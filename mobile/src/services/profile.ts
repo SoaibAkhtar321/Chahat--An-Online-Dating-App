@@ -60,7 +60,28 @@ export async function saveProfile(
     const updateData: Record<string, any> = {};
 
     if (profile.name !== undefined) updateData.name = profile.name.slice(0, 40);
-    if (profile.dob !== undefined) updateData.dob = profile.dob;
+
+    // If dob is provided, check existing profile before sending it to avoid triggering the
+    // database immutability guard: "Date of birth cannot be changed once saved"
+    if (profile.dob !== undefined && profile.dob) {
+      const { data: existingRow } = await supabase
+        .from("profiles")
+        .select("dob")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!existingRow?.dob) {
+        // Not set yet in database, safe to set
+        updateData.dob = profile.dob;
+      } else if (existingRow.dob !== profile.dob) {
+        // Already set and different: log and do not send to prevent blocking other updates
+        console.warn(
+          "saveProfile: DOB is immutable once set in database. Keeping existing DOB:",
+          existingRow.dob
+        );
+      }
+      // If existingRow.dob === profile.dob, omitting it from updateData prevents the trigger from firing
+    }
     if (profile.gender !== undefined) updateData.gender = profile.gender;
     if (profile.seeking !== undefined) updateData.seeking = profile.seeking;
     if (profile.city !== undefined) updateData.city = profile.city.slice(0, 80);
