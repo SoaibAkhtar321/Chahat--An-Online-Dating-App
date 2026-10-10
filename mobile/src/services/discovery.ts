@@ -1,7 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Profile, SwipeResponse } from "../types";
-import { calculateAge } from "../utils/validation";
-import { getStoragePublicUrl } from "./profile";
+import { getSignedUrls } from "./storage";
 
 // Bundled demo profiles for offline/testing mode matching prototype exactly
 export const DEMO_PROFILES: Profile[] = [
@@ -102,58 +101,36 @@ export async function fetchDiscoveryDeck(
     return DEMO_PROFILES;
   }
   try {
-    // 1. Attempt to use server RPC
+    // Server RPC only: it applies blocks, city/seeking filters, already-swiped exclusion and never returns dob.
     const { data: rpcData, error: rpcError } = await supabase.rpc("get_discovery_feed", {
       _limit: 30,
     });
-
-    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-      return rpcData.map((row: any) => formatProfileRow(row));
-    }
-
-    // 2. Query profiles directly with city matching and exclude swiped
-    let query = supabase
-      .from("profiles")
-      .select(
-        "id, name, dob, city, bio, work, education, intents, interests, languages, lifestyle, prompt, photos, is_demo, likes_you",
-      )
-      .eq("status", "active")
-      .eq("onboarded", true)
-      .neq("id", currentUserId)
-      .limit(30);
-
-    if (userCity) {
-      query = query.ilike("city", userCity);
-    }
-    if (seekingGender) {
-      query = query.eq("gender", seekingGender);
-    }
-
-    const { data, error } = await query;
-
-    if (error || !data) {
-      console.warn("Discovery query failed:", error?.message);
+    if (rpcError || !Array.isArray(rpcData)) {
+      console.warn("Discovery feed failed:", rpcError?.message);
       return [];
     }
-
-    return data.map((row: any) => formatProfileRow(row));
+    const signed = await getSignedUrls(
+      "photos",
+      rpcData.flatMap((r: any) => (Array.isArray(r.photos) ? r.photos.map((p: any) => p.path) : [])),
+    );
+    return rpcData.map((row: any) => formatProfileRow(row, signed));
   } catch (err) {
     console.warn("Discovery failed:", err);
     return [];
   }
 }
 
-function formatProfileRow(r: any): Profile {
+function formatProfileRow(r: any, signed: Record<string, string>): Profile {
   const photosArray = Array.isArray(r.photos)
     ? r.photos
-        .map((p: any) => (p.path ? getStoragePublicUrl("photos", p.path) : p.src || ""))
+        .map((p: any) => (p.path ? signed[p.path] || "" : p.src || ""))
         .filter(Boolean)
     : [];
 
   return {
     id: r.id,
     name: r.name || "Milo Member",
-    age: r.age ?? (r.dob ? calculateAge(r.dob) : 25),
+    age: r.age || 25,
     city: r.city || "Mumbai",
     distanceKm: r.distanceKm || 5,
     bio: r.bio || "",

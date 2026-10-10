@@ -132,12 +132,13 @@ export async function deleteUserAccount(): Promise<{ success: boolean; error?: s
   }
 
   try {
-    const { error } = await supabase.rpc("delete_user_account");
-    if (error) {
-      await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", (await supabase.auth.getUser()).data.user?.id ?? "");
+    // Server-side deletion (Auth user + media + data). The service-role key never reaches the app.
+    const { data, error } = await supabase.functions.invoke("delete-account", { body: { confirm: true } });
+    if (error || !data?.success) {
+      return {
+        success: false,
+        error: data?.error || error?.message || "Account deletion failed. Please try again.",
+      };
     }
     await supabase.auth.signOut();
     return { success: true };

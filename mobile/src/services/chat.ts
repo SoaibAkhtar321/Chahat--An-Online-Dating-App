@@ -1,8 +1,7 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Message, MatchItem, Profile } from "../types";
-import { getStoragePublicUrl } from "./profile";
+import { getSignedUrls, getSignedUrl } from "./storage";
 import { DEMO_PROFILES } from "./discovery";
-import { calculateAge } from "../utils/validation";
 
 export async function fetchUserMatches(currentUserId: string): Promise<MatchItem[]> {
   try {
@@ -38,23 +37,22 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
       let otherProfile = DEMO_PROFILES.find((p) => p.id === otherId);
 
       if (!otherProfile) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("id, name, dob, city, bio, photos, interests, intents, work, education")
-          .eq("id", otherId)
-          .maybeSingle();
+        const { data: profRows } = await supabase.rpc("get_public_profile", { _id: otherId });
+        const prof = Array.isArray(profRows) ? (profRows[0] as any) : null;
 
         if (prof) {
-          const photos = Array.isArray(prof.photos)
-            ? prof.photos.map((p: any) =>
-                p.path ? getStoragePublicUrl("photos", p.path) : p.src || "",
-              )
+          const signed = await getSignedUrls(
+            "photos",
+            Array.isArray(prof.photos) ? prof.photos.map((p: any) => p.path) : [],
+          );
+          const photos: string[] = Array.isArray(prof.photos)
+            ? prof.photos.map((p: any) => (p.path ? signed[p.path] || "" : p.src || "")).filter(Boolean)
             : [];
 
           otherProfile = {
             id: prof.id,
             name: prof.name || "Member",
-            age: prof.dob ? calculateAge(prof.dob) : 0,
+            age: prof.age || 0,
             city: prof.city || "",
             distanceKm: 0,
             bio: prof.bio || "",
@@ -86,7 +84,7 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
             text: last.body,
             at: new Date(last.created_at).getTime(),
             status: last.read_at ? "read" : "sent",
-            image: last.image_path ? getStoragePublicUrl("chat", last.image_path) : undefined,
+            image: last.image_path ? await getSignedUrl("chat", last.image_path) : undefined,
           };
         }
 
@@ -129,6 +127,10 @@ export async function fetchMessagesForMatch(
       return [];
     }
 
+    const signed = await getSignedUrls(
+      "chat",
+      data.map((m) => m.image_path).filter(Boolean) as string[],
+    );
     return data.map((m) => ({
       id: m.id,
       matchId: m.match_id,
@@ -137,7 +139,7 @@ export async function fetchMessagesForMatch(
       text: m.body,
       at: new Date(m.created_at).getTime(),
       status: m.read_at ? "read" : "sent",
-      image: m.image_path ? getStoragePublicUrl("chat", m.image_path) : undefined,
+      image: m.image_path ? signed[m.image_path] : undefined,
     }));
   } catch {
     return [];
@@ -185,7 +187,7 @@ export async function sendChatMessage(
       sender: senderId,
       from: "me",
       text,
-      image: imagePath ? getStoragePublicUrl("chat", imagePath) : imageUri,
+      image: imagePath ? (await getSignedUrl("chat", imagePath)) ?? imageUri : imageUri,
       at: Date.now(),
       status: "sent",
     };

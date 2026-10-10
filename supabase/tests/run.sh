@@ -3,10 +3,17 @@
 # Requires: psql + a local Postgres you can create databases on.
 #   PGHOST/PGPORT/PGUSER/PGPASSWORD select the server (defaults: localhost:5432, user postgres).
 #   MIGRATIONS_DIR overrides ../migrations (used to prove the suite catches regressions).
+#   Refuses non-local PGHOST unless ALLOW_NONLOCAL_DB=1 (it DROPs milo_test_* databases).
 # Exit code is non-zero if anything fails. SQL NOTICEs are not failures.
 set -u
 cd "$(dirname "$0")"
 export PGHOST="${PGHOST:-localhost}" PGPORT="${PGPORT:-5432}" PGUSER="${PGUSER:-postgres}"
+# Safety guard: this script DROPs and recreates milo_test_* databases, so it only runs against a
+# local/disposable server (localhost, 127.0.0.1, a unix socket path) unless explicitly overridden.
+case "$PGHOST" in
+  localhost|127.0.0.1|::1|/*) ;;
+  *) [ "${ALLOW_NONLOCAL_DB:-}" = "1" ] || { echo "REFUSING to run against non-local PGHOST=$PGHOST (set ALLOW_NONLOCAL_DB=1 only for a disposable server)"; exit 2; } ;;
+esac
 MIG="${MIGRATIONS_DIR:-../migrations}"
 P="psql -X -q -v ON_ERROR_STOP=1"
 status=0
@@ -15,7 +22,10 @@ setup_db() {
   local db="$1"
   psql -X -q -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db" 2>&1 | grep -v NOTICE
   $P -d "$db" -f 00_supabase_standins.sql || { echo "FAIL: stand-ins"; return 1; }
-  for f in "$MIG"/*.sql ../seed.sql; do
+  # Lexical (deterministic) order. seed.sql is optional: it is skipped if the file does not exist.
+  local files=("$MIG"/*.sql); [ -f ../seed.sql ] && files+=(../seed.sql)
+  [ -e "${files[0]}" ] || { echo "FAIL: no migrations found in $MIG"; return 1; }
+  for f in "${files[@]}"; do
     $P -d "$db" -f "$f" >/dev/null 2>/tmp/milo_apply.err || { echo "FAIL: applying $f"; cat /tmp/milo_apply.err; return 1; }
   done
   echo "applied migrations + seed to $db"
@@ -26,7 +36,8 @@ setup_db milo_test_func || exit 1
 for f in 10_functional_rls.sql 20_storage_deletion.sql 90_assert.sql; do
   $P -d milo_test_func -f "$f" > /tmp/milo_test.out 2>&1; rc=$?
   [ "$f" = 90_assert.sql ] && cat /tmp/milo_test.out
-  if [ $rc -ne 0 ]; then echo "FAIL: $f (exit $rc)"; [ "$f" != 90_assert.sql ] && head -20 /tmp/milo_test.out; status=1; break; fi
+  # Keep going after a failing file so 90_assert.sql still reports every recorded check.
+  if [ $rc -ne 0 ]; then echo "FAIL: $f (exit $rc)"; [ "$f" != 90_assert.sql ] && head -20 /tmp/milo_test.out; status=1; fi
 done
 
 echo "== concurrency =="

@@ -252,7 +252,17 @@ export default function OnboardingScreen() {
         return;
       }
 
-      await refreshProfile();
+      console.log("handleFinish: profile saved, refreshing");
+      // Never let a slow/failed refresh trap the user on this screen: the profile is already saved.
+      try {
+        await Promise.race([
+          refreshProfile(),
+          new Promise((resolve) => setTimeout(resolve, 8000)),
+        ]);
+      } catch (refreshErr) {
+        console.warn("handleFinish: refreshProfile failed", refreshErr);
+      }
+      console.log("handleFinish: navigating to discover");
       router.replace("/(tabs)/discover");
     } catch (err: any) {
       console.error("handleFinish failed", err);

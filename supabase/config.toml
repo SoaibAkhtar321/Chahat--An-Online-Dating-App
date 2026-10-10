@@ -1,1 +1,10 @@
-project_id = "uryujmwnwragfaptchsc"
+# NOTE: project_id here is the LOCAL CLI identifier. The remote target is set by `supabase link --project-ref`.
+# Previous value (uryujmwnwragfaptchsc) did not match milo-dev (tuptdzbdowqtmbyhazet).
+project_id = "tuptdzbdowqtmbyhazet"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[functions.delete-account]
+verify_jwt = true

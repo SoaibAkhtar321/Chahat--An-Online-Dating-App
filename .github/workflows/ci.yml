@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck (mobile)
+        run: npm run build
+      - name: Unit tests
+        run: npm test -- --ci
+
+  database:
+    # Disposable PostgreSQL 16 service container only. No Supabase project, keys or CLI are used.
+    # NOTE (interim): this job currently FAILS by design on real assertion failures; see
+    # supabase/tests/README.md. Do not mask it until the migration set is reconciled (Task 2.8).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Wait for PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 2
+          done
+          echo "PostgreSQL did not become ready" >&2
+          exit 1
+      - name: Assemble committed migrations (interim, deterministic order)
+        # supabase/migrations/ currently holds only 0003; 0000-0002 live in drizzle/migrations/.
+        # drizzle/migrations/0003 is NOT applied (the supabase/ copy is used). Replace this step
+        # once the migration set is reconciled.
+        run: |
+          mkdir -p "$RUNNER_TEMP/migrations"
+          cp drizzle/migrations/0000_migration.sql drizzle/migrations/0001_migration.sql \
+             drizzle/migrations/0002_admin_moderation.sql "$RUNNER_TEMP/migrations/"
+          cp supabase/migrations/0003_mobile_security_hardening.sql "$RUNNER_TEMP/migrations/"
+          ls -1 "$RUNNER_TEMP/migrations"
+      - name: Database security and concurrency suite
+        env:
+          MIGRATIONS_DIR: ${{ runner.temp }}/migrations
+        run: bash supabase/tests/run.sh

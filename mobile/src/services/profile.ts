@@ -1,20 +1,32 @@
 import { supabase } from "./supabase";
+import { getSignedUrls } from "./storage";
 import type { MeProfile, PhotoItem } from "../types";
 export { calculateAge, validateDob } from "../utils/validation";
 
 export async function fetchMyProfile(userId: string, email: string): Promise<MeProfile> {
   const [profileRes, stateRes] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    supabase
+      .from("profiles")
+      .select(
+        "id, name, gender, seeking, city, bio, work, education, intents, interests, languages, lifestyle, prompt, photos, onboarded",
+      )
+      .eq("id", userId)
+      .maybeSingle(),
     supabase.from("account_state").select("data").eq("user_id", userId).maybeSingle(),
   ]);
 
-  const row = profileRes.data;
+  if (profileRes.error) throw new Error(`profile load failed: ${profileRes.error.message}`);
+  const row = profileRes.data as any;
+  // dob is not readable via table select (privacy); fetch own dob through a dedicated RPC.
+  const { data: ownDob } = await supabase.rpc("get_my_dob");
+  const photoPaths = Array.isArray(row?.photos) ? (row.photos as any[]).map((p) => p.path).filter(Boolean) : [];
+  const signed = await getSignedUrls("photos", photoPaths);
   const stateData = stateRes.data?.data ?? {};
 
   const photos: PhotoItem[] = Array.isArray(row?.photos)
     ? (row.photos as any[]).map((p, idx) => ({
         id: p.id || `photo_${idx}`,
-        uri: p.path ? getStoragePublicUrl("photos", p.path) : p.src || "",
+        uri: p.path ? signed[p.path] || "" : p.src || "",
         path: p.path,
         thumbPath: p.thumbPath,
         isMain: idx === 0,
@@ -26,7 +38,7 @@ export async function fetchMyProfile(userId: string, email: string): Promise<MeP
     id: userId,
     email,
     name: row?.name ?? "",
-    dob: row?.dob ?? "",
+    dob: (ownDob as string | null) ?? "",
     gender: (row?.gender as any) ?? "",
     seeking: (row?.seeking as any) ?? "",
     intents: row?.intents ?? [],
@@ -45,11 +57,6 @@ export async function fetchMyProfile(userId: string, email: string): Promise<MeP
     onboarded: !!row?.onboarded,
     verificationStatus: stateData.verification?.status ?? "none",
   };
-}
-
-export function getStoragePublicUrl(bucket: string, path: string): string {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
 }
 
 export async function saveProfile(
