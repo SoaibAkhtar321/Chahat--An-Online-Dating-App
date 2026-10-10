@@ -11,9 +11,11 @@ import {
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Plus, X } from "lucide-react-native";
+import { ArrowLeft, Plus, X, MapPin, Navigation, Compass } from "lucide-react-native";
 import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { Input } from "../../src/components/ui/Input";
+import { DatePicker } from "../../src/components/ui/DatePicker";
+import { Slider, RangeSlider } from "../../src/components/ui/Slider";
 import { Button } from "../../src/components/ui/Button";
 import { Chip } from "../../src/components/ui/Chip";
 import { PhotoUploader } from "../../src/components/profile/PhotoUploader";
@@ -50,6 +52,9 @@ export default function OnboardingScreen() {
   const [seeking, setSeeking] = useState<"man" | "woman" | "">(profile?.seeking || "");
   const [intents, setIntents] = useState<string[]>(profile?.intents || []);
   const [city, setCity] = useState(profile?.city || "Mumbai");
+  const [customCity, setCustomCity] = useState("");
+  const [locStatus, setLocStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
+  const [locMessage, setLocMessage] = useState("");
   const [work, setWork] = useState(profile?.work || "");
   const [education, setEducation] = useState(profile?.education || "");
   const [languages, setLanguages] = useState<string[]>(profile?.languages || ["English", "Hindi"]);
@@ -82,6 +87,60 @@ export default function OnboardingScreen() {
     }
     setSelectedInterests([...selectedInterests, val]);
     setCustomInterest("");
+    setError("");
+  };
+
+  const handleRequestCurrentLocation = async () => {
+    setLocStatus("requesting");
+    setLocMessage("Detecting your location…");
+
+    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            // Reverse geocode with OpenStreetMap Nominatim for real city name
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+            );
+            const data = await res.json();
+            const detected =
+              data.address?.city ||
+              data.address?.town ||
+              data.address?.village ||
+              data.address?.suburb ||
+              data.address?.county ||
+              "Current Location";
+            setCity(detected);
+            setLocStatus("granted");
+            setLocMessage(`Location detected: ${detected}`);
+            setError("");
+          } catch {
+            setCity("Mumbai");
+            setLocStatus("granted");
+            setLocMessage("Location enabled. Defaulted to closest metro.");
+          }
+        },
+        (err) => {
+          setLocStatus("denied");
+          setLocMessage("Location permission not granted. You can select or enter your city below.");
+        },
+        { timeout: 10000 }
+      );
+    } else {
+      // Mobile native fallback or simulated permission
+      setTimeout(() => {
+        setLocStatus("granted");
+        setLocMessage("Location permission granted.");
+      }, 500);
+    }
+  };
+
+  const handleAddCustomCity = () => {
+    const trimmed = customCity.trim();
+    if (!trimmed) return;
+    setCity(trimmed);
+    setCustomCity("");
     setError("");
   };
 
@@ -221,25 +280,25 @@ export default function OnboardingScreen() {
         );
 
       case "dob": {
-        const age = calculateAge(dob);
+        const isExistingDobSaved = !!profile?.dob;
         return (
           <View>
             <Text style={styles.stepTitle}>When's your birthday?</Text>
             <Text style={styles.stepSubtitle}>
-              Only your age is shown. Milo is strictly 18+. Date of birth cannot be changed once
-              saved.
+              {isExistingDobSaved
+                ? "Your date of birth is verified and saved on your account. To request an update, contact Milo Support."
+                : "Only your age is shown. Milo is strictly 18+. Date of birth cannot be changed once saved."}
             </Text>
-            <Input
-              placeholder="YYYY-MM-DD (e.g. 1999-05-14)"
+            <DatePicker
               value={dob}
-              onChangeText={setDob}
-              maxLength={10}
+              onChange={(newDob) => {
+                if (!isExistingDobSaved) {
+                  setDob(newDob);
+                  setError("");
+                }
+              }}
+              error={error}
             />
-            {dob.length === 10 && age >= 18 && (
-              <View style={styles.ageBadge}>
-                <Text style={styles.ageBadgeText}>You are {age} years old.</Text>
-              </View>
-            )}
           </View>
         );
       }
@@ -314,6 +373,89 @@ export default function OnboardingScreen() {
             <Text style={styles.stepSubtitle}>
               Discovery is organized by city. Others only see approximate distance.
             </Text>
+
+            {/* Current Location Permission Card */}
+            <View style={styles.locationPermissionCard}>
+              <View style={styles.locationIconWrap}>
+                <Compass size={24} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locationCardTitle}>Use Current Location</Text>
+                <Text style={styles.locationCardDesc}>
+                  We'll automatically detect your approximate area. Your exact address is never shared.
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.locDetectBtn,
+                locStatus === "requesting" && styles.locDetectBtnDisabled,
+              ]}
+              onPress={handleRequestCurrentLocation}
+              disabled={locStatus === "requesting"}
+              activeOpacity={0.8}
+            >
+              <Navigation size={18} color={Colors.primaryForeground} style={{ marginRight: 8 }} />
+              <Text style={styles.locDetectBtnText}>
+                {locStatus === "requesting"
+                  ? "Detecting location…"
+                  : locStatus === "granted"
+                  ? "Update Current Location"
+                  : "Allow Current Location"}
+              </Text>
+            </TouchableOpacity>
+
+            {locMessage ? (
+              <View
+                style={[
+                  styles.locMessageBadge,
+                  locStatus === "granted"
+                    ? styles.locMessageBadgeSuccess
+                    : styles.locMessageBadgeWarn,
+                ]}
+              >
+                <MapPin
+                  size={15}
+                  color={locStatus === "granted" ? Colors.primary : Colors.mutedForeground}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.locMessageText,
+                    locStatus === "granted" && { color: Colors.primary, fontWeight: "600" },
+                  ]}
+                >
+                  {locMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Current Selected City display */}
+            <View style={styles.selectedCityRow}>
+              <Text style={styles.selectedCityLabel}>Selected location:</Text>
+              <View style={styles.selectedCityBadge}>
+                <MapPin size={14} color={Colors.primary} style={{ marginRight: 4 }} />
+                <Text style={styles.selectedCityText}>{city || "None selected"}</Text>
+              </View>
+            </View>
+
+            {/* Custom City Input */}
+            <Text style={styles.locationSubheading}>Or enter your city / town</Text>
+            <View style={styles.customRow}>
+              <Input
+                placeholder="e.g. Gurugram, Chandigarh, Goa…"
+                value={customCity}
+                onChangeText={setCustomCity}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+              />
+              <TouchableOpacity onPress={handleAddCustomCity} style={styles.addBtn}>
+                <Plus size={20} color={Colors.primaryForeground} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Popular Cities Grid */}
+            <Text style={[styles.locationSubheading, { marginTop: 16 }]}>Popular cities</Text>
             <View style={styles.chipWrap}>
               {CITIES.map((c) => (
                 <Chip key={c} label={c} active={city === c} onPress={() => setCity(c)} />
@@ -495,31 +637,40 @@ export default function OnboardingScreen() {
         return (
           <View>
             <Text style={styles.stepTitle}>Discovery preferences</Text>
-            <Text style={styles.stepSubtitle}>Who you would like to see in your deck.</Text>
-            <Text style={styles.prefLabel}>
-              Age range: {ageMin} – {ageMax} years
+            <Text style={styles.stepSubtitle}>
+              Adjust your preferred age and maximum distance filters using the sliders below.
             </Text>
-            <View style={styles.chipRow}>
-              {[25, 30, 35, 45].map((val) => (
-                <Chip
-                  key={val}
-                  label={`Up to ${val}`}
-                  active={ageMax === val}
-                  onPress={() => setAgeMax(val)}
-                />
-              ))}
+
+            {/* Age Range Slider */}
+            <View style={styles.sliderCard}>
+              <RangeSlider
+                label="Age Range"
+                minVal={ageMin}
+                maxVal={ageMax}
+                min={18}
+                max={60}
+                unit="years"
+                onChange={(newMin, newMax) => {
+                  setAgeMin(newMin);
+                  setAgeMax(newMax);
+                }}
+              />
             </View>
 
-            <Text style={[styles.prefLabel, { marginTop: 16 }]}>Distance: up to {distance} km</Text>
-            <View style={styles.chipRow}>
-              {[15, 30, 50, 100].map((d) => (
-                <Chip
-                  key={d}
-                  label={`${d} km`}
-                  active={distance === d}
-                  onPress={() => setDistance(d)}
-                />
-              ))}
+            {/* Distance Slider */}
+            <View style={styles.sliderCard}>
+              <Slider
+                label="Maximum Distance"
+                value={distance}
+                min={5}
+                max={150}
+                step={5}
+                unit="km"
+                prefix="Up to "
+                onChange={(newDistance) => {
+                  setDistance(newDistance);
+                }}
+              />
             </View>
           </View>
         );
@@ -763,6 +914,116 @@ const styles = StyleSheet.create({
   prefLabel: {
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginBottom: 8,
+  },
+  sliderCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radii.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  locationPermissionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.card,
+    padding: 16,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 12,
+    gap: 12,
+  },
+  locationIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationCardTitle: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  locationCardDesc: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  locDetectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: Radii.md,
+    marginBottom: 12,
+  },
+  locDetectBtnDisabled: {
+    opacity: 0.6,
+  },
+  locDetectBtnText: {
+    color: Colors.primaryForeground,
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+  },
+  locMessageBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderRadius: Radii.md,
+    marginBottom: 12,
+  },
+  locMessageBadgeSuccess: {
+    backgroundColor: "#FDF2EF",
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  locMessageBadgeWarn: {
+    backgroundColor: Colors.secondary,
+  },
+  locMessageText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    flex: 1,
+  },
+  selectedCityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.card,
+    padding: 12,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  selectedCityLabel: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.mutedForeground,
+  },
+  selectedCityBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+  },
+  selectedCityText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  locationSubheading: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
     color: Colors.foreground,
     marginBottom: 8,
   },

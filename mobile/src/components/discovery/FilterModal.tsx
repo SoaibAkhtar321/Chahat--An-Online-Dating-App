@@ -6,6 +6,7 @@ import type { Filters } from "../../types";
 import { INTERESTS, LANGUAGES, DEFAULT_FILTERS } from "../../types";
 import { Chip } from "../ui/Chip";
 import { Button } from "../ui/Button";
+import { Slider, RangeSlider } from "../ui/Slider";
 
 interface FilterModalProps {
   visible: boolean;
@@ -58,38 +59,35 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Age range */}
+          {/* Age range Slider */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Age Range</Text>
-            <Text style={styles.sectionValue}>
-              {localFilters.ageMin} – {localFilters.ageMax} years old
-            </Text>
-            <View style={styles.pillRow}>
-              {[21, 25, 30, 35, 40].map((age) => (
-                <Chip
-                  key={age}
-                  label={`Up to ${age}`}
-                  active={localFilters.ageMax === age}
-                  onPress={() => setLocalFilters((prev) => ({ ...prev, ageMax: age }))}
-                />
-              ))}
-            </View>
+            <RangeSlider
+              label="Age Range"
+              minVal={localFilters.ageMin}
+              maxVal={localFilters.ageMax}
+              min={18}
+              max={65}
+              unit="years"
+              onChange={(ageMin, ageMax) => {
+                setLocalFilters((prev) => ({ ...prev, ageMin, ageMax }));
+              }}
+            />
           </View>
 
-          {/* Distance */}
+          {/* Distance Slider */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Maximum Distance</Text>
-            <Text style={styles.sectionValue}>Up to {localFilters.distance} km</Text>
-            <View style={styles.pillRow}>
-              {[10, 25, 50, 100].map((d) => (
-                <Chip
-                  key={d}
-                  label={`${d} km`}
-                  active={localFilters.distance === d}
-                  onPress={() => setLocalFilters((prev) => ({ ...prev, distance: d }))}
-                />
-              ))}
-            </View>
+            <Slider
+              label="Maximum Distance"
+              value={localFilters.distance}
+              min={5}
+              max={150}
+              step={5}
+              unit="km"
+              prefix="Up to "
+              onChange={(distance) => {
+                setLocalFilters((prev) => ({ ...prev, distance }));
+              }}
+            />
           </View>
 
           {/* Interests */}

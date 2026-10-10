@@ -1,5 +1,12 @@
-import React from "react";
-import { View, Text, StyleSheet, Dimensions } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  ScrollView,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -7,149 +14,267 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
 import { Button } from "../../src/components/ui/Button";
 
-const { width } = Dimensions.get("window");
+const { height: screenHeight } = Dimensions.get("window");
+
+const SLIDES = [
+  {
+    title: "Match only when it's mutual",
+    desc: "A match happens only when you both like each other. No surprises.",
+  },
+  {
+    title: "Safety, built right in",
+    desc: "Strictly 18+, verified members, and full control over your privacy and chats.",
+  },
+];
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const [slideIndex, setSlideIndex] = useState(0);
+
+  // Auto-advance slides every 3.8s
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSlideIndex((prev) => (prev + 1) % SLIDES.length);
+    }, 3800);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeSlide = SLIDES[slideIndex];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.heroSection}>
-        {/* Splash photo card */}
-        <View style={styles.cardContainer}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <View style={styles.outerWrapper}>
+        {/* Top Half: Dedicated Hero Image Container (~42-45% height) */}
+        <View style={styles.heroHalf}>
           <Image
-            source={{
-              uri: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop&q=80",
-            }}
+            source={require("../../assets/p1.jpg")}
             style={styles.heroImage}
             contentFit="cover"
+            contentPosition="top center"
+            priority="high"
           />
+
+          {/* Top Brand Logo Overlay */}
           <LinearGradient
-            colors={["transparent", "rgba(35, 20, 30, 0.4)", "rgba(35, 20, 30, 0.95)"]}
-            style={styles.heroGradient}
+            colors={["rgba(35, 20, 30, 0.45)", "transparent"]}
+            style={styles.topGradient}
           >
-            <Text style={styles.logoText}>
-              mi<Text style={styles.logoAccent}>l</Text>o
-            </Text>
-            <Text style={styles.tagline}>Meet someone who matches your intention.</Text>
+            <View style={styles.logoRow}>
+              <Text style={styles.logoText}>
+                mi<Text style={styles.logoAccent}>l</Text>o
+              </Text>
+              <View style={styles.badgePill}>
+                <Text style={styles.badgeText}>Dating in India</Text>
+              </View>
+            </View>
           </LinearGradient>
+
         </View>
-      </View>
 
-      <View style={styles.actionSection}>
-        <Text style={styles.legalDisclaimer}>
-          Milo is designed for genuine connections in India. Strictly 18+.
-        </Text>
+        {/* Bottom Half: Clean, high-contrast readable content */}
+        <ScrollView
+          style={styles.bottomScroll}
+          contentContainerStyle={styles.bottomContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          {/* Headline & Value Proposition Text */}
+          <View style={styles.copySection}>
+            <Text style={styles.headingText}>{activeSlide.title}</Text>
+            <Text style={styles.bodyText}>{activeSlide.desc}</Text>
 
-        <Button
-          title="Create an account"
-          onPress={() => router.push("/(auth)/signup")}
-          style={styles.button}
-        />
+            {/* Slide indicator dots */}
+            <View style={styles.dotsRow}>
+              {SLIDES.map((_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setSlideIndex(i)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.dot,
+                    i === slideIndex ? styles.dotActive : styles.dotInactive,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
 
-        <Button
-          title="Log in"
-          variant="ghost"
-          onPress={() => router.push("/(auth)/login")}
-          style={styles.button}
-        />
+          {/* Action CTAs */}
+          <View style={styles.actionsSection}>
+            <Button
+              title="Create account"
+              onPress={() => router.push("/(auth)/signup")}
+              style={styles.primaryButton}
+            />
 
-        <View style={styles.termsContainer}>
-          <Text style={styles.termsText}>
-            By signing up, you agree to our{" "}
-            <Text style={styles.termsLink} onPress={() => router.push("/legal/terms")}>
-              Terms
-            </Text>{" "}
-            and{" "}
-            <Text style={styles.termsLink} onPress={() => router.push("/legal/privacy")}>
-              Privacy Policy
-            </Text>
-            .
-          </Text>
-        </View>
+            <Button
+              title="I already have an account"
+              variant="ghost"
+              onPress={() => router.push("/(auth)/login")}
+              style={styles.secondaryButton}
+            />
+
+            <View style={styles.legalSection}>
+              <Text style={styles.legalText}>
+                Strictly 18+. By continuing you agree to our{" "}
+                <Text
+                  style={styles.legalLink}
+                  onPress={() => router.push("/legal/terms")}
+                >
+                  Terms
+                </Text>{" "}
+                and{" "}
+                <Text
+                  style={styles.legalLink}
+                  onPress={() => router.push("/legal/privacy")}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.background,
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingBottom: 24,
   },
-  heroSection: {
+  outerWrapper: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 16,
+    width: "100%",
+    maxWidth: 500,
+    alignSelf: "center",
+    backgroundColor: Colors.background,
   },
-  cardContainer: {
-    width: width - 48,
-    height: (width - 48) * 1.3,
-    borderRadius: Radii.xxl,
-    overflow: "hidden",
+  // Top half: Dedicated hero image container (~52% height) with crisp clean border
+  heroHalf: {
+    height: Math.max(340, Math.min(screenHeight * 0.52, 480)),
+    width: "100%",
     position: "relative",
+    backgroundColor: Colors.ink,
+    borderBottomLeftRadius: Radii.xxl,
+    borderBottomRightRadius: Radii.xxl,
+    borderBottomWidth: 1.5,
+    borderBottomColor: Colors.border,
+    overflow: "hidden",
     ...Shadows.card,
   },
   heroImage: {
     width: "100%",
     height: "100%",
   },
-  heroGradient: {
+  topGradient: {
     position: "absolute",
+    top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    height: "60%",
-    justifyContent: "flex-end",
-    padding: 24,
+    paddingTop: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 22,
+  },
+  logoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   logoText: {
     fontFamily: Typography.fontDisplay,
-    fontSize: 48,
+    fontSize: 34,
     fontWeight: Typography.weights.bold,
-    color: Colors.primaryForeground,
+    color: "#FFFFFF",
     fontStyle: "italic",
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
   logoAccent: {
     color: Colors.accent,
   },
-  tagline: {
-    fontSize: Typography.sizes.base,
-    color: Colors.primaryForeground,
-    opacity: 0.9,
-    marginTop: 6,
-    lineHeight: 22,
+  badgePill: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
   },
-  actionSection: {
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    letterSpacing: 0.3,
+  },
+  // Bottom half: Content area
+  bottomScroll: {
+    flex: 1,
+  },
+  bottomContent: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  copySection: {
+    paddingVertical: 8,
+  },
+  headingText: {
+    fontSize: Typography.sizes.title,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    lineHeight: 36,
+    letterSpacing: -0.5,
+  },
+  bodyText: {
+    fontSize: Typography.sizes.base,
+    color: Colors.mutedForeground,
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  dotsRow: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  dot: {
+    height: 6,
+    borderRadius: Radii.full,
+  },
+  dotActive: {
+    width: 24,
+    backgroundColor: Colors.primary,
+  },
+  dotInactive: {
+    width: 6,
+    backgroundColor: Colors.border,
+  },
+  actionsSection: {
     width: "100%",
     gap: 12,
-    marginTop: 24,
+    marginTop: 16,
   },
-  legalDisclaimer: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  button: {
+  primaryButton: {
     width: "100%",
   },
-  termsContainer: {
-    paddingHorizontal: 16,
-    marginTop: 4,
+  secondaryButton: {
+    width: "100%",
   },
-  termsText: {
+  legalSection: {
+    marginTop: 4,
+    paddingHorizontal: 12,
+  },
+  legalText: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     textAlign: "center",
     lineHeight: 18,
   },
-  termsLink: {
+  legalLink: {
     color: Colors.primary,
     fontWeight: Typography.weights.semibold,
   },
