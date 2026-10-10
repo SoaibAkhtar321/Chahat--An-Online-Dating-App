@@ -3,6 +3,7 @@
 Tagline: "Meet. Match. Connect." This is a phone-sized web prototype for review and handoff. It is not the React Native app. The final Android app gets built separately from this handoff.
 
 ## 1. Brand direction
+
 - Palette: deep marigold/saffron primary, rose-terracotta accent, warm ivory background, plum-ink text. Dark theme uses plum-charcoal.
 - Type: a display serif with character for headings (e.g. Fraunces) and a clean sans for body text (e.g. Manrope).
 - Look: full-bleed photo cards, rounded corners, soft shadows, chip tags, a bottom tab bar with 4 tabs (Discover, Likes, Chats, Profile), and gentle spring motion.
@@ -32,6 +33,7 @@ Tagline: "Meet. Match. Connect." This is a phone-sized web prototype for review 
 **Notifications:** In-app inbox (match, message, like, call, missed call, subscription, safety)
 
 ## 3. Main journey
+
 ```text
 Splash → Welcome → Sign up → Verify email → Login
   → Onboarding (10 steps) → Location → Discover
@@ -43,27 +45,31 @@ Tabs: Discover | Likes | Chats | Profile(→Settings)
 ```
 
 ## 4. Free vs Premium
-| Feature | Free | Premium |
-|---|---|---|
-| Daily likes | Limited (amount you choose) | Unlimited |
-| See who liked you | Blurred | Yes |
-| Advanced filters | Basic | All |
-| Undo last swipe | No | Yes |
-| Profile boost | No | Monthly |
-| Free first call minute | Yes | Yes + extended |
-| Chat with matches | Yes | Yes |
+
+| Feature                | Free                        | Premium        |
+| ---------------------- | --------------------------- | -------------- |
+| Daily likes            | Limited (amount you choose) | Unlimited      |
+| See who liked you      | Blurred                     | Yes            |
+| Advanced filters       | Basic                       | All            |
+| Undo last swipe        | No                          | Yes            |
+| Profile boost          | No                          | Monthly        |
+| Free first call minute | Yes                         | Yes + extended |
+| Chat with matches      | Yes                         | Yes            |
 
 ## 5. Data model (Lovable Cloud, planned)
+
 profiles, preferences, photos, swipes (one per pair per direction, unique), matches (created only by the server when both people like each other), conversations, messages, blocks, reports, entitlements, call_sessions, call_pricing (region, rate, currency, tax, increment, caps, effective dates), billing_transactions (idempotency key), notification_prefs, user_roles, admin_audit_log.
 
 Access rules: you can only edit your own rows. Messages and calls are visible only to the two matched people. Blocks and suspensions are filtered out on the server. Admin rights are checked on the server through a separate roles table. Pricing and billing are written only by the server.
 
 ## 6. Built vs simulated in this prototype
+
 - **Built and clickable:** every screen above, swiping, the match flow, chat UI, call UI with the 60-second countdown and consent sheet, and the settings and admin screens.
 - **Simulated (clearly labeled "Demo"):** sign-in, sample profiles, other people's replies, the video stream, payments, and push notifications.
 - **Not built (only in the handoff):** real video provider, Google Play Billing, server-side call metering, real location lookup.
 
 ## 7. Key risks and decisions you need to make
+
 1. Whether Google Play allows per-minute call billing outside its own billing system. This needs a policy check before choosing a payment provider.
 2. Free minute applies per call, per user, or per matched pair?
 3. Prepaid wallet or charge per call?
@@ -72,11 +78,13 @@ Access rules: you can only edit your own rows. Messages and calls are visible on
 6. Daily like limit for free users.
 
 ## 8. Next stages
+
 - **Stage 2:** design system, then Auth → Onboarding → Discover → Match → Chat, all on demo data.
 - **Stage 3:** calls and consent, pricing, premium, safety, notifications, settings, admin.
 - **Stage 4:** audit, plus handoff documents (React Native handoff, Play release checklist, store listing copy, security spec).
 
 ## Technical details
+
 - TanStack Start routes, one file per screen group. The prototype sits in a phone-width frame on desktop.
 - Demo data lives in a local in-memory store so the prototype runs without a backend. Lovable Cloud gets connected only if you want real sign-in in Stage 2.
 - Shared design tokens in styles.css, written so they map 1:1 to a React Native theme file.

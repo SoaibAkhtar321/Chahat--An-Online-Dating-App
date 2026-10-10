@@ -1,4 +1,5 @@
 # Milo roadmap
+
 - [x] Stage 1 — plan
 - [x] Stage 2 — core prototype + audit fixes
 - [x] Stage 3 — calls + paid consent, pricing, premium, safety, notifications, settings, admin

@@ -17,7 +17,8 @@ function ResetPassword() {
   const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return setErr("Use 8+ characters with a letter and a number");
+    if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw))
+      return setErr("Use 8+ characters with a letter and a number");
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password: pw });
     setBusy(false);
@@ -29,8 +30,21 @@ function ResetPassword() {
     <Phone className="px-6 py-10">
       <h1 className="text-3xl font-semibold">Choose a new password</h1>
       <form onSubmit={submit} className="mt-8 space-y-5" noValidate>
-        <Field label="New password" error={err}><input className={inputCls} type="password" value={pw} onChange={(e) => { setPw(e.target.value); setErr(""); }} autoComplete="new-password" /></Field>
-        <button className={btnPrimary} disabled={busy}>{busy ? "Saving…" : "Save password"}</button>
+        <Field label="New password" error={err}>
+          <input
+            className={inputCls}
+            type="password"
+            value={pw}
+            onChange={(e) => {
+              setPw(e.target.value);
+              setErr("");
+            }}
+            autoComplete="new-password"
+          />
+        </Field>
+        <button className={btnPrimary} disabled={busy}>
+          {busy ? "Saving…" : "Save password"}
+        </button>
       </form>
     </Phone>
   );

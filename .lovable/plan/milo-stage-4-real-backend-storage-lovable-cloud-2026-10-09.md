@@ -3,6 +3,7 @@
 Your request counts as approval to lift the "no backend" rule for accounts, profiles, matches and chats only. Payments, video calls and push notifications stay simulated.
 
 ## What users get
+
 - Real sign-up and log-in with email + password, plus Google sign-in. Email confirmation is real.
 - The same profile, photos, Likes, Matches and chats on every device.
 - New messages appear live without refreshing.
@@ -10,12 +11,15 @@ Your request counts as approval to lift the "no backend" rule for accounts, prof
 - Blocks, reports, suspensions and deletions are enforced on the server.
 
 ## Stays demo for now (still labelled)
+
 Premium purchases, calls, push/email notifications, verification review, voice intros, Explore extras and the admin panel's other settings. These keep using local storage until a later stage.
 
 ## Sample profiles
+
 The 6 sample profiles become seeded demo profiles in the database (marked "demo"), so Discover still has people in it. Their auto-replies in chat stay simulated.
 
 ## Steps
+
 1. Turn on Lovable Cloud; enable email sign-in and Google.
 2. Create tables with strict access rules (see below).
 3. Replace demo sign-up, log-in, verify-email, log-out and delete-account with real ones.
@@ -25,6 +29,7 @@ The 6 sample profiles become seeded demo profiles in the database (marked "demo"
 7. Update the backend handoff note and project docs. Stop for your review.
 
 ## Technical details
+
 - Tables: `profiles` (1:1 with user, dob check 18+, gender, intent, languages[], interests[], bio, privacy fields), `profile_photos` (storage path, position), `swipes` (from, to, kind like/pass/priority, unique pair), `matches` (user_a < user_b, unique), `messages` (match_id, sender, body, image_path, read_at), `blocks`, `reports`, `user_roles` (admin role via `has_role`).
 - RLS: users read/write only their own profile private fields; discovery reads go through a server function returning only public columns for eligible, opposite-sex, unblocked, non-suspended profiles. Messages readable/insertable only by match members who haven't blocked each other.
 - Match creation: a database trigger on `swipes` insert creates the match when the reverse Like exists (atomic, never client-side).

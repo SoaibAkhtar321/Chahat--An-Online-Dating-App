@@ -84,7 +84,12 @@
   --ink-foreground: oklch(0.98 0.01 80);
   /* Tonal terracotta, deliberately not a pink-to-orange sweep */
   --gradient-brand: linear-gradient(160deg, oklch(0.6 0.15 42), oklch(0.5 0.14 32));
-  --gradient-photo: linear-gradient(to top, oklch(0.18 0.05 340 / 0.92), oklch(0.18 0.05 340 / 0.25) 45%, transparent 70%);
+  --gradient-photo: linear-gradient(
+    to top,
+    oklch(0.18 0.05 340 / 0.92),
+    oklch(0.18 0.05 340 / 0.25) 45%,
+    transparent 70%
+  );
   --shadow-card: 0 20px 40px -18px oklch(0.3 0.08 340 / 0.45);
   --shadow-glow: 0 10px 30px -10px oklch(0.45 0.12 35 / 0.55);
   --chart-1: oklch(0.646 0.222 41.116);
@@ -103,20 +108,37 @@
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
   body {
     background-color: var(--color-stage);
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
-  h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
 }
 
-@utility bg-brand { background-image: var(--gradient-brand); }
-@utility bg-photo-fade { background-image: var(--gradient-photo); }
-@utility shadow-card { box-shadow: var(--shadow-card); }
-@utility shadow-glow { box-shadow: var(--shadow-glow); }
+@utility bg-brand {
+  background-image: var(--gradient-brand);
+}
+@utility bg-photo-fade {
+  background-image: var(--gradient-photo);
+}
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
 @utility no-scrollbar {
   scrollbar-width: none;
-  &::-webkit-scrollbar { display: none; }
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
