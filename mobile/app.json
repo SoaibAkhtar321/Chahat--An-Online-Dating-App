@@ -45,7 +45,8 @@
         {
           "photosPermission": "Milo needs access to your photos so you can add pictures to your dating profile."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

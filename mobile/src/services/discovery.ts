@@ -131,16 +131,15 @@ export async function fetchDiscoveryDeck(
 
     const { data, error } = await query;
 
-    if (error || !data || data.length === 0) {
-      // Fallback to sample profiles
-      return DEMO_PROFILES.filter(
-        (p) => !userCity || p.city.toLowerCase() === userCity.toLowerCase() || true,
-      );
+    if (error || !data) {
+      console.warn("Discovery query failed:", error?.message);
+      return [];
     }
 
     return data.map((row: any) => formatProfileRow(row));
-  } catch {
-    return DEMO_PROFILES;
+  } catch (err) {
+    console.warn("Discovery failed:", err);
+    return [];
   }
 }
 
@@ -184,24 +183,11 @@ export async function submitSwipe(
     });
 
     if (error) {
-      // Fallback client-side record
-      const uid = (await supabase.auth.getUser()).data.user?.id;
-      if (!uid)
-        return { success: false, isMatch: false, likesRemaining: 10, error: "Not logged in" };
-
-      await supabase.from("swipes").upsert({
-        from_id: uid,
-        to_id: toUserId,
-        kind,
-      });
-
-      // Check if match
-      const isDemoMatch = DEMO_PROFILES.find((p) => p.id === toUserId)?.likesYou;
       return {
-        success: true,
-        isMatch: !!isDemoMatch && kind !== "pass",
-        matchId: isDemoMatch ? `match_${toUserId}` : undefined,
-        likesRemaining: 9,
+        success: false,
+        isMatch: false,
+        likesRemaining: 0,
+        error: error.message || "Could not record swipe. Please try again.",
       };
     }
 
@@ -209,14 +195,14 @@ export async function submitSwipe(
       success: data.success,
       isMatch: data.is_match,
       matchId: data.match_id,
-      likesRemaining: data.likes_remaining ?? 10,
+      likesRemaining: data.likes_remaining ?? 0,
       error: data.error,
     };
   } catch (err: any) {
     return {
       success: false,
       isMatch: false,
-      likesRemaining: 10,
+      likesRemaining: 0,
       error: err.message,
     };
   }

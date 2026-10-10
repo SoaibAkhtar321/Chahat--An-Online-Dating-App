@@ -1,7 +1,8 @@
-import { supabase } from "./supabase";
+import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Message, MatchItem, Profile } from "../types";
 import { getStoragePublicUrl } from "./profile";
 import { DEMO_PROFILES } from "./discovery";
+import { calculateAge } from "../utils/validation";
 
 export async function fetchUserMatches(currentUserId: string): Promise<MatchItem[]> {
   try {
@@ -11,25 +12,21 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
       .or(`user_a.eq.${currentUserId},user_b.eq.${currentUserId}`)
       .order("created_at", { ascending: false });
 
-    if (error || !matches) {
-      // Return demo matches if DB empty
+    if (!isSupabaseConfigured()) {
+      // Local preview only: backend not configured
       return [
         {
           id: "demo_match_ananya",
           otherUser: DEMO_PROFILES[0]!,
           createdAt: new Date().toISOString(),
-          unreadCount: 1,
-          lastMessage: {
-            id: "msg_1",
-            matchId: "demo_match_ananya",
-            sender: "ananya",
-            from: "them",
-            text: "Sea-face walk this weekend?",
-            at: Date.now() - 1000 * 60 * 30,
-            status: "read",
-          },
+          unreadCount: 0,
         },
       ];
+    }
+
+    if (error || !matches) {
+      console.warn("Matches query failed:", error?.message);
+      return [];
     }
 
     const items: MatchItem[] = [];
@@ -57,7 +54,7 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
           otherProfile = {
             id: prof.id,
             name: prof.name || "Member",
-            age: 26,
+            age: prof.dob ? calculateAge(prof.dob) : 0,
             city: prof.city || "",
             distanceKm: 0,
             bio: prof.bio || "",

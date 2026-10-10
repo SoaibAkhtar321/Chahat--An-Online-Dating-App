@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ViewStyle,
+  StyleProp,
   TextStyle,
 } from "react-native";
 import { Colors, Radii, Shadows, Typography } from "../../constants/theme";
@@ -17,7 +18,7 @@ interface ButtonProps {
   loading?: boolean;
   disabled?: boolean;
   icon?: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   textStyle?: TextStyle;
 }
 
