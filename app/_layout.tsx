@@ -1,4 +1,9 @@
 import React from "react";
+
+// Safe isomorphic fallback to avoid server-side useLayoutEffect warnings
+if (typeof window === "undefined") {
+  React.useLayoutEffect = React.useEffect;
+}
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
