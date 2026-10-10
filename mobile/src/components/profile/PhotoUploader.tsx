@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
+import { Alert } from "../../utils/alert";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { Plus, X, Star, ArrowLeft, ArrowRight } from "lucide-react-native";

@@ -56,15 +56,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Initial session load
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadUserProfile(session.user).finally(() => setLoading(false));
-      } else {
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          loadUserProfile(session.user).finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((e) => {
+        // Never leave the app on the startup spinner if session restore fails
+        console.error("Failed to restore session", e);
         setLoading(false);
-      }
-    });
+      });
 
     // Listen to auth events
     const {

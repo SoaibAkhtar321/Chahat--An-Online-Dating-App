@@ -6,6 +6,9 @@ import { AuthProvider } from "../src/context/AuthContext";
 import { MiloProvider } from "../src/context/MiloContext";
 import { Colors } from "../src/constants/theme";
 
+// Show a visible error screen (with retry) instead of a blank screen when a route throws
+export { ErrorBoundary } from "expo-router";
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>

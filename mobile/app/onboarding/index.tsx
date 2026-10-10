@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from "react-native";
+import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plus, X } from "lucide-react-native";
@@ -158,40 +158,49 @@ export default function OnboardingScreen() {
   };
 
   const handleFinish = async () => {
-    if (!user) return;
-    setSaving(true);
-    const res = await saveProfile(
-      {
-        name,
-        dob,
-        gender,
-        seeking,
-        intents,
-        city,
-        work,
-        education,
-        languages,
-        bio,
-        prompt: { q: promptQ, a: promptA },
-        interests: selectedInterests,
-        lifestyle,
-        photos,
-        ageMin,
-        ageMax,
-        distance,
-        onboarded: true,
-      },
-      user.id,
-    );
-    setSaving(false);
-
-    if (!res.success) {
-      Alert.alert("Error saving profile", res.error);
+    if (!user) {
+      Alert.alert("Not signed in", "Please log in again to finish setting up your profile.");
       return;
     }
+    setSaving(true);
+    try {
+      const res = await saveProfile(
+        {
+          name,
+          dob,
+          gender,
+          seeking,
+          intents,
+          city,
+          work,
+          education,
+          languages,
+          bio,
+          prompt: { q: promptQ, a: promptA },
+          interests: selectedInterests,
+          lifestyle,
+          photos,
+          ageMin,
+          ageMax,
+          distance,
+          onboarded: true,
+        },
+        user.id,
+      );
 
-    await refreshProfile();
-    router.replace("/(tabs)/discover");
+      if (!res.success) {
+        Alert.alert("Error saving profile", res.error || "Unknown error");
+        return;
+      }
+
+      await refreshProfile();
+      router.replace("/(tabs)/discover");
+    } catch (err: any) {
+      console.error("handleFinish failed", err);
+      Alert.alert("Something went wrong", err?.message || "Could not finish setup.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const renderContent = () => {

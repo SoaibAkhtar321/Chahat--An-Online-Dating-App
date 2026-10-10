@@ -83,9 +83,22 @@ export async function saveProfile(
       }));
     }
 
-    const { error } = await supabase.from("profiles").update(updateData).eq("id", userId);
+    const { data: updated, error } = await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", userId)
+      .select("id");
     if (error) {
+      console.error("saveProfile: profiles update failed", error);
       return { success: false, error: error.message };
+    }
+    if (!updated || updated.length === 0) {
+      console.error("saveProfile: no profile row was updated for user", userId);
+      return {
+        success: false,
+        error:
+          "Your profile record could not be found or updated. The database may not be fully set up for this project (profiles table or the new-user trigger).",
+      };
     }
 
     // Update account_state for private preferences
@@ -96,9 +109,13 @@ export async function saveProfile(
       verification: { status: profile.verificationStatus },
     };
 
-    await supabase
+    const { error: stateError } = await supabase
       .from("account_state")
       .upsert({ user_id: userId, data: privateState, updated_at: new Date().toISOString() });
+    if (stateError) {
+      // Non-fatal: the profile itself was saved
+      console.warn("saveProfile: account_state upsert failed", stateError.message);
+    }
 
     return { success: true };
   } catch (err: any) {
