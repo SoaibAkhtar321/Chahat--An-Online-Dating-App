@@ -1,29 +1,105 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { PhoneCall, Video, Info } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { PhoneCall, Video, Info, MessageCircle, ShieldCheck, Clock } from "lucide-react-native";
 import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { Header } from "../../src/components/ui/Header";
+import { useMilo } from "../../src/context/MiloContext";
 
 export default function CallsScreen() {
+  const router = useRouter();
+  const { matches } = useMilo();
+
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Calls & Billing" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Banner with Info */}
         <View style={styles.infoBox}>
-          <Info size={20} color={Colors.primary} />
+          <View style={styles.infoIconWrap}>
+            <Info size={20} color={Colors.primary} />
+          </View>
           <Text style={styles.infoText}>
-            Milo video and voice calls require mutual consent between matched members. First minute
-            is free on demo calls.
+            Audio and video calling requires mutual consent between matched members. The first minute
+            of every call is always free.
           </Text>
         </View>
 
+        {/* Feature Overview Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Recent Calls</Text>
-          <Text style={styles.emptyText}>
-            No recent calls. You can start audio or video calls directly from inside an active chat.
-          </Text>
+          <Text style={styles.cardTitle}>Calling Features</Text>
+
+          <View style={styles.featureRow}>
+            <View style={styles.iconCircle}>
+              <PhoneCall size={18} color={Colors.primary} />
+            </View>
+            <View style={styles.featureContent}>
+              <Text style={styles.featureTitle}>Crystal-Clear Voice Calls</Text>
+              <Text style={styles.featureDesc}>Direct 1-on-1 audio calling with end-call controls and mute options.</Text>
+            </View>
+          </View>
+
+          <View style={styles.featureRow}>
+            <View style={styles.iconCircle}>
+              <Video size={18} color={Colors.primary} />
+            </View>
+            <View style={styles.featureContent}>
+              <Text style={styles.featureTitle}>Face-to-Face Video Calls</Text>
+              <Text style={styles.featureDesc}>High-definition video with camera flip, privacy toggle, and live timer.</Text>
+            </View>
+          </View>
+
+          <View style={styles.featureRow}>
+            <View style={styles.iconCircle}>
+              <ShieldCheck size={18} color={Colors.accent} />
+            </View>
+            <View style={styles.featureContent}>
+              <Text style={styles.featureTitle}>Mutual Consent Protected</Text>
+              <Text style={styles.featureDesc}>Calls can only be initiated with members you have actively matched with.</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Call Logs & Matched Contacts */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Quick Call With Matches</Text>
+          {matches.length > 0 ? (
+            <View style={styles.matchList}>
+              {matches.map((m) => (
+                <View key={m.id} style={styles.matchRow}>
+                  <View style={styles.matchInfo}>
+                    <Text style={styles.matchName}>{m.otherUser.name}</Text>
+                    <Text style={styles.matchCity}>{m.otherUser.city}</Text>
+                  </View>
+                  <View style={styles.callActions}>
+                    <TouchableOpacity
+                      style={styles.callBtn}
+                      onPress={() => router.push({ pathname: "/call/[id]", params: { id: m.id, type: "audio" } })}
+                      activeOpacity={0.7}
+                    >
+                      <PhoneCall size={16} color={Colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.callBtn, styles.callBtnPrimary]}
+                      onPress={() => router.push({ pathname: "/call/[id]", params: { id: m.id, type: "video" } })}
+                      activeOpacity={0.7}
+                    >
+                      <Video size={16} color={Colors.primaryForeground} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyWrap}>
+              <MessageCircle size={32} color={Colors.mutedForeground} />
+              <Text style={styles.emptyText}>
+                No active matches yet. Once you match with someone, you can start voice or video calls directly with them.
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -37,6 +113,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+    gap: 16,
+    paddingBottom: 40,
   },
   infoBox: {
     flexDirection: "row",
@@ -44,14 +122,18 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: Radii.lg,
     gap: 12,
-    marginBottom: 20,
-    alignItems: "center",
+    alignItems: "flex-start",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  infoIconWrap: {
+    marginTop: 2,
   },
   infoText: {
     flex: 1,
     fontSize: Typography.sizes.sm,
     color: Colors.secondaryForeground,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   card: {
     backgroundColor: Colors.card,
@@ -64,11 +146,87 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  featureRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 16,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  featureContent: {
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
+  },
+  featureDesc: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  matchList: {
+    gap: 12,
+  },
+  matchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  matchInfo: {
+    flex: 1,
+  },
+  matchName: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  matchCity: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    marginTop: 2,
+  },
+  callActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  callBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  callBtnPrimary: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  emptyWrap: {
+    alignItems: "center",
+    paddingVertical: 16,
+    gap: 8,
   },
   emptyText: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
     lineHeight: 20,
+    textAlign: "center",
   },
 });

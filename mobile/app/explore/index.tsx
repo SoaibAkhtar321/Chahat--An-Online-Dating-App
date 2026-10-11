@@ -6,21 +6,33 @@ import { Compass, Coffee, Mountain, BookOpen, Music, Camera } from "lucide-react
 import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { Header } from "../../src/components/ui/Header";
 
+import { useMilo } from "../../src/context/MiloContext";
+
 const TOPICS = [
-  { id: "coffee", title: "Coffee & Chats", desc: "People who love cafe hopping", icon: Coffee },
-  { id: "outdoor", title: "Weekend Trekkers", desc: "Hikes and monsoon getaways", icon: Mountain },
-  { id: "readers", title: "Book Lovers", desc: "Fiction, non-fiction and poetry", icon: BookOpen },
-  { id: "music", title: "Concerts & Gigs", desc: "Indie, Bollywood and live music", icon: Music },
+  { id: "coffee", title: "Coffee & Chats", desc: "People who love cafe hopping", icon: Coffee, interests: ["Coffee", "Foodie"] },
+  { id: "outdoor", title: "Weekend Trekkers", desc: "Hikes and monsoon getaways", icon: Mountain, interests: ["Hiking", "Travel", "Yoga"] },
+  { id: "readers", title: "Book Lovers", desc: "Fiction, non-fiction and poetry", icon: BookOpen, interests: ["Books"] },
+  { id: "music", title: "Concerts & Gigs", desc: "Indie, Bollywood and live music", icon: Music, interests: ["Music", "Bollywood"] },
   {
     id: "photo",
     title: "Photography & Art",
     desc: "Visual creators and gallery dates",
     icon: Camera,
+    interests: ["Photography", "Art"],
   },
 ];
 
 export default function ExploreScreen() {
   const router = useRouter();
+  const { setFilters } = useMilo();
+
+  const handleSelectTopic = (interests: string[]) => {
+    setFilters((prev) => ({
+      ...prev,
+      interests,
+    }));
+    router.push("/(tabs)/discover");
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -38,7 +50,7 @@ export default function ExploreScreen() {
               <TouchableOpacity
                 key={item.id}
                 style={styles.card}
-                onPress={() => router.push("/(tabs)/discover")}
+                onPress={() => handleSelectTopic(item.interests)}
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>

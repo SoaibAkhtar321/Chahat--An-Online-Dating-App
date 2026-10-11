@@ -32,6 +32,8 @@ export interface Profile {
   likesYou?: boolean;
   gender?: Gender;
   isDemo?: boolean;
+  isVerified?: boolean;
+  verificationStatus?: "none" | "pending" | "approved" | "rejected";
 }
 
 export interface MeProfile {

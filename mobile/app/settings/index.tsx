@@ -13,6 +13,10 @@ import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
 import { deleteUserAccount } from "../../src/services/auth";
 import { runAccountDeletion } from "../../src/utils/deletionFlow";
+import {
+  getNotificationPreferences,
+  saveNotificationPreferences,
+} from "../../src/services/notifications";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -28,6 +32,29 @@ export default function SettingsScreen() {
   const [notifMatches, setNotifMatches] = useState(true);
   const [notifMessages, setNotifMessages] = useState(true);
   const [notifLikes, setNotifLikes] = useState(true);
+
+  React.useEffect(() => {
+    getNotificationPreferences().then((prefs) => {
+      setNotifMatches(prefs.matches);
+      setNotifMessages(prefs.messages);
+      setNotifLikes(prefs.likes);
+    });
+  }, []);
+
+  const handleToggleNotifMatches = (val: boolean) => {
+    setNotifMatches(val);
+    saveNotificationPreferences({ matches: val, messages: notifMessages, likes: notifLikes });
+  };
+
+  const handleToggleNotifMessages = (val: boolean) => {
+    setNotifMessages(val);
+    saveNotificationPreferences({ matches: notifMatches, messages: val, likes: notifLikes });
+  };
+
+  const handleToggleNotifLikes = (val: boolean) => {
+    setNotifLikes(val);
+    saveNotificationPreferences({ matches: notifMatches, messages: notifMessages, likes: val });
+  };
 
   // Dialogs
   const [logoutVisible, setLogoutVisible] = useState(false);
@@ -128,9 +155,9 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>NOTIFICATIONS</Text>
           <View style={styles.card}>
-            <Toggle label="New matches" value={notifMatches} onValueChange={setNotifMatches} />
-            <Toggle label="New messages" value={notifMessages} onValueChange={setNotifMessages} />
-            <Toggle label="Likes received" value={notifLikes} onValueChange={setNotifLikes} />
+            <Toggle label="New matches" value={notifMatches} onValueChange={handleToggleNotifMatches} />
+            <Toggle label="New messages" value={notifMessages} onValueChange={handleToggleNotifMessages} />
+            <Toggle label="Likes received" value={notifLikes} onValueChange={handleToggleNotifLikes} />
           </View>
         </View>
 

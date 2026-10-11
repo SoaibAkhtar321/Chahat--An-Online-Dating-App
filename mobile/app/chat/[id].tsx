@@ -27,6 +27,7 @@ import {
   subscribeToMatchMessages,
 } from "../../src/services/chat";
 import { blockUser, reportUser, unmatchUser } from "../../src/services/moderation";
+import { getSignedUrls } from "../../src/services/storage";
 import type { Message, Profile } from "../../src/types";
 
 export default function ChatDetailScreen() {
@@ -64,19 +65,33 @@ export default function ChatDetailScreen() {
     fetchMessagesForMatch(matchId, user.id).then(setMessages);
     markChatRead(matchId, user.id);
 
-    const channel = subscribeToMatchMessages(matchId, (newMsgRow) => {
+    const channel = subscribeToMatchMessages(
+      matchId,
+      async (newMsgRow) => {
+        let imageUrl: string | undefined;
+        if (newMsgRow.image_path) {
+          imageUrl = (await getSignedUrls("chat", [newMsgRow.image_path]))[newMsgRow.image_path];
+        }
+
       const formatted: Message = {
         id: newMsgRow.id,
         matchId: newMsgRow.match_id,
         sender: newMsgRow.sender,
         from: newMsgRow.sender === user.id ? "me" : "them",
         text: newMsgRow.body,
+        image: imageUrl,
         at: new Date(newMsgRow.created_at).getTime(),
         status: newMsgRow.read_at ? "read" : "sent",
       };
-      setMessages((prev) => [...prev, formatted]);
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === formatted.id)) {
+          return prev.map((m) => (m.id === formatted.id ? formatted : m));
+        }
+        return [...prev, formatted];
+      });
       markChatRead(matchId, user.id);
-    });
+    }, user.id);
 
     return () => {
       channel.unsubscribe();

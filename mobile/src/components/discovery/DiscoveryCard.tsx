@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { MapPin, Info } from "lucide-react-native";
+import { MapPin, Info, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
 import { Colors, Radii, Shadows, Typography } from "../../constants/theme";
 import type { Profile } from "../../types";
 
@@ -33,6 +33,10 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
     }
   };
 
+  // Dynamic compatibility estimate
+  const interestCount = profile.interests?.length || 2;
+  const compatScore = Math.min(96, Math.max(72, 70 + interestCount * 5));
+
   return (
     <View style={styles.card}>
       <Image
@@ -46,6 +50,18 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
       <View style={styles.tapContainer}>
         <Pressable style={styles.tapLeft} onPress={prevPhoto} />
         <Pressable style={styles.tapRight} onPress={nextPhoto} />
+      </View>
+
+      {/* Top Floating Badges */}
+      <View style={styles.topBadgesRow}>
+        <View style={styles.compatBadge}>
+          <Sparkles size={13} color={Colors.accent} />
+          <Text style={styles.compatBadgeText}>{compatScore}% Match</Text>
+        </View>
+
+        <View style={styles.dailyBadge}>
+          <Text style={styles.dailyBadgeText}>Daily Pick</Text>
+        </View>
       </View>
 
       {/* Photo indicator bars */}
@@ -65,25 +81,42 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
 
       {/* Gradient vignette */}
       <LinearGradient
-        colors={["transparent", "rgba(35, 20, 30, 0.3)", "rgba(35, 20, 30, 0.95)"]}
+        colors={["transparent", "rgba(25, 12, 20, 0.4)", "rgba(25, 12, 20, 0.96)"]}
         style={styles.gradient}
       >
         <View style={styles.infoRow}>
           <View style={styles.textColumn}>
-            <Text style={styles.name}>
-              {profile.name}, {profile.age}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.name}>
+                {profile.name}, {profile.age}
+              </Text>
+              {(profile.isVerified || profile.verificationStatus === "approved") && (
+                <View style={styles.verifiedTag}>
+                  <BadgeCheck size={18} color={Colors.accent} fill={Colors.accent} />
+                </View>
+              )}
+            </View>
+
             <View style={styles.locationRow}>
-              <MapPin size={14} color={Colors.primaryForeground} />
+              <MapPin size={13} color={Colors.primaryForeground} />
               <Text style={styles.locationText}>
                 {profile.city} · ~{profile.distanceKm} km away
               </Text>
             </View>
-            {profile.intent ? (
-              <View style={styles.intentBadge}>
-                <Text style={styles.intentText}>{profile.intent}</Text>
+
+            <View style={styles.tagChipsRow}>
+              {profile.intent ? (
+                <View style={styles.intentBadge}>
+                  <Text style={styles.intentText}>{profile.intent}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.voiceBadge}>
+                <Volume2 size={12} color={Colors.primaryForeground} />
+                <Text style={styles.voiceBadgeText}>Voice Intro</Text>
               </View>
-            ) : null}
+            </View>
+
             {profile.bio ? (
               <Text style={styles.bio} numberOfLines={2}>
                 {profile.bio}
@@ -113,6 +146,7 @@ const styles = StyleSheet.create({
     borderRadius: Radii.xxl,
     overflow: "hidden",
     backgroundColor: Colors.card,
+    position: "relative",
     ...Shadows.card,
   },
   image: {
@@ -130,11 +164,49 @@ const styles = StyleSheet.create({
   tapRight: {
     flex: 1,
   },
+  topBadgesRow: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    right: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    zIndex: 2,
+  },
+  compatBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(30, 20, 25, 0.75)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  compatBadgeText: {
+    fontSize: 11,
+    fontWeight: Typography.weights.bold,
+    color: Colors.accent,
+  },
+  dailyBadge: {
+    backgroundColor: "rgba(255, 107, 129, 0.9)",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+  },
+  dailyBadgeText: {
+    fontSize: 10,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primaryForeground,
+    letterSpacing: 0.3,
+  },
   indicatorContainer: {
     position: "absolute",
-    top: 12,
-    left: 12,
-    right: 12,
+    top: 48,
+    left: 16,
+    right: 16,
     flexDirection: "row",
     gap: 4,
     zIndex: 2,
@@ -145,19 +217,19 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   indicatorActive: {
-    backgroundColor: Colors.primaryForeground,
+    backgroundColor: "#ffffff",
   },
   indicatorInactive: {
-    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    backgroundColor: "rgba(255, 255, 255, 0.35)",
   },
   gradient: {
     position: "absolute",
+    bottom: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    height: "55%",
-    justifyContent: "flex-end",
-    padding: 20,
+    paddingTop: 80,
+    paddingBottom: 22,
+    paddingHorizontal: 18,
     zIndex: 2,
   },
   infoRow: {
@@ -167,53 +239,80 @@ const styles = StyleSheet.create({
   },
   textColumn: {
     flex: 1,
-    paddingRight: 12,
+    marginRight: 12,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   name: {
-    fontSize: Typography.sizes.xxl,
+    fontSize: 24,
     fontWeight: Typography.weights.bold,
-    color: Colors.primaryForeground,
     fontFamily: Typography.fontDisplay,
+    color: Colors.primaryForeground,
+  },
+  verifiedTag: {
+    justifyContent: "center",
   },
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     marginTop: 4,
   },
   locationText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.primaryForeground,
-    opacity: 0.9,
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: Typography.weights.medium,
+  },
+  tagChipsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 6,
   },
   intentBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(200, 70, 48, 0.8)",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: Radii.full,
-    marginTop: 8,
+    alignSelf: "flex-start",
   },
   intentText: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
+    fontSize: 11,
     color: Colors.primaryForeground,
+    fontWeight: Typography.weights.semiBold,
+  },
+  voiceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255, 107, 129, 0.35)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  voiceBadgeText: {
+    fontSize: 10,
+    color: Colors.primaryForeground,
+    fontWeight: Typography.weights.semiBold,
   },
   bio: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.primaryForeground,
-    opacity: 0.9,
-    marginTop: 8,
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.85)",
     lineHeight: 18,
+    marginTop: 4,
   },
   infoButton: {
     width: 44,
     height: 44,
     borderRadius: Radii.full,
-    backgroundColor: "rgba(35, 20, 30, 0.5)",
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
   },
 });

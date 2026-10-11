@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../services/supabase";
 import { fetchMyProfile } from "../services/profile";
+import { registerPushNotificationToken } from "../services/notifications";
 import type { MeProfile } from "../types";
 
 interface AuthContextType {
@@ -40,6 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const prof = await fetchMyProfile(currentUser.id, currentUser.email || "");
       setProfile(prof);
       setProfileError(false);
+      registerPushNotificationToken(currentUser.id).catch(() => {});
     } catch (e) {
       // Do NOT treat a failed load as "not onboarded": keep profile null and flag the error instead.
       console.error("Failed to load profile", e);

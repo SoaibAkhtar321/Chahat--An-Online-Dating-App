@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Message, MatchItem, Profile } from "../types";
 import { getSignedUrls, getSignedUrl } from "./storage";
 import { DEMO_PROFILES } from "./discovery";
+import { pushNotificationToInbox } from "./notifications";
 
 export async function fetchUserMatches(currentUserId: string): Promise<MatchItem[]> {
   try {
@@ -211,7 +212,11 @@ export async function markChatRead(matchId: string, currentUserId: string): Prom
   }
 }
 
-export function subscribeToMatchMessages(matchId: string, onMessageReceived: (msg: any) => void) {
+export function subscribeToMatchMessages(
+  matchId: string,
+  onMessageReceived: (msg: any) => void,
+  currentUserId?: string,
+) {
   return supabase
     .channel(`match_${matchId}`)
     .on(
@@ -223,7 +228,21 @@ export function subscribeToMatchMessages(matchId: string, onMessageReceived: (ms
         filter: `match_id=eq.${matchId}`,
       },
       (payload) => {
-        onMessageReceived(payload.new);
+        const msg = payload.new;
+        onMessageReceived(msg);
+
+        // If the incoming message is from the other user, dispatch to in-app notifications
+        if (currentUserId && msg && msg.sender !== currentUserId) {
+          pushNotificationToInbox({
+            kind: "message",
+            title: "New Message",
+            text: msg.body ? (msg.body.length > 50 ? `${msg.body.slice(0, 50)}...` : msg.body) : "Sent a photo",
+            data: {
+              matchId,
+              senderId: msg.sender,
+            },
+          }).catch(() => {});
+        }
       },
     )
     .subscribe();

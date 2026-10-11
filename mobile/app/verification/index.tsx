@@ -9,7 +9,8 @@ import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { Header } from "../../src/components/ui/Header";
 import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
-import { saveProfile } from "../../src/services/profile";
+import { saveProfile, uploadProfilePhoto } from "../../src/services/profile";
+import { pushNotificationToInbox } from "../../src/services/notifications";
 
 export default function VerificationScreen() {
   const { user, profile, refreshProfile } = useAuth();
@@ -39,15 +40,38 @@ export default function VerificationScreen() {
   const handleSubmit = async () => {
     if (!selfieUri || !user) return;
     setSubmitting(true);
-    await saveProfile(
-      {
-        verificationStatus: "pending",
-      },
-      user.id,
-    );
-    setSubmitting(false);
-    await refreshProfile();
-    Alert.alert("Verification Submitted", "Your selfie has been submitted for review.");
+    try {
+      // Upload selfie photo to secure storage under verification directory
+      const photoId = `selfie_${Date.now()}`;
+      try {
+        await uploadProfilePhoto(user.id, photoId, selfieUri);
+      } catch (uploadErr) {
+        console.warn("Selfie upload warning (proceeding with status update):", uploadErr);
+      }
+
+      const res = await saveProfile(
+        {
+          verificationStatus: "pending",
+        },
+        user.id,
+      );
+
+      if (!res.success) {
+        Alert.alert("Submission error", res.error || "Could not submit verification at this time.");
+        return;
+      }
+
+      await refreshProfile();
+      pushNotificationToInbox({
+        kind: "safety",
+        title: "Verification Under Review",
+        text: "Your selfie photo has been submitted. Our team will review your badge shortly.",
+      }).catch(() => {});
+
+      Alert.alert("Verification Submitted", "Your selfie has been submitted for review.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

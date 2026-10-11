@@ -1,47 +1,58 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from "react-native";
+import React, { useEffect, useState, useCallback } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Bell, Heart, MessageCircle, ShieldCheck } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { Bell, Heart, MessageCircle, ShieldCheck, CheckCheck } from "lucide-react-native";
 import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { Header } from "../../src/components/ui/Header";
-
-interface NoticeItem {
-  id: string;
-  kind: "match" | "message" | "like" | "safety";
-  text: string;
-  timeAgo: string;
-  read: boolean;
-}
-
-const INITIAL_NOTICES: NoticeItem[] = [
-  {
-    id: "1",
-    kind: "match",
-    text: "You matched with Ananya! Say hello when you're ready.",
-    timeAgo: "10m ago",
-    read: false,
-  },
-  {
-    id: "2",
-    kind: "like",
-    text: "Someone new liked your profile in Mumbai.",
-    timeAgo: "2h ago",
-    read: false,
-  },
-  {
-    id: "3",
-    kind: "safety",
-    text: "Welcome to Milo! Complete photo verification to unlock your verified badge.",
-    timeAgo: "1d ago",
-    read: true,
-  },
-];
+import {
+  fetchNotificationInbox,
+  markAllNotificationsRead,
+  markNotificationRead,
+  NoticeItem,
+} from "../../src/services/notifications";
 
 export default function NotificationsScreen() {
-  const [notices, setNotices] = useState<NoticeItem[]>(INITIAL_NOTICES);
+  const router = useRouter();
+  const [notices, setNotices] = useState<NoticeItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const markAllRead = () => {
-    setNotices(notices.map((n) => ({ ...n, read: true })));
+  const loadNotices = useCallback(async () => {
+    const list = await fetchNotificationInbox();
+    setNotices(list);
+  }, []);
+
+  useEffect(() => {
+    loadNotices();
+  }, [loadNotices]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadNotices();
+    setRefreshing(false);
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsRead();
+    setNotices((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const handlePressNotice = async (item: NoticeItem) => {
+    if (!item.read) {
+      await markNotificationRead(item.id);
+      setNotices((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
+    }
+
+    if (item.data?.matchId) {
+      router.push({
+        pathname: "/chat/[id]",
+        params: { id: item.data.matchId },
+      });
+    } else if (item.kind === "like") {
+      router.push("/(tabs)/likes");
+    } else if (item.kind === "safety") {
+      router.push("/safety");
+    }
   };
 
   const renderIcon = (kind: NoticeItem["kind"]) => {
@@ -57,14 +68,19 @@ export default function NotificationsScreen() {
     }
   };
 
+  const unreadCount = notices.filter((n) => !n.read).length;
+
   return (
     <SafeAreaView style={styles.container}>
       <Header
         title="Notifications"
         rightElement={
-          <TouchableOpacity onPress={markAllRead}>
-            <Text style={styles.markReadText}>Read all</Text>
-          </TouchableOpacity>
+          unreadCount > 0 ? (
+            <TouchableOpacity onPress={handleMarkAllRead} style={styles.markReadBtn} activeOpacity={0.7}>
+              <CheckCheck size={16} color={Colors.primary} />
+              <Text style={styles.markReadText}>Read all</Text>
+            </TouchableOpacity>
+          ) : undefined
         }
       />
 
@@ -72,19 +88,31 @@ export default function NotificationsScreen() {
         data={notices}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+        }
         renderItem={({ item }) => (
-          <View style={[styles.itemCard, !item.read && styles.itemUnread]}>
+          <TouchableOpacity
+            style={[styles.itemCard, !item.read && styles.itemUnread]}
+            onPress={() => handlePressNotice(item)}
+            activeOpacity={0.8}
+          >
             <View style={styles.iconCircle}>{renderIcon(item.kind)}</View>
             <View style={styles.itemContent}>
+              {item.title ? <Text style={styles.itemTitle}>{item.title}</Text> : null}
               <Text style={styles.itemText}>{item.text}</Text>
               <Text style={styles.itemTime}>{item.timeAgo}</Text>
             </View>
-          </View>
+            {!item.read && <View style={styles.unreadDot} />}
+          </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyView}>
-            <Bell size={48} color={Colors.mutedForeground} />
-            <Text style={styles.emptyText}>No notifications yet</Text>
+            <View style={styles.emptyIconCircle}>
+              <Bell size={36} color={Colors.mutedForeground} />
+            </View>
+            <Text style={styles.emptyTitle}>No notifications</Text>
+            <Text style={styles.emptyText}>You're all caught up with your matches and messages.</Text>
           </View>
         }
       />
@@ -97,13 +125,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  markReadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   markReadText: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.primary,
   },
   list: {
-    padding: 20,
+    padding: 16,
     gap: 12,
   },
   itemCard: {
@@ -120,9 +153,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
     backgroundColor: "#FFF9F8",
   },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary,
+  },
   iconCircle: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: Radii.full,
     backgroundColor: Colors.secondary,
     alignItems: "center",
@@ -130,6 +169,12 @@ const styles = StyleSheet.create({
   },
   itemContent: {
     flex: 1,
+  },
+  itemTitle: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginBottom: 2,
   },
   itemText: {
     fontSize: Typography.sizes.sm,
@@ -144,10 +189,27 @@ const styles = StyleSheet.create({
   emptyView: {
     alignItems: "center",
     marginTop: 80,
-    gap: 12,
+    paddingHorizontal: 32,
+    gap: 10,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
   },
   emptyText: {
-    fontSize: Typography.sizes.base,
+    fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

@@ -12,6 +12,7 @@ import {
   Gem,
   Rocket,
   MapPin,
+  Crown,
 } from "lucide-react-native";
 import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
 import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
@@ -29,6 +30,7 @@ export default function DiscoverScreen() {
     loadingDeck,
     isBoosting,
     boostTimeRemaining,
+    subscription,
     swipeCard,
     undoPass,
     triggerBoost,
@@ -112,14 +114,40 @@ export default function DiscoverScreen() {
       </View>
 
       {/* Subheader status bar */}
-      <View style={styles.statusBar}>
-        <Text style={styles.quotaText}>
-          {likesRemaining} likes left today (resets midnight IST)
-        </Text>
+      <TouchableOpacity
+        style={styles.statusBar}
+        onPress={() => router.push("/premium")}
+        activeOpacity={0.8}
+      >
+        {subscription && subscription.tier !== "free" ? (
+          <View style={styles.premiumStatusRow}>
+            <Crown size={14} color={Colors.accent} />
+            <Text style={styles.premiumStatusText}>
+              CHAHAT {subscription.tier.toUpperCase()} · Unlimited Likes
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.quotaText}>
+            {likesRemaining} likes left today · <Text style={styles.upgradeLinkText}>Get Unlimited</Text>
+          </Text>
+        )}
         {isBoosting && (
           <Text style={styles.boostActiveText}>🚀 Boost on ({boostTimeRemaining}m left)</Text>
         )}
-      </View>
+      </TouchableOpacity>
+
+      {/* Active Filter Bar if interests/vibes are applied */}
+      {filters.interests && filters.interests.length > 0 ? (
+        <View style={styles.activeFilterBar}>
+          <Text style={styles.activeFilterLabel}>Vibe filter: {filters.interests.join(", ")}</Text>
+          <TouchableOpacity
+            onPress={() => setFilters((prev) => ({ ...prev, interests: [] }))}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.clearFilterText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Deck Card Area */}
       <View style={styles.cardArea}>
@@ -267,10 +295,45 @@ const styles = StyleSheet.create({
     color: Colors.mutedForeground,
     fontWeight: Typography.weights.medium,
   },
+  upgradeLinkText: {
+    color: Colors.primary,
+    fontWeight: Typography.weights.bold,
+  },
+  premiumStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  premiumStatusText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.primary,
+    fontWeight: Typography.weights.bold,
+  },
   boostActiveText: {
     fontSize: Typography.sizes.xs,
     color: Colors.primary,
     fontWeight: Typography.weights.bold,
+  },
+  activeFilterBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.secondary,
+    borderRadius: Radii.full,
+  },
+  activeFilterLabel: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
+  },
+  clearFilterText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primary,
   },
   cardArea: {
     flex: 1,

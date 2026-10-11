@@ -12,7 +12,11 @@ import {
   X,
   Flag,
   Ban,
+  BadgeCheck,
+  Sparkles,
+  HeartHandshake,
 } from "lucide-react-native";
+import { VoiceIntroPlayer } from "../../src/components/profile/VoiceIntroPlayer";
 import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
@@ -93,6 +97,9 @@ export default function ProfileDetailScreen() {
             <Text style={styles.name}>
               {targetProfile.name}, {targetProfile.age}
             </Text>
+            {(targetProfile.isVerified || targetProfile.verificationStatus === "approved") && (
+              <BadgeCheck size={22} color={Colors.accent} fill={Colors.accent} />
+            )}
           </View>
 
           <View style={styles.metaRow}>
@@ -102,15 +109,37 @@ export default function ProfileDetailScreen() {
             </Text>
           </View>
 
+          {/* Relationship Intentions Badge */}
+          {targetProfile.intent ? (
+            <View style={styles.intentCard}>
+              <View style={styles.intentIconBox}>
+                <HeartHandshake size={18} color={Colors.primary} />
+              </View>
+              <View style={styles.intentTextBox}>
+                <Text style={styles.intentHeading}>Looking for / संबंध इरादा:</Text>
+                <Text style={styles.intentValue}>{targetProfile.intent}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Voice Introduction Player */}
+          <VoiceIntroPlayer userName={targetProfile.name} durationSec={24} />
+
           {/* Compatibility Card */}
           <View style={styles.compatCard}>
-            <Text style={styles.compatTitle}>
-              <Text style={styles.compatScore}>{score}%</Text> compatibility estimate
-            </Text>
+            <View style={styles.compatHeaderRow}>
+              <Sparkles size={18} color={Colors.accent} />
+              <Text style={styles.compatTitle}>
+                <Text style={styles.compatScore}>{score}%</Text> Compatibility Summary
+              </Text>
+            </View>
             <Text style={styles.compatDesc}>
               {sharedInterests.length > 0
-                ? `You both like ${sharedInterests.join(", ")}.`
-                : "You share similar relationship intentions."}
+                ? `You both love ${sharedInterests.join(", ")}. Strong lifestyle alignment in city and age preferences.`
+                : "Common lifestyle and relationship goal alignment detected."}
+            </Text>
+            <Text style={styles.compatDisclaimer}>
+              *Score is calculated from shared interests & relationship goals as an estimate, not a scientific guarantee.
             </Text>
           </View>
 
@@ -299,6 +328,7 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
   },
   name: {
     fontSize: Typography.sizes.title,
@@ -316,13 +346,50 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
   },
+  intentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.secondary,
+    padding: 14,
+    borderRadius: Radii.xl,
+    marginTop: 12,
+  },
+  intentIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  intentTextBox: {
+    flex: 1,
+  },
+  intentHeading: {
+    fontSize: 11,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.semiBold,
+  },
+  intentValue: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+    marginTop: 2,
+  },
   compatCard: {
     backgroundColor: Colors.card,
-    borderRadius: Radii.lg,
+    borderRadius: Radii.xl,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginVertical: 18,
+    marginVertical: 12,
+  },
+  compatHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
   },
   compatTitle: {
     fontSize: Typography.sizes.base,
@@ -330,14 +397,22 @@ const styles = StyleSheet.create({
     color: Colors.foreground,
   },
   compatScore: {
-    fontSize: Typography.sizes.xxl,
+    fontSize: Typography.sizes.xl,
     fontFamily: Typography.fontDisplay,
     color: Colors.primary,
   },
   compatDesc: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
+    lineHeight: 20,
     marginTop: 4,
+  },
+  compatDisclaimer: {
+    fontSize: 10,
+    color: Colors.mutedForeground,
+    fontStyle: "italic",
+    marginTop: 8,
+    lineHeight: 14,
   },
   section: {
     marginBottom: 20,

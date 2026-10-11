@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Profile, SwipeResponse } from "../types";
 import { getSignedUrls } from "./storage";
+import { pushNotificationToInbox } from "./notifications";
 
 // Bundled demo profiles for offline/testing mode matching prototype exactly
 export const DEMO_PROFILES: Profile[] = [
@@ -25,6 +26,8 @@ export const DEMO_PROFILES: Profile[] = [
     lastActiveMin: 0,
     likesYou: true,
     isDemo: true,
+    isVerified: true,
+    verificationStatus: "approved",
   },
   {
     id: "meera",
@@ -96,28 +99,56 @@ export async function fetchDiscoveryDeck(
   currentUserId: string,
   userCity: string,
   seekingGender: string,
+  filters?: import("../types").Filters,
 ): Promise<Profile[]> {
+  let deck: Profile[] = [];
   if (!isSupabaseConfigured()) {
-    return DEMO_PROFILES;
-  }
-  try {
-    // Server RPC only: it applies blocks, city/seeking filters, already-swiped exclusion and never returns dob.
-    const { data: rpcData, error: rpcError } = await supabase.rpc("get_discovery_feed", {
-      _limit: 30,
-    });
-    if (rpcError || !Array.isArray(rpcData)) {
-      console.warn("Discovery feed failed:", rpcError?.message);
-      return [];
+    deck = [...DEMO_PROFILES];
+  } else {
+    try {
+      // Server RPC only: it applies blocks, city/seeking filters, already-swiped exclusion and never returns dob.
+      const { data: rpcData, error: rpcError } = await supabase.rpc("get_discovery_feed", {
+        _limit: 30,
+      });
+      if (rpcError || !Array.isArray(rpcData)) {
+        console.warn("Discovery feed failed:", rpcError?.message);
+        deck = [];
+      } else {
+        const signed = await getSignedUrls(
+          "photos",
+          rpcData.flatMap((r: any) => (Array.isArray(r.photos) ? r.photos.map((p: any) => p.path) : [])),
+        );
+        deck = rpcData.map((row: any) => formatProfileRow(row, signed));
+      }
+    } catch (err) {
+      console.warn("Discovery failed:", err);
+      deck = [];
     }
-    const signed = await getSignedUrls(
-      "photos",
-      rpcData.flatMap((r: any) => (Array.isArray(r.photos) ? r.photos.map((p: any) => p.path) : [])),
-    );
-    return rpcData.map((row: any) => formatProfileRow(row, signed));
-  } catch (err) {
-    console.warn("Discovery failed:", err);
-    return [];
   }
+
+  // Apply client-side criteria from active filters (age range, distance, interests, languages)
+  if (filters && deck.length > 0) {
+    deck = deck.filter((profile) => {
+      if (filters.ageMin && profile.age < filters.ageMin) return false;
+      if (filters.ageMax && profile.age > filters.ageMax) return false;
+      if (filters.distance && profile.distanceKm > filters.distance) return false;
+      if (filters.interests && filters.interests.length > 0) {
+        const hasMatchingInterest = profile.interests.some((i) =>
+          filters.interests.some((fi) => fi.toLowerCase() === i.toLowerCase()),
+        );
+        if (!hasMatchingInterest) return false;
+      }
+      if (filters.languages && filters.languages.length > 0 && profile.languages) {
+        const hasMatchingLanguage = profile.languages.some((l) =>
+          filters.languages.some((fl) => fl.toLowerCase() === l.toLowerCase()),
+        );
+        if (!hasMatchingLanguage) return false;
+      }
+      return true;
+    });
+  }
+
+  return deck;
 }
 
 function formatProfileRow(r: any, signed: Record<string, string>): Profile {
@@ -146,6 +177,8 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
     lastActiveMin: 0,
     likesYou: false,
     isDemo: false,
+    isVerified: r.is_verified === true || r.verification_status === "approved",
+    verificationStatus: r.verification_status || (r.is_verified ? "approved" : "none"),
   };
 }
 
@@ -166,6 +199,18 @@ export async function submitSwipe(
         likesRemaining: 0,
         error: error.message || "Could not record swipe. Please try again.",
       };
+    }
+
+    if (data.is_match) {
+      pushNotificationToInbox({
+        kind: "match",
+        title: "New Match!",
+        text: "You and a new connection liked each other. Start a conversation!",
+        data: {
+          matchId: data.match_id,
+          profileId: toUserId,
+        },
+      }).catch(() => {});
     }
 
     return {
