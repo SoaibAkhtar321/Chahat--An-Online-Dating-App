@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   intentHeading: {
     fontSize: 11,
     color: Colors.mutedForeground,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
   },
   intentValue: {
     fontSize: Typography.sizes.sm,

@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   intentText: {
     fontSize: 11,
     color: Colors.primaryForeground,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
   },
   voiceBadge: {
     flexDirection: "row",
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   voiceBadgeText: {
     fontSize: 10,
     color: Colors.primaryForeground,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
   },
   bio: {
     fontSize: 12,

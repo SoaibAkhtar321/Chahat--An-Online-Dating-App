@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   heroTagline: {
     fontSize: Typography.sizes.xs,
     color: Colors.primary,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
     marginTop: 2,
     marginBottom: 6,
   },
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
   durationSavings: {
     fontSize: 10,
     color: Colors.success,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
     marginTop: 2,
   },
   durationSavingsSelected: {
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   planName: {
-    fontSize: Typography.sizes.md,
+    fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
   },
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
   },
   ctaPlanSummary: {
     fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
     color: Colors.foreground,
   },
   ctaTotalAmount: {

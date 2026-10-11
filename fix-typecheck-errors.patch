@@ -1,0 +1,101 @@
+diff --git a/mobile/app/premium/index.tsx b/mobile/app/premium/index.tsx
+index 3edc6c6..ac8916f 100644
+--- a/mobile/app/premium/index.tsx
++++ b/mobile/app/premium/index.tsx
+@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
+   heroTagline: {
+     fontSize: Typography.sizes.xs,
+     color: Colors.primary,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+     marginTop: 2,
+     marginBottom: 6,
+   },
+@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
+   durationSavings: {
+     fontSize: 10,
+     color: Colors.success,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+     marginTop: 2,
+   },
+   durationSavingsSelected: {
+@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
+     gap: 6,
+   },
+   planName: {
+-    fontSize: Typography.sizes.md,
++    fontSize: Typography.sizes.base,
+     fontWeight: Typography.weights.bold,
+     color: Colors.foreground,
+   },
+@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
+   },
+   ctaPlanSummary: {
+     fontSize: Typography.sizes.sm,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+     color: Colors.foreground,
+   },
+   ctaTotalAmount: {
+diff --git a/mobile/app/profile/[id].tsx b/mobile/app/profile/[id].tsx
+index ab6d8e2..8a28a06 100644
+--- a/mobile/app/profile/[id].tsx
++++ b/mobile/app/profile/[id].tsx
+@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
+   intentHeading: {
+     fontSize: 11,
+     color: Colors.mutedForeground,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+   },
+   intentValue: {
+     fontSize: Typography.sizes.sm,
+diff --git a/mobile/src/components/chat/CoupleGamesModal.tsx b/mobile/src/components/chat/CoupleGamesModal.tsx
+index 4efba9e..652a240 100644
+--- a/mobile/src/components/chat/CoupleGamesModal.tsx
++++ b/mobile/src/components/chat/CoupleGamesModal.tsx
+@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
+   },
+   choiceText: {
+     fontSize: Typography.sizes.xs,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+     color: Colors.foreground,
+     textAlign: "center",
+   },
+diff --git a/mobile/src/components/discovery/DiscoveryCard.tsx b/mobile/src/components/discovery/DiscoveryCard.tsx
+index 23e6de3..951f7cf 100644
+--- a/mobile/src/components/discovery/DiscoveryCard.tsx
++++ b/mobile/src/components/discovery/DiscoveryCard.tsx
+@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
+   intentText: {
+     fontSize: 11,
+     color: Colors.primaryForeground,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+   },
+   voiceBadge: {
+     flexDirection: "row",
+@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
+   voiceBadgeText: {
+     fontSize: 10,
+     color: Colors.primaryForeground,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+   },
+   bio: {
+     fontSize: 12,
+diff --git a/mobile/src/components/profile/VoiceIntroPlayer.tsx b/mobile/src/components/profile/VoiceIntroPlayer.tsx
+index 132a339..859e844 100644
+--- a/mobile/src/components/profile/VoiceIntroPlayer.tsx
++++ b/mobile/src/components/profile/VoiceIntroPlayer.tsx
+@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
+   },
+   tagText: {
+     fontSize: 11,
+-    fontWeight: Typography.weights.semiBold,
++    fontWeight: Typography.weights.semibold,
+     color: Colors.primary,
+   },
+   title: {

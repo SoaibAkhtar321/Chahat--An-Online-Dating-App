@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   tagText: {
     fontSize: 11,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
     color: Colors.primary,
   },
   title: {

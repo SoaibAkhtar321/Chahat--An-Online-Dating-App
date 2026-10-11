@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   },
   choiceText: {
     fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.semiBold,
+    fontWeight: Typography.weights.semibold,
     color: Colors.foreground,
     textAlign: "center",
   },
