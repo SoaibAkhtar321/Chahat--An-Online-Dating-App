@@ -1,7 +1,7 @@
 # Milo: pre-backend handoff note
 
 The current repository contains both the **web prototype** (TanStack Start + React) and the **Native Android mobile application** (`/mobile` directory, built with React Native + Expo SDK 52 + TypeScript).
-Stage 4 & Android Rebuild: Real accounts (email auth), profiles, photos, Likes, Matches, chats (live), blocks and reports are integrated via Supabase. Daily Like limits are server-enforced in India Standard Time (`record_swipe` RPC in `0003_mobile_security_hardening.sql`), and DOB is strictly locked against client modification after initial save. Realtime chat subscriptions, photo selection via native picker, and safe account deletion are active. Admin dashboard remains a web-only interface.
+Stage 4 & Android Rebuild: Real accounts (email auth), profiles, photos, Likes, Matches, chats (live), blocks and reports are integrated via Supabase. Daily Like limits are server-enforced in India Standard Time (`record_swipe` RPC in `supabase/migrations/20260101000300_mobile_security_hardening.sql`), and DOB is strictly locked against client modification after initial save. Realtime chat subscriptions, photo selection via native picker, and safe account deletion are active. Admin dashboard remains a web-only interface.
 
 ## 1. Proposed service boundaries
 

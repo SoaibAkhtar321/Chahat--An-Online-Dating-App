@@ -1,13 +1,13 @@
-// Supabase Edge Function: delete-account  (NOT DEPLOYED — requires explicit approval)
+// Supabase Edge Function: delete-account
 //
 // Completely deletes the CALLING user. The user id is taken only from the verified JWT, never from the request body.
 // Order (every step is idempotent so the client can safely retry after a partial failure):
 //   1. verify caller JWT
-//   2. delete the user's storage objects (photos/<uid>/*, chat media the user sent)
+//   2. delete the user's storage objects (photos/<uid>/*, and chat/<matchId>/* for all user's matches)
 //   3. purge DB rows via purge_user_data(uid) (service_role only RPC)
 //   4. delete the Supabase Auth user (treats "already deleted" as success)
 // The service-role key is read from the function's server-side environment (auto-injected by Supabase).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,13 +17,20 @@ const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 async function removeFolder(admin: ReturnType<typeof createClient>, bucket: string, folder: string) {
-  // list() is paginated; loop until the folder is empty.
+  // list() is paginated; loop until the folder is completely emptied.
+  let remainingCount = 0;
   for (let guard = 0; guard < 50; guard++) {
     const { data, error } = await admin.storage.from(bucket).list(folder, { limit: 100 });
     if (error) throw new Error(`list ${bucket}/${folder}: ${error.message}`);
     if (!data || data.length === 0) return;
+    remainingCount = data.length;
     const { error: rmErr } = await admin.storage.from(bucket).remove(data.map((f) => `${folder}/${f.name}`));
     if (rmErr) throw new Error(`remove ${bucket}/${folder}: ${rmErr.message}`);
+  }
+  // If files still remain after the 50 iterations, throw to prevent silent exit
+  const { data: finalCheck } = await admin.storage.from(bucket).list(folder, { limit: 1 });
+  if (finalCheck && finalCheck.length > 0) {
+    throw new Error(`removeFolder guard limit reached: files still remain in ${bucket}/${folder}`);
   }
 }
 
@@ -57,15 +64,49 @@ Deno.serve(async (req) => {
     current = step("storage:photos");
     await removeFolder(admin, "photos", uid);
 
-    // 2b. chat media this user sent (other participant's media is untouched)
+    // 2b. chat media: delete chat folders for all matches the user belongs to
     current = step("storage:chat");
-    const { data: msgs, error: msgErr } = await admin
-      .from("messages").select("image_path").eq("sender", uid).not("image_path", "is", null);
-    if (msgErr) throw new Error(msgErr.message);
-    const paths = (msgs ?? []).map((m) => m.image_path as string);
-    for (let i = 0; i < paths.length; i += 100) {
-      const { error } = await admin.storage.from("chat").remove(paths.slice(i, i + 100));
-      if (error) throw new Error(error.message);
+    const { data: userMatches, error: matchErr } = await admin
+      .from("matches")
+      .select("id")
+      .or(`user_a.eq.${uid},user_b.eq.${uid}`);
+    if (matchErr) throw new Error(matchErr.message);
+
+    for (const m of userMatches ?? []) {
+      await removeFolder(admin, "chat", m.id);
+    }
+
+    // Also paginated scan for any leftover messages sent by user that might have had orphan paths
+    let hasMoreMessages = true;
+    let page = 0;
+    const pageSize = 500;
+    while (hasMoreMessages) {
+      const { data: msgs, error: msgErr } = await admin
+        .from("messages")
+        .select("image_path")
+        .eq("sender", uid)
+        .not("image_path", "is", null)
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (msgErr) throw new Error(msgErr.message);
+      if (!msgs || msgs.length === 0) {
+        hasMoreMessages = false;
+        break;
+      }
+
+      const paths = msgs.map((m) => m.image_path as string).filter(Boolean);
+      if (paths.length > 0) {
+        for (let i = 0; i < paths.length; i += 100) {
+          const { error: rmErr } = await admin.storage.from("chat").remove(paths.slice(i, i + 100));
+          if (rmErr) throw new Error(rmErr.message);
+        }
+      }
+
+      if (msgs.length < pageSize) {
+        hasMoreMessages = false;
+      } else {
+        page++;
+      }
     }
 
     // 3. database rows
@@ -79,8 +120,8 @@ Deno.serve(async (req) => {
     if (delErr && !/not.?found/i.test(delErr.message)) throw new Error(delErr.message);
 
     return json(200, { success: true });
-  } catch (e) {
-    console.error(`delete-account failed at ${current} for ${uid}:`, e);
+  } catch (e: any) {
+    console.error(`delete-account failed at ${current}:`, e?.message || e);
     return json(500, {
       success: false,
       retryable: true,

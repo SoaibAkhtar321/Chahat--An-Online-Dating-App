@@ -28,8 +28,8 @@ export default function PrivacyScreen() {
         <Text style={styles.subheading}>2. Private Photographs & Moderation</Text>
         <Text style={styles.paragraph}>
           Uploaded profile photographs are stored in secure cloud object storage. In accordance with
-          platform security standards, photos undergo approval review to protect members from
-          inappropriate or fraudulent content.
+          platform security standards, photos are subject to community guidelines, automated checks, and
+          moderation review upon report to protect members from inappropriate or fraudulent content.
         </Text>
 
         <Text style={styles.subheading}>3. Account & Data Deletion</Text>

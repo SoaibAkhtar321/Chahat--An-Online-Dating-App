@@ -11,4 +11,10 @@ Roles `anon`/`authenticated`/`service_role`, `auth.users`, `auth.uid()`/`auth.ro
 Real Supabase Auth (JWT verification, `auth.users` columns/triggers), the real Storage service and its policies/buckets, PostgREST behaviour, Supabase's real default privileges, extensions and roles, and the **actual remote schema**. A pass here is not evidence that the Supabase project is secure; a fail shows the committed SQL does not meet the suite's expectations.
 
 ## Known state
-The committed migrations are split across `drizzle/migrations/` (0000-0002) and `supabase/migrations/` (0003 only), and do not satisfy the suite (see CI results). CI assembles them as an interim, clearly labelled step. Reconciliation is a separate task.
+The migration history is unified and timestamp-ordered in `supabase/migrations/`:
+1. `20260101000000_core_schema.sql`
+2. `20260101000100_storage.sql`
+3. `20260101000200_admin_moderation.sql`
+4. `20260101000300_mobile_security_hardening.sql`
+
+Legacy Drizzle migration files in `drizzle/migrations/` are superseded and kept for historical reference only. CI runs directly against `supabase/migrations/` and `supabase/seed.sql`.

@@ -114,4 +114,8 @@ INSERT INTO public.t_results SELECT 'B sees own block', public.is_blocked_pair('
 INSERT INTO public.t_results SELECT 'blocked C hidden from B discovery', count(*)=0, count(*)::text FROM public.get_discovery_feed(50) WHERE id='00000000-0000-0000-0000-00000000000c';
 CALL public.expect_fail('B cannot swipe blocked C','SELECT public.record_swipe(''00000000-0000-0000-0000-00000000000c'',''like'')');
 INSERT INTO public.t_results SELECT 'non-admin has_role false', NOT public.has_role(auth.uid(),'admin'), 'false';
+-- photo path ownership test
+CALL public.expect_fail('B cannot set photo pointing to A folder', 'UPDATE public.profiles SET photos=''[{"id":"p1","path":"00000000-0000-0000-0000-00000000000a/p1.jpg"}]''::jsonb WHERE id=auth.uid()::text');
+CALL public.expect_ok('B can set photo pointing to own folder', 'UPDATE public.profiles SET photos=''[{"id":"p1","path":"00000000-0000-0000-0000-00000000000b/p1.jpg"}]''::jsonb WHERE id=auth.uid()::text');
 RESET ROLE;
+
