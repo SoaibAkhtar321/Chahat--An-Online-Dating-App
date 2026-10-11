@@ -1,4 +1,5 @@
 // Supabase Edge Function: delete-account
+// STATUS: NOT DEPLOYED yet (deployed by the runbook in Part C / docs/DEPLOYMENT_RUNBOOK.md).
 //
 // Completely deletes the CALLING user. The user id is taken only from the verified JWT, never from the request body.
 // Order (every step is idempotent so the client can safely retry after a partial failure):
