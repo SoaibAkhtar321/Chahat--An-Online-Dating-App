@@ -15,6 +15,7 @@ Baseline: commit `788cf7d`. Target project: `milo-dev` (ref `tuptdzbdowqtmbyhaze
 4. `supabase/migrations/20260101000300_mobile_security_hardening.sql` (quota limits, 2-arg record_swipe, purge_user_data RPC, dob locking)
 5. `supabase/migrations/20260101000400_security_followups.sql` (photo path ownership, search_path = public, pg_temp on SECURITY DEFINER functions)
 6. `supabase/migrations/20260101000500_privacy_and_rate_limits.sql` (remove is_demo and likes_you from feed & profiles grant, revoke demo_reply from authenticated, rate limit triggers on messages and reports)
+7. `supabase/migrations/20260101000600_trigger_function_hardening.sql` (revoke direct EXECUTE on the two rate-limit trigger functions; align `messages_guard` search_path). Note: any NEW function created after 0300 needs its own explicit `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated` unless callers need it.
 
 ## Tunable server settings
 `public.app_settings`: `daily_like_limit` (10) and `daily_priority_like_limit` (3). Modifiable via service_role SQL without code changes.

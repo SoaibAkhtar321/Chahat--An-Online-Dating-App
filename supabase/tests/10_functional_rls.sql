@@ -172,6 +172,25 @@ BEGIN
   END LOOP;
 END $$;
 CALL public.expect_fail('11th report rejected by rate limit', 'INSERT INTO public.reports(reporter, target, category, note) VALUES (auth.uid()::text, ''00000000-0000-0000-0000-00000000000c'', ''test'', ''over limit'')');
+-- Trigger functions must hold no direct EXECUTE grant for API roles (migration 0600).
+-- Asserts the privilege itself: PostgreSQL also refuses direct trigger-function calls, so a call test can't tell.
+RESET ROLE;
+INSERT INTO public.t_results SELECT 'anon has no EXECUTE on check_message_rate_limit',
+  NOT has_function_privilege('anon','public.check_message_rate_limit()','EXECUTE'),
+  has_function_privilege('anon','public.check_message_rate_limit()','EXECUTE')::text;
+INSERT INTO public.t_results SELECT 'anon has no EXECUTE on check_report_rate_limit',
+  NOT has_function_privilege('anon','public.check_report_rate_limit()','EXECUTE'),
+  has_function_privilege('anon','public.check_report_rate_limit()','EXECUTE')::text;
+INSERT INTO public.t_results SELECT 'authenticated has no EXECUTE on check_message_rate_limit',
+  NOT has_function_privilege('authenticated','public.check_message_rate_limit()','EXECUTE'),
+  has_function_privilege('authenticated','public.check_message_rate_limit()','EXECUTE')::text;
+INSERT INTO public.t_results SELECT 'authenticated has no EXECUTE on check_report_rate_limit',
+  NOT has_function_privilege('authenticated','public.check_report_rate_limit()','EXECUTE'),
+  has_function_privilege('authenticated','public.check_report_rate_limit()','EXECUTE')::text;
+INSERT INTO public.t_results SELECT 'messages_guard search_path hardened',
+  coalesce(proconfig::text LIKE '%pg_temp%', false), coalesce(proconfig::text, 'none')
+  FROM pg_proc WHERE oid = 'public.messages_guard()'::regprocedure;
+SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
 RESET ROLE;
 
 
