@@ -221,4 +221,4 @@ The database migrations are located in:
 2. **IST Midnight Quota Reset**: The `record_swipe` RPC enforces daily limits according to India Standard Time (`Asia/Kolkata` calendar date).
 3. **Server-Enforced Matches**: The client cannot manufacture matches. Matches are created exclusively inside the database transaction trigger `on_swipe` or `record_swipe`.
 4. **City-Only Discovery**: The server query filters profiles by city, automatically excluding blocked members and inactive accounts.
-5. **Secure Account Deletion**: `delete_user_account()` wipes matches, swipes, messages, and profile data while retaining an audit record.
+5. **Secure Account Deletion**: the `delete-account` Edge Function (committed, not yet deployed) removes the user's Storage files, calls the service-role-only `purge_user_data()`, and then deletes the Auth user, while retaining an audit record. See `docs/ACCOUNT_DELETION.md`.

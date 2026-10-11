@@ -126,23 +126,106 @@ export async function resendConfirmation(
   }
 }
 
-export async function deleteUserAccount(): Promise<{ success: boolean; error?: string }> {
+export interface DeleteAccountResult {
+  success: boolean;
+  error?: string;
+  /** The session is no longer valid (HTTP 401); the person must log in again before retrying. */
+  sessionExpired?: boolean;
+  /** The delete-account Edge Function is not reachable on this backend (HTTP 404, e.g. not deployed). */
+  unavailable?: boolean;
+  /** The server said a retry is safe (partial failure) or the request never reached it. */
+  retryable?: boolean;
+  /** Set when the server deletion succeeded but local sign-out could not be completed. */
+  warning?: string;
+}
+
+const SESSION_EXPIRED_MESSAGE =
+  "Your session has expired. Please log in again, then retry deleting your account.";
+const UNAVAILABLE_MESSAGE =
+  "Account deletion isn't available right now. Please try again later or contact support.";
+const NETWORK_MESSAGE = "Could not reach the server. Check your connection and try again.";
+const DELETE_FAILED_MESSAGE = "Could not delete your account right now. Please try again.";
+
+/**
+ * supabase-js puts the failed Response on `error.context`, so `data` is null on non-2xx replies.
+ * Read the status and (if present) the function's JSON body defensively.
+ */
+async function readFunctionError(
+  error: any,
+): Promise<{ status?: number; body?: { error?: unknown; retryable?: unknown } }> {
+  const ctx = error?.context;
+  const status = typeof ctx?.status === "number" ? ctx.status : undefined;
+  let body: { error?: unknown; retryable?: unknown } | undefined;
+  try {
+    if (ctx && typeof ctx.json === "function") {
+      const parsed = await ctx.json();
+      if (parsed && typeof parsed === "object") body = parsed;
+    }
+  } catch {
+    // Response body was not JSON; fall back to the status code.
+  }
+  return { status, body };
+}
+
+/**
+ * Deletes the signed-in user's account through the `delete-account` Edge Function (server side:
+ * Storage objects, database rows via purge_user_data, then the Auth user). The user id comes from the
+ * verified JWT on the server; the request body only carries the confirmation flag. The local session
+ * is cleared only after the function reports success. The function must be deployed for this to work
+ * (see docs/ACCOUNT_DELETION.md).
+ */
+export async function deleteUserAccount(): Promise<DeleteAccountResult> {
   if (!isSupabaseConfigured()) {
     return { success: false, error: CONFIG_ERROR };
   }
 
   try {
-    // Server-side deletion (Auth user + media + data). The service-role key never reaches the app.
-    const { data, error } = await supabase.functions.invoke("delete-account", { body: { confirm: true } });
-    if (error || !data?.success) {
+    const { data, error } = await supabase.functions.invoke("delete-account", {
+      body: { confirm: true },
+    });
+
+    if (error) {
+      if ((error as any).name === "FunctionsFetchError") {
+        return { success: false, error: NETWORK_MESSAGE, retryable: true };
+      }
+      const { status, body } = await readFunctionError(error);
+      if (status === 401) {
+        return { success: false, sessionExpired: true, error: SESSION_EXPIRED_MESSAGE };
+      }
+      if (status === 404) {
+        return { success: false, unavailable: true, error: UNAVAILABLE_MESSAGE };
+      }
       return {
         success: false,
-        error: data?.error || error?.message || "Account deletion failed. Please try again.",
+        error: typeof body?.error === "string" ? body.error : DELETE_FAILED_MESSAGE,
+        retryable: body?.retryable === true,
       };
     }
-    await supabase.auth.signOut();
+
+    if (!data || data.success !== true) {
+      return {
+        success: false,
+        error: typeof data?.error === "string" ? data.error : DELETE_FAILED_MESSAGE,
+      };
+    }
+
+    // Server reported success (the Auth user is gone): clear the local session without a server call.
+    try {
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+      if (signOutError) {
+        return {
+          success: true,
+          warning: "Your account was deleted but you could not be signed out automatically.",
+        };
+      }
+    } catch {
+      return {
+        success: true,
+        warning: "Your account was deleted but you could not be signed out automatically.",
+      };
+    }
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || "Failed to delete account" };
+    return { success: false, error: err?.message || DELETE_FAILED_MESSAGE };
   }
 }

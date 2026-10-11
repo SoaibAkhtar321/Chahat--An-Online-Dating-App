@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,6 +12,7 @@ import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
 import { deleteUserAccount } from "../../src/services/auth";
+import { runAccountDeletion } from "../../src/utils/deletionFlow";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -34,24 +35,29 @@ export default function SettingsScreen() {
   const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleDeleteAccount = async () => {
-    if (deleteConfirmationText.trim().toUpperCase() !== "DELETE") {
-      Alert.alert("Error", "Please type DELETE in all capital letters to confirm.");
-      return;
-    }
+  const deletingRef = useRef(false);
 
-    setIsDeleting(true);
-    const res = await deleteUserAccount();
-    setIsDeleting(false);
-
-    if (res.success) {
-      setDeleteStep(0);
-      Alert.alert("Account Deleted", "Your profile and data have been removed.");
-      router.replace("/(auth)/welcome");
-    } else {
-      Alert.alert("Error", res.error || "Could not delete account right now.");
-    }
-  };
+  const handleDeleteAccount = () =>
+    runAccountDeletion({
+      confirmationText: deleteConfirmationText,
+      inFlight: deletingRef,
+      deleteAccount: deleteUserAccount,
+      onUnconfirmed: () =>
+        Alert.alert("Error", "Please type DELETE in all capital letters to confirm."),
+      onStart: () => setIsDeleting(true),
+      onSettled: () => setIsDeleting(false),
+      onSuccess: (res) => {
+        setDeleteStep(0);
+        setDeleteConfirmationText("");
+        Alert.alert(
+          "Account deleted",
+          "Your account and data have been removed." +
+            (res.warning ? `\n\n${res.warning}` : ""),
+        );
+        router.replace("/(auth)/welcome");
+      },
+      onFailure: (message) => Alert.alert("Could not delete account", message),
+    });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -205,7 +211,7 @@ export default function SettingsScreen() {
       <Dialog
         visible={deleteStep === 1}
         title="Delete your account?"
-        body="Your profile, photos, matches and messages will be permanently deleted. This action cannot be reversed."
+        body="Your profile, photos, matches and messages will be permanently deleted, along with your sign-in. Some moderation records may be retained. This action cannot be reversed."
         confirmText="Continue"
         danger
         onConfirm={() => setDeleteStep(2)}
@@ -216,11 +222,12 @@ export default function SettingsScreen() {
       <Dialog
         visible={deleteStep === 2}
         title="Type DELETE to confirm"
-        body="This will permanently delete your Milo account."
+        body="This will permanently delete your account."
         confirmText={isDeleting ? "Deleting…" : "Delete permanently"}
         danger
         onConfirm={handleDeleteAccount}
         onCancel={() => {
+          if (isDeleting) return;
           setDeleteStep(0);
           setDeleteConfirmationText("");
         }}
