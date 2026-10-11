@@ -49,18 +49,18 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, p
 $$;
 
 CREATE OR REPLACE FUNCTION public.is_blocked_pair(_a text, _b text)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
   SELECT EXISTS (SELECT 1 FROM public.blocks WHERE (blocker = _a AND blocked = _b) OR (blocker = _b AND blocked = _a))
          AND auth.uid() IS NOT NULL AND auth.uid()::text IN (_a, _b)
 $$;
 
 CREATE OR REPLACE FUNCTION public.is_match_member(_match uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
   SELECT EXISTS (SELECT 1 FROM public.matches WHERE id = _match AND auth.uid()::text IN (user_a, user_b))
 $$;
 
 CREATE OR REPLACE FUNCTION public.photo_folder_visible(_folder text)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
   SELECT _folder = auth.uid()::text OR EXISTS (
     SELECT 1 FROM public.profiles p
     WHERE p.id = _folder AND p.status = 'active' AND p.onboarded
@@ -68,7 +68,7 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
 $$;
 
 CREATE OR REPLACE FUNCTION public.chat_folder_member(_folder text)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
   SELECT EXISTS (SELECT 1 FROM public.matches WHERE id::text = _folder AND auth.uid()::text IN (user_a, user_b))
 $$;
 
@@ -202,4 +202,36 @@ BEGIN
   DELETE FROM public.profiles WHERE id = _t;
   INSERT INTO public.admin_audit (admin_id, action, target, note)
   VALUES (_uid, 'account_self_deleted', _t, 'User data purged; auth user and media removed by delete-account function');
+END $$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  INSERT INTO public.profiles (id, user_id) VALUES (NEW.id::text, NEW.id) ON CONFLICT DO NOTHING;
+  INSERT INTO public.account_state (user_id) VALUES (NEW.id) ON CONFLICT DO NOTHING;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.demo_reply(_match uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE m public.matches; other text; n int;
+  replies text[] := ARRAY['Haha, that''s sweet 😄','Tell me more!','Okay you have good taste.','Weekend plans?','Ha! Same here.'];
+BEGIN
+  SELECT * INTO m FROM public.matches WHERE id = _match AND auth.uid()::text IN (user_a, user_b);
+  IF m.id IS NULL THEN RETURN; END IF;
+  other := CASE WHEN m.user_a = auth.uid()::text THEN m.user_b ELSE m.user_a END;
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = other AND is_demo) THEN RETURN; END IF;
+  IF public.is_blocked_pair(m.user_a, m.user_b) THEN RETURN; END IF;
+  UPDATE public.messages SET read_at = now() WHERE match_id = _match AND sender <> other AND read_at IS NULL;
+  SELECT count(*) INTO n FROM public.messages WHERE match_id = _match;
+  INSERT INTO public.messages (match_id, sender, body) VALUES (_match, other, replies[(n % 5) + 1]);
+END $$;
+
+CREATE OR REPLACE FUNCTION public.messages_sender_active()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE id = NEW.sender AND status <> 'active') THEN
+    RAISE EXCEPTION 'Account suspended';
+  END IF;
+  RETURN NEW;
 END $$;

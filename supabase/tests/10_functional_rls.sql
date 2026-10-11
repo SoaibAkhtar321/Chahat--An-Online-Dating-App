@@ -118,4 +118,60 @@ INSERT INTO public.t_results SELECT 'non-admin has_role false', NOT public.has_r
 CALL public.expect_fail('B cannot set photo pointing to A folder', 'UPDATE public.profiles SET photos=''[{"id":"p1","path":"00000000-0000-0000-0000-00000000000a/p1.jpg"}]''::jsonb WHERE id=auth.uid()::text');
 CALL public.expect_ok('B can set photo pointing to own folder', 'UPDATE public.profiles SET photos=''[{"id":"p1","path":"00000000-0000-0000-0000-00000000000b/p1.jpg"}]''::jsonb WHERE id=auth.uid()::text');
 RESET ROLE;
+-- check every SECURITY DEFINER function in schema public has search_path containing pg_temp
+INSERT INTO public.t_results SELECT
+  'all public security definer functions have search_path with pg_temp',
+  count(*) = 0,
+  coalesce(string_agg(proname, ', '), 'all ok')
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.prosecdef = true
+  AND NOT EXISTS (
+    SELECT 1
+    FROM unnest(p.proconfig) cfg
+    WHERE cfg LIKE 'search_path=%' AND cfg LIKE '%pg_temp%'
+  );
+
+-- Part A1 tests: feed has no is_demo/likes_you columns, authed cannot select is_demo from profiles
+SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000b';
+CALL public.expect_fail('authed cannot select is_demo from profiles', 'SELECT is_demo FROM public.profiles');
+CALL public.expect_fail('authed cannot select likes_you from profiles', 'SELECT likes_you FROM public.profiles');
+CALL public.expect_fail('discovery feed has no is_demo column', 'SELECT is_demo FROM public.get_discovery_feed(10)');
+CALL public.expect_fail('discovery feed has no likes_you column', 'SELECT likes_you FROM public.get_discovery_feed(10)');
+
+-- Part A2 tests: demo_reply revoked from authenticated
+CALL public.expect_fail('authed cannot execute demo_reply', format('SELECT public.demo_reply(%L)', current_setting('t.m')));
+RESET ROLE;
+
+-- Part A3 tests: rate limits on messages (30/min) and reports (10/hr)
+SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
+-- Insert 29 more messages (1 was already inserted in earlier test)
+DO $$
+DECLARE
+  i int;
+  m uuid := current_setting('t.m')::uuid;
+BEGIN
+  FOR i IN 1..28 LOOP
+    INSERT INTO public.messages(match_id, sender, body) VALUES (m, auth.uid()::text, 'msg ' || i);
+  END LOOP;
+END $$;
+-- 30th message should succeed
+CALL public.expect_ok('30th message succeeds under limit', format('INSERT INTO public.messages(match_id, sender, body) VALUES (%L, auth.uid()::text, ''msg 30'')', current_setting('t.m')));
+-- 31st message should fail due to rate limit
+CALL public.expect_fail('31st message rejected by rate limit', format('INSERT INTO public.messages(match_id, sender, body) VALUES (%L, auth.uid()::text, ''msg 31'')', current_setting('t.m')));
+
+-- Reports rate limit: 10 reports allowed, 11th rejected
+DO $$
+DECLARE
+  i int;
+BEGIN
+  FOR i IN 1..10 LOOP
+    INSERT INTO public.reports(reporter, target, category, note)
+    VALUES (auth.uid()::text, '00000000-0000-0000-0000-00000000000c', 'test category', 'note ' || i);
+  END LOOP;
+END $$;
+CALL public.expect_fail('11th report rejected by rate limit', 'INSERT INTO public.reports(reporter, target, category, note) VALUES (auth.uid()::text, ''00000000-0000-0000-0000-00000000000c'', ''test'', ''over limit'')');
+RESET ROLE;
+
 

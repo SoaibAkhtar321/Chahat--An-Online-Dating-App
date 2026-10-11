@@ -47,10 +47,10 @@ export async function reportUser(
   category: string,
   note: string,
   source: "profile" | "chat" | "call" = "profile",
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   try {
     const uid = (await supabase.auth.getUser()).data.user?.id;
-    if (!uid) return false;
+    if (!uid) return { success: false, error: "Authentication required" };
 
     const { error } = await supabase.from("reports").insert({
       reporter: uid,
@@ -61,9 +61,10 @@ export async function reportUser(
       status: "open",
     });
 
-    return !error;
-  } catch {
-    return false;
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to submit report" };
   }
 }
 

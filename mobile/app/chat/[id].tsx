@@ -136,11 +136,15 @@ export default function ChatDetailScreen() {
       refreshMatches();
       router.back();
     } else if (actionDialog === "report") {
-      await reportUser(otherUser.id, "Inappropriate behavior", "Reported from mobile chat", "chat");
-      Alert.alert(
-        "Report submitted",
-        "Thank you for helping keep Milo safe. Our team will review this.",
-      );
+      const rep = await reportUser(otherUser.id, "Inappropriate behavior", "Reported from mobile chat", "chat");
+      if (rep.success) {
+        Alert.alert(
+          "Report submitted",
+          "Thank you for helping keep Milo safe. Our team will review this.",
+        );
+      } else {
+        Alert.alert("Could not report", rep.error || "Please try again later.");
+      }
     }
 
     setActionDialog(null);

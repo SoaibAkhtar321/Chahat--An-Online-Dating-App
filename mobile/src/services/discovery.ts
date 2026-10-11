@@ -144,8 +144,8 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
     lifestyle: r.lifestyle,
     languages: r.languages || [],
     lastActiveMin: 0,
-    likesYou: !!r.likes_you,
-    isDemo: !!r.is_demo,
+    likesYou: false,
+    isDemo: false,
   };
 }
 

@@ -19,6 +19,7 @@ import { useMilo } from "../../src/context/MiloContext";
 import { DEMO_PROFILES } from "../../src/services/discovery";
 import { blockUser, reportUser } from "../../src/services/moderation";
 import { Dialog } from "../../src/components/ui/Dialog";
+import { Alert } from "../../src/utils/alert";
 import type { Profile } from "../../src/types";
 
 const { width } = Dimensions.get("window");
@@ -225,16 +226,23 @@ export default function ProfileDetailScreen() {
         onConfirm={async () => {
           if (dialogAction === "block") {
             await blockUser(targetProfile.id);
+            setDialogAction(null);
+            router.back();
           } else {
-            await reportUser(
+            const rep = await reportUser(
               targetProfile.id,
               "Profile concern",
               "Reported from profile detail",
               "profile",
             );
+            setDialogAction(null);
+            if (rep.success) {
+              Alert.alert("Report submitted", "Thank you for helping keep Milo safe.");
+              router.back();
+            } else {
+              Alert.alert("Could not report", rep.error || "Please try again later.");
+            }
           }
-          setDialogAction(null);
-          router.back();
         }}
         onCancel={() => setDialogAction(null)}
       />
