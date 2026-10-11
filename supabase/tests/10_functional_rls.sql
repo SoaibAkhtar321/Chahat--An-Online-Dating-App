@@ -146,13 +146,13 @@ RESET ROLE;
 
 -- Part A3 tests: rate limits on messages (30/min) and reports (10/hr)
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
--- Insert 29 more messages (1 was already inserted in earlier test)
+-- Insert 27 more messages (2 were already inserted in earlier tests)
 DO $$
 DECLARE
   i int;
   m uuid := current_setting('t.m')::uuid;
 BEGIN
-  FOR i IN 1..28 LOOP
+  FOR i IN 1..27 LOOP
     INSERT INTO public.messages(match_id, sender, body) VALUES (m, auth.uid()::text, 'msg ' || i);
   END LOOP;
 END $$;
