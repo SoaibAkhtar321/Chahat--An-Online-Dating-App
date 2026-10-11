@@ -56,3 +56,4 @@ The old `delete_user_account()` RPC is dropped by `supabase/migrations/202601010
 4. `supabase/migrations/20260101000300_mobile_security_hardening.sql`
 5. `supabase/migrations/20260101000400_security_followups.sql`
 6. `supabase/migrations/20260101000500_privacy_and_rate_limits.sql`
+7. `supabase/migrations/20260101000600_trigger_function_hardening.sql`

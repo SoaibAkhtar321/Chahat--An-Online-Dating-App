@@ -16,5 +16,8 @@ The migration history is unified and timestamp-ordered in `supabase/migrations/`
 2. `20260101000100_storage.sql`
 3. `20260101000200_admin_moderation.sql`
 4. `20260101000300_mobile_security_hardening.sql`
+5. `20260101000400_security_followups.sql`
+6. `20260101000500_privacy_and_rate_limits.sql`
+7. `20260101000600_trigger_function_hardening.sql`
 
 Legacy Drizzle migration files in `drizzle/migrations/` are superseded and kept for historical reference only. CI runs directly against `supabase/migrations/` and `supabase/seed.sql`.

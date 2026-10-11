@@ -8,3 +8,31 @@ sql_paths = ["./seed.sql"]
 
 [functions.delete-account]
 verify_jwt = true
+
+# ---------------------------------------------------------------------------------------------
+# Auth settings, codified (Phase 1 / issue O9).
+# SCOPE: these values drive the LOCAL stack (`supabase start`) and document what the hosted project
+# `milo-dev` is expected to use. Nothing here changes the remote unless someone runs
+# `supabase config push`; do NOT run that before comparing with the Dashboard
+# (see docs/AUTH_SETTINGS_CHECKLIST.md).
+# Password rules mirror mobile/src/utils/validation.ts (>= 8 characters, at least one letter and one number).
+# ---------------------------------------------------------------------------------------------
+[auth]
+enabled = true
+# The mobile app handles unconfirmed e-mail addresses (signInUser returns isUnconfirmed), so e-mail
+# confirmation is expected to stay ON.
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 8
+password_requirements = "letters_digits"
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+# Deep-link scheme of the Expo app (mobile/app.json "scheme"). Review before any remote push.
+site_url = "milo://"
+additional_redirect_urls = ["milo://"]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+double_confirm_changes = true
