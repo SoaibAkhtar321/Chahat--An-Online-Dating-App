@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { getSignedUrls } from "./storage";
+import { getSignedUrls, sanitizeAndPrepareImageUpload } from "./storage";
 import type { MeProfile, PhotoItem } from "../types";
 export { calculateAge, validateDob } from "../utils/validation";
 
@@ -159,11 +159,10 @@ export async function uploadProfilePhoto(
   const extension = "jpg";
   const filePath = `${userId}/${photoId}.${extension}`;
 
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  const { blob, mimeType } = await sanitizeAndPrepareImageUpload(uri, "image/jpeg");
 
   const { error } = await supabase.storage.from("photos").upload(filePath, blob, {
-    contentType: "image/jpeg",
+    contentType: mimeType,
     upsert: true,
   });
 

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Message, MatchItem, Profile } from "../types";
-import { getSignedUrls, getSignedUrl } from "./storage";
+import { getSignedUrls, getSignedUrl, sanitizeAndPrepareImageUpload } from "./storage";
 import { DEMO_PROFILES } from "./discovery";
 import { pushNotificationToInbox } from "./notifications";
 
@@ -169,13 +169,13 @@ export async function sendChatMessage(
     let imagePath: string | null = null;
 
     if (imageUri) {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
       const ext = "jpg";
       imagePath = `${matchId}/${messageId}.${ext}`;
 
+      const { blob, mimeType } = await sanitizeAndPrepareImageUpload(imageUri, "image/jpeg");
+
       const { error: uploadErr } = await supabase.storage.from("chat").upload(imagePath, blob, {
-        contentType: "image/jpeg",
+        contentType: mimeType,
       });
       if (uploadErr) return { success: false, error: uploadErr.message };
     }
