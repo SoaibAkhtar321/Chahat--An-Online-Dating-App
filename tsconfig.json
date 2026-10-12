@@ -2,15 +2,19 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "eslint.config.js"
+    "eslint.config.js",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
   ],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",
     "module": "ESNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "moduleResolution": "Bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
@@ -18,7 +22,10 @@
     "skipLibCheck": true,
     "strict": false,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
-  }
+  },
+  "extends": "expo/tsconfig.base"
 }

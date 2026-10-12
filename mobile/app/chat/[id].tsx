@@ -8,16 +8,32 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { ArrowLeft, Phone, Video, MoreVertical, ImagePlus, Send } from "lucide-react-native";
+import {
+  ArrowLeft,
+  Phone,
+  Video,
+  MoreVertical,
+  ImagePlus,
+  Send,
+  Sparkles,
+  Trophy,
+  ShieldCheck,
+  Compass,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react-native";
 import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { ChatBubble } from "../../src/components/chat/ChatBubble";
 import { Dialog } from "../../src/components/ui/Dialog";
+import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
+import { SMART_ICEBREAKERS, type Icebreaker } from "../../src/constants/icebreakers";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
 import {
@@ -27,7 +43,7 @@ import {
   subscribeToMatchMessages,
 } from "../../src/services/chat";
 import { blockUser, reportUser, unmatchUser } from "../../src/services/moderation";
-import { getSignedUrls } from "../../src/services/storage";
+import { supabase } from "../../src/services/supabase";
 import type { Message, Profile } from "../../src/types";
 
 export default function ChatDetailScreen() {
@@ -42,6 +58,12 @@ export default function ChatDetailScreen() {
   const [sending, setSending] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [actionDialog, setActionDialog] = useState<"block" | "report" | "unmatch" | null>(null);
+
+  // Smart Icebreaker & Game & Journey States
+  const [showIcebreakers, setShowIcebreakers] = useState(false);
+  const [icebreakerLang, setIcebreakerLang] = useState<"hinglish" | "hindi" | "english">("hinglish");
+  const [showGamesModal, setShowGamesModal] = useState(false);
+  const [showJourney, setShowJourney] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -62,39 +84,27 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     if (!matchId || !user) return;
 
-    fetchMessagesForMatch(matchId, user.id).then(setMessages);
-    markChatRead(matchId, user.id);
+    fetchMessagesForMatch(matchId, user.id).then((msgs) => {
+      setMessages(msgs);
+      markChatRead(matchId, user.id);
+    });
 
     const channel = subscribeToMatchMessages(
       matchId,
-      async (newMsgRow) => {
-        let imageUrl: string | undefined;
-        if (newMsgRow.image_path) {
-          imageUrl = (await getSignedUrls("chat", [newMsgRow.image_path]))[newMsgRow.image_path];
+      (newMsg) => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+        if (newMsg.fromId !== user.id) {
+          markChatRead(matchId, user.id);
         }
-
-      const formatted: Message = {
-        id: newMsgRow.id,
-        matchId: newMsgRow.match_id,
-        sender: newMsgRow.sender,
-        from: newMsgRow.sender === user.id ? "me" : "them",
-        text: newMsgRow.body,
-        image: imageUrl,
-        at: new Date(newMsgRow.created_at).getTime(),
-        status: newMsgRow.read_at ? "read" : "sent",
-      };
-
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === formatted.id)) {
-          return prev.map((m) => (m.id === formatted.id ? formatted : m));
-        }
-        return [...prev, formatted];
-      });
-      markChatRead(matchId, user.id);
-    }, user.id);
+      },
+      user.id,
+    );
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [matchId, user]);
 
@@ -137,6 +147,21 @@ export default function ChatDetailScreen() {
     }
   };
 
+  const handleSelectIcebreaker = (icebreaker: Icebreaker) => {
+    setInputText(icebreaker.text);
+    setShowIcebreakers(false);
+  };
+
+  const handleSendGameAnswer = async (gameText: string) => {
+    if (!user || !matchId) return;
+    const res = await sendChatMessage(matchId, user.id, gameText);
+    if (res.success && res.message) {
+      setMessages((prev) => [...prev, res.message!]);
+      refreshMatches();
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  };
+
   const handleConfirmAction = async () => {
     if (!actionDialog) return;
 
@@ -164,6 +189,8 @@ export default function ChatDetailScreen() {
 
     setActionDialog(null);
   };
+
+  const activeIcebreakers = SMART_ICEBREAKERS.filter((i) => i.category === icebreakerLang);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -193,6 +220,14 @@ export default function ChatDetailScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.actionIcon}
+            onPress={() => setShowGamesModal(true)}
+            accessibilityLabel="Couple games"
+          >
+            <Trophy size={19} color={Colors.accent} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.actionIcon}
             onPress={() =>
@@ -256,6 +291,54 @@ export default function ChatDetailScreen() {
         </View>
       )}
 
+      {/* Connection Journey Bar */}
+      <View style={styles.journeyBar}>
+        <TouchableOpacity
+          style={styles.journeyHeader}
+          onPress={() => setShowJourney(!showJourney)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.journeyTitleRow}>
+            <Compass size={14} color={Colors.primary} />
+            <Text style={styles.journeyTitle}>Connection Journey: Getting to know {otherUser.name}</Text>
+          </View>
+          {showJourney ? (
+            <ChevronUp size={16} color={Colors.mutedForeground} />
+          ) : (
+            <ChevronDown size={16} color={Colors.mutedForeground} />
+          )}
+        </TouchableOpacity>
+
+        {showJourney && (
+          <View style={styles.journeyBody}>
+            <View style={styles.journeyStep}>
+              <View style={[styles.stepDot, styles.stepDotDone]} />
+              <Text style={styles.stepText}>1. Matched with shared interests</Text>
+            </View>
+            <View style={styles.journeyStep}>
+              <View style={[styles.stepDot, messages.length > 0 && styles.stepDotDone]} />
+              <Text style={styles.stepText}>2. Break the ice (try Hindi/Hinglish starters)</Text>
+            </View>
+            <View style={styles.journeyStep}>
+              <View style={[styles.stepDot, messages.length >= 6 && styles.stepDotDone]} />
+              <Text style={styles.stepText}>3. Play Couple Quiz or This or That</Text>
+            </View>
+            <View style={styles.journeyStep}>
+              <View style={styles.stepDot} />
+              <Text style={styles.stepText}>4. Consensual Voice Note / Video Call & Date Plan</Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Safety Notice Header */}
+      <View style={styles.safetyNotice}>
+        <ShieldCheck size={14} color={Colors.mutedForeground} />
+        <Text style={styles.safetyNoticeText}>
+          Keep conversations on Milo. Never share OTP or bank details.
+        </Text>
+      </View>
+
       {/* Message List */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -285,6 +368,13 @@ export default function ChatDetailScreen() {
                 Say hello when you're ready! Start with shared interests like{" "}
                 {otherUser.interests[0] || "coffee"}.
               </Text>
+              <TouchableOpacity
+                style={styles.starterQuickBtn}
+                onPress={() => setShowIcebreakers(true)}
+              >
+                <Sparkles size={16} color={Colors.primaryForeground} />
+                <Text style={styles.starterQuickBtnText}>Use Smart Icebreaker</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -300,15 +390,84 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
+        {/* Smart Icebreakers Drawer */}
+        {showIcebreakers && (
+          <View style={styles.icebreakersDrawer}>
+            <View style={styles.icebreakerHeader}>
+              <View style={styles.icebreakerTabs}>
+                {(["hinglish", "hindi", "english"] as const).map((lang) => (
+                  <TouchableOpacity
+                    key={lang}
+                    style={[
+                      styles.langTab,
+                      icebreakerLang === lang && styles.langTabActive,
+                    ]}
+                    onPress={() => setIcebreakerLang(lang)}
+                  >
+                    <Text
+                      style={[
+                        styles.langTabText,
+                        icebreakerLang === lang && styles.langTabTextActive,
+                      ]}
+                    >
+                      {lang === "hinglish" ? "Hinglish 💬" : lang === "hindi" ? "हिंदी 🇮🇳" : "English ✨"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.closeDrawerBtn}
+                onPress={() => setShowIcebreakers(false)}
+              >
+                <Text style={styles.closeDrawerText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.icebreakersScroll}
+            >
+              {activeIcebreakers.map((ib) => (
+                <TouchableOpacity
+                  key={ib.id}
+                  style={styles.icebreakerChip}
+                  onPress={() => handleSelectIcebreaker(ib)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.icebreakerChipTag}>{ib.tag}</Text>
+                  <Text style={styles.icebreakerChipText}>{ib.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Input Bar */}
         <View style={styles.inputBar}>
           <TouchableOpacity style={styles.attachBtn} onPress={handlePickImage} activeOpacity={0.7}>
             <ImagePlus size={22} color={Colors.primary} />
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[styles.attachBtn, showIcebreakers && styles.attachBtnActive]}
+            onPress={() => setShowIcebreakers(!showIcebreakers)}
+            activeOpacity={0.7}
+          >
+            <Sparkles size={20} color={showIcebreakers ? Colors.accent : Colors.mutedForeground} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.attachBtn}
+            onPress={() => setShowGamesModal(true)}
+            activeOpacity={0.7}
+          >
+            <Trophy size={19} color={Colors.primary} />
+          </TouchableOpacity>
+
           <TextInput
             style={styles.textInput}
-            placeholder="Type a message…"
+            placeholder="Type a message or use icebreaker…"
             placeholderTextColor={Colors.mutedForeground}
             value={inputText}
             onChangeText={setInputText}
@@ -329,6 +488,14 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Couple Games Modal */}
+      <CoupleGamesModal
+        visible={showGamesModal}
+        partnerName={otherUser.name}
+        onClose={() => setShowGamesModal(false)}
+        onSendGameAnswer={handleSendGameAnswer}
+      />
 
       {/* Action Dialogs */}
       <Dialog
@@ -402,10 +569,70 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   actionIcon: {
     padding: 6,
+  },
+  journeyBar: {
+    backgroundColor: Colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  journeyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  journeyTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  journeyTitle: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.primary,
+  },
+  journeyBody: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 4,
+  },
+  journeyStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.border,
+  },
+  stepDotDone: {
+    backgroundColor: Colors.success,
+  },
+  stepText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.foreground,
+  },
+  safetyNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: Colors.secondary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  safetyNoticeText: {
+    fontSize: 11,
+    color: Colors.mutedForeground,
   },
   menuBanner: {
     backgroundColor: Colors.card,
@@ -454,29 +681,111 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
+  starterQuickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: Radii.full,
+    marginTop: 20,
+  },
+  starterQuickBtnText: {
+    color: Colors.primaryForeground,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+  },
   imagePreviewBar: {
     flexDirection: "row",
     alignItems: "center",
+    padding: 8,
     backgroundColor: Colors.card,
-    padding: 10,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 10,
+    gap: 12,
   },
   previewThumb: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: Radii.sm,
   },
   previewText: {
     flex: 1,
-    fontSize: Typography.sizes.xs,
+    fontSize: Typography.sizes.sm,
     color: Colors.foreground,
   },
   removePreview: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
+    fontSize: Typography.sizes.sm,
     color: Colors.destructive,
+    fontWeight: Typography.weights.medium,
+  },
+  icebreakersDrawer: {
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingVertical: 10,
+  },
+  icebreakerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  icebreakerTabs: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  langTab: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.secondary,
+  },
+  langTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  langTabText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.foreground,
+    fontWeight: Typography.weights.medium,
+  },
+  langTabTextActive: {
+    color: Colors.primaryForeground,
+    fontWeight: Typography.weights.bold,
+  },
+  closeDrawerBtn: {
+    padding: 4,
+  },
+  closeDrawerText: {
+    fontSize: 14,
+    color: Colors.mutedForeground,
+  },
+  icebreakersScroll: {
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  icebreakerChip: {
+    backgroundColor: Colors.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radii.lg,
+    maxWidth: 240,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  icebreakerChipTag: {
+    fontSize: 10,
+    color: Colors.primary,
+    fontWeight: Typography.weights.bold,
+    marginBottom: 2,
+    textTransform: "uppercase",
+  },
+  icebreakerChipText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.foreground,
+    lineHeight: 16,
   },
   inputBar: {
     flexDirection: "row",
@@ -489,17 +798,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   attachBtn: {
-    padding: 8,
+    padding: 6,
+    borderRadius: Radii.full,
+  },
+  attachBtnActive: {
+    backgroundColor: Colors.secondary,
   },
   textInput: {
     flex: 1,
     minHeight: 40,
     maxHeight: 100,
-    backgroundColor: Colors.background,
-    borderRadius: Radii.xl,
+    backgroundColor: Colors.input,
+    borderRadius: Radii.full,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    fontSize: Typography.sizes.base,
+    fontSize: Typography.sizes.sm,
     color: Colors.foreground,
   },
   sendBtn: {
@@ -511,6 +824,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sendBtnDisabled: {
-    opacity: 0.4,
+    backgroundColor: Colors.muted,
   },
 });

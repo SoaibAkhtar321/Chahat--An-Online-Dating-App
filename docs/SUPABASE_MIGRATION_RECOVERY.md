@@ -6,7 +6,7 @@ Baseline: commit `788cf7d`. Target project: `milo-dev` (ref `tuptdzbdowqtmbyhaze
 - `supabase/migrations/` is the ONLY migration source for the Supabase CLI (timestamp ordered: core schema, storage, admin/moderation, mobile hardening, security followups, privacy and rate limits).
 - `supabase/seed.sql` is development-only demo data (local `supabase db reset`). Never run on production.
 - `supabase/functions/delete-account/` — complete account deletion; NOT deployed yet (deployed via runbook).
-- `drizzle/migrations/` is legacy and superseded (see its README).
+- `archive/legacy-drizzle/drizzle/migrations/` is legacy, archived, and superseded (see its README).
 
 ## Migration order
 1. `supabase/migrations/20260101000000_core_schema.sql` (core roles, profiles, swipes, matches, messages, blocks, reports)

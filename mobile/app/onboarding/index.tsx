@@ -20,7 +20,7 @@ import { Button } from "../../src/components/ui/Button";
 import { Chip } from "../../src/components/ui/Chip";
 import { PhotoUploader } from "../../src/components/profile/PhotoUploader";
 import { useAuth } from "../../src/context/AuthContext";
-import { validateDob, calculateAge, saveProfile } from "../../src/services/profile";
+import { validateDob, calculateAge, saveProfile, uploadProfilePhoto } from "../../src/services/profile";
 import { INTERESTS, CITIES, PROMPTS, LANGUAGES, LIFESTYLE, PhotoItem } from "../../src/types";
 
 const STEPS = [
@@ -223,6 +223,27 @@ export default function OnboardingScreen() {
     }
     setSaving(true);
     try {
+      // Process and upload any new/local photos through the sanitized upload service
+      const processedPhotos: PhotoItem[] = [];
+      for (const p of photos) {
+        if (p.uri && (p.uri.startsWith("file:") || p.uri.startsWith("blob:") || p.uri.startsWith("data:") || p.uri.startsWith("ph:"))) {
+          try {
+            const { path, thumbPath } = await uploadProfilePhoto(user.id, p.id, p.uri);
+            processedPhotos.push({
+              ...p,
+              path,
+              thumbPath,
+              status: "approved",
+            });
+          } catch (uploadErr) {
+            console.warn("Failed to upload photo:", p.id, uploadErr);
+            processedPhotos.push(p);
+          }
+        } else {
+          processedPhotos.push(p);
+        }
+      }
+
       const res = await saveProfile(
         {
           name,
@@ -238,7 +259,7 @@ export default function OnboardingScreen() {
           prompt: { q: promptQ, a: promptA },
           interests: selectedInterests,
           lifestyle,
-          photos,
+          photos: processedPhotos,
           ageMin,
           ageMax,
           distance,

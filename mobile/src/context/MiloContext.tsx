@@ -31,7 +31,7 @@ const MiloContext = createContext<MiloContextType>({
   deck: [],
   currentProfile: null,
   matches: [],
-  likesRemaining: 20,
+  likesRemaining: 10,
   lastPassedId: null,
   filters: DEFAULT_FILTERS,
   loadingDeck: false,
@@ -40,7 +40,7 @@ const MiloContext = createContext<MiloContextType>({
   totalUnreadCount: 0,
   subscription: null,
   refreshSubscription: async () => {},
-  swipeCard: async () => ({ success: false, isMatch: false, likesRemaining: 20 }),
+  swipeCard: async () => ({ success: false, isMatch: false, likesRemaining: 10 }),
   undoPass: async () => false,
   triggerBoost: () => {},
   setFilters: () => {},
@@ -52,7 +52,7 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { user, profile, isLoggedIn } = useAuth();
   const [deck, setDeck] = useState<Profile[]>([]);
   const [matches, setMatches] = useState<MatchItem[]>([]);
-  const [likesRemaining, setLikesRemaining] = useState<number>(20);
+  const [likesRemaining, setLikesRemaining] = useState<number>(10);
   const [lastPassedId, setLastPassedId] = useState<string | null>(null);
   const [lastPassedProfile, setLastPassedProfile] = useState<Profile | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);

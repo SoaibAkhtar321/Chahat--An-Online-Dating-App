@@ -1,15 +1,10 @@
 // Subscription & Pricing Service for CHAHAT / Milo Android
-// Supports Free, Premium (₹99), Plus (₹199), and VIP (₹399) tiers with multi-month packages.
+// Server-backed entitlement definitions for Free, Premium (₹99), Plus (₹199), and VIP (₹399).
+// Subscriptions are strictly verified against the backend and cannot be granted client-side.
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 export type PlanTier = "free" | "premium" | "plus" | "vip";
-
-export interface PlanFeature {
-  title: string;
-  hindiTitle: string;
-  includedIn: PlanTier[];
-}
 
 export interface PlanConfig {
   id: PlanTier;
@@ -31,7 +26,9 @@ export interface BillingDuration {
   popular?: boolean;
 }
 
-export const BILLING_DURATIONS: BillingDuration[] = [
+// Approved multi-month packages apply specifically to CHAHAT Premium:
+// ₹99 (1 month), ₹249 (3 months), ₹449 (6 months), ₹799 (12 months).
+export const PREMIUM_BILLING_DURATIONS: BillingDuration[] = [
   {
     id: "1m",
     months: 1,
@@ -71,7 +68,7 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlyPrice: 0,
     features: [
       "Profile बनाना (Create Profile)",
-      "रोज़ 20 Likes (20 Daily Likes)",
+      "रोज़ 10 Likes (10 Daily Likes)", // T6 server limit is 10
       "Limited Matching & Discover Deck",
       "Basic Chat — Match होने के बाद",
       "Free Selfie/Profile Verification Badge",
@@ -90,9 +87,8 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
       "Unlimited Likes (असीमित लाइक्स)",
       "किसने Like किया देखें (See Who Liked You)",
       "Undo Last Swipe (Rewind Pass)",
-      "ज्यादा Profile Recommendations",
       "Smart Icebreakers (Hindi, English, Hinglish)",
-      "Compatibility Score Breakdown",
+      "Compatibility Score Summary",
     ],
   },
   plus: {
@@ -103,11 +99,9 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlyPrice: 199,
     features: [
       "Premium के सभी Features",
-      "महीने में 5 Profile Boosts",
-      "Advanced Search Filters (City, Lifestyle)",
-      "Priority Profile Visibility (शीर्ष प्राथमिकता)",
-      "Voice Intro & Audio Highlights",
-      "Read Receipts Control",
+      "Read Receipts Control (प्लस और वीआईपी केवल)",
+      "Priority Profile Visibility",
+      "Advanced Search Filters",
     ],
   },
   vip: {
@@ -119,101 +113,94 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     badge: "Exclusive VIP",
     features: [
       "Plus के सभी Features",
-      "15 Profile Boosts प्रति माह",
-      "Extra Discovery & Travel Mode",
       "Incognito Mode (पूर्ण गोपनीयता)",
-      "Exclusive VIP Profile Customization",
-      "Priority Customer Support 24/7",
+      "Exclusive VIP Badge",
+      "Priority Match Distribution",
     ],
   },
 };
 
-const STORAGE_KEY_USER_SUBSCRIPTION = "chahat_user_subscription";
-
 export interface UserSubscription {
   tier: PlanTier;
-  duration: "1m" | "3m" | "6m" | "12m";
-  activatedAt: number;
-  expiresAt: number;
+  status: "active" | "expired" | "cancelled";
+  startsAt: number;
+  expiresAt: number | null;
   autoRenew: boolean;
-  orderId?: string;
 }
 
+/**
+ * Fetches the caller's verified subscription from Supabase.
+ * Returns free tier if no record exists or if the subscription has expired/cancelled.
+ * Client state or local storage CANNOT override this.
+ */
 export async function getUserSubscription(): Promise<UserSubscription> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY_USER_SUBSCRIPTION);
-    if (raw) {
-      const sub = JSON.parse(raw) as UserSubscription;
-      // Check if expired
-      if (sub.tier !== "free" && Date.now() > sub.expiresAt) {
-        return {
-          tier: "free",
-          duration: "1m",
-          activatedAt: Date.now(),
-          expiresAt: Infinity,
-          autoRenew: false,
-        };
-      }
-      return sub;
-    }
-  } catch (err) {
-    console.warn("Could not read subscription from storage:", err);
+  const freeFallback: UserSubscription = {
+    tier: "free",
+    status: "active",
+    startsAt: Date.now(),
+    expiresAt: null,
+    autoRenew: false,
+  };
+
+  if (!isSupabaseConfigured()) {
+    return freeFallback;
   }
 
-  return {
-    tier: "free",
-    duration: "1m",
-    activatedAt: Date.now(),
-    expiresAt: Infinity,
-    autoRenew: false,
-  };
+  try {
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !authData.user) {
+      return freeFallback;
+    }
+
+    const { data, error } = await supabase
+      .from("user_subscriptions")
+      .select("tier, status, starts_at, expires_at, auto_renew")
+      .eq("user_id", authData.user.id)
+      .maybeSingle();
+
+    if (error || !data) {
+      return freeFallback;
+    }
+
+    const expiresAt = data.expires_at ? new Date(data.expires_at).getTime() : null;
+    const isExpired = expiresAt !== null && Date.now() > expiresAt;
+    const isCancelled = data.status === "cancelled";
+
+    if (isExpired || isCancelled || data.status !== "active") {
+      return freeFallback;
+    }
+
+    const tier = (["free", "premium", "plus", "vip"].includes(data.tier)
+      ? data.tier
+      : "free") as PlanTier;
+
+    return {
+      tier,
+      status: "active",
+      startsAt: new Date(data.starts_at).getTime(),
+      expiresAt,
+      autoRenew: !!data.auto_renew,
+    };
+  } catch (err) {
+    console.warn("Could not query server subscription:", err);
+    return freeFallback;
+  }
 }
 
-export async function activateSubscription(
-  tier: PlanTier,
-  durationId: "1m" | "3m" | "6m" | "12m" = "1m",
-): Promise<UserSubscription> {
-  const duration = BILLING_DURATIONS.find((d) => d.id === durationId) || BILLING_DURATIONS[0]!;
-  const days = duration.months * 30;
-  const activatedAt = Date.now();
-  const expiresAt = activatedAt + days * 24 * 60 * 60 * 1000;
-
-  const newSub: UserSubscription = {
-    tier,
-    duration: durationId,
-    activatedAt,
-    expiresAt,
-    autoRenew: true,
-    orderId: `CHAHAT_ORD_${Date.now()}`,
-  };
-
-  await AsyncStorage.setItem(STORAGE_KEY_USER_SUBSCRIPTION, JSON.stringify(newSub));
-  return newSub;
-}
-
-export async function cancelSubscription(): Promise<UserSubscription> {
-  const freeSub: UserSubscription = {
-    tier: "free",
-    duration: "1m",
-    activatedAt: Date.now(),
-    expiresAt: Infinity,
-    autoRenew: false,
-  };
-  await AsyncStorage.setItem(STORAGE_KEY_USER_SUBSCRIPTION, JSON.stringify(freeSub));
-  return freeSub;
-}
-
+/**
+ * Entitlement checker helper.
+ * Derived from server-verified subscription tier.
+ */
 export function hasEntitlement(
   tier: PlanTier,
   feature:
     | "unlimitedLikes"
     | "seeWhoLikedYou"
     | "undoPass"
-    | "profileBoost"
+    | "readReceipts"
     | "advancedFilters"
     | "priorityVisibility"
-    | "incognito"
-    | "voiceIntro",
+    | "incognito",
 ): boolean {
   if (tier === "vip") return true;
   if (tier === "plus") {
@@ -223,8 +210,7 @@ export function hasEntitlement(
     return (
       feature === "unlimitedLikes" ||
       feature === "seeWhoLikedYou" ||
-      feature === "undoPass" ||
-      feature === "voiceIntro"
+      feature === "undoPass"
     );
   }
   // Free tier

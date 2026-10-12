@@ -232,17 +232,17 @@ export async function submitSwipe(
 
 export async function undoLastPass(toUserId: string): Promise<boolean> {
   try {
-    const uid = (await supabase.auth.getUser()).data.user?.id;
-    if (!uid) return false;
-
-    const { error } = await supabase
-      .from("swipes")
-      .delete()
-      .eq("from_id", uid)
-      .eq("to_id", toUserId)
-      .eq("kind", "pass");
-
-    return !error;
+    if (!isSupabaseConfigured()) {
+      return true; // Local preview mock
+    }
+    const { data, error } = await supabase.rpc("undo_swipe_pass", {
+      _target_id: toUserId,
+    });
+    if (error) {
+      console.warn("undoLastPass error:", error.message);
+      return false;
+    }
+    return Boolean(data?.success);
   } catch {
     return false;
   }

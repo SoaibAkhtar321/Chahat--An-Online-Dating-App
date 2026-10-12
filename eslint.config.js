@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 
 export default [
-  { ignores: ["dist", ".output", ".vinxi", "node_modules", ".expo", "mobile", "src", "supabase", "drizzle"] },
+  { ignores: ["dist", ".output", ".vinxi", "node_modules", ".expo", "src", "supabase", "drizzle"] },
   js.configs.recommended,
   {
     files: ["**/*.js", "**/*.mjs", "**/*.cjs"],
