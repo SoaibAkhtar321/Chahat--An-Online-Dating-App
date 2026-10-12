@@ -64,9 +64,6 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshSubscription = useCallback(async () => {
     const sub = await getUserSubscription();
     setSubscription(sub);
-    if (sub.tier !== "free") {
-      setLikesRemaining(999);
-    }
   }, []);
 
   const refreshDeck = useCallback(async () => {
@@ -115,9 +112,7 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const res = await submitSwipe(target.id, direction);
-    if (subscription && subscription.tier !== "free") {
-      setLikesRemaining(999);
-    } else if (res.likesRemaining !== undefined) {
+    if (res.likesRemaining !== undefined) {
       setLikesRemaining(res.likesRemaining);
     }
 

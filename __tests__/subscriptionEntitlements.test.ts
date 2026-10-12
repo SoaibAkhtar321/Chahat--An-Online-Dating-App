@@ -41,10 +41,8 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
     likesUsedToday: number,
     dailyLimit: number = 10,
   ): { allowed: boolean; likesRemaining: number } => {
-    const isPaid = activeTier === "premium" || activeTier === "plus" || activeTier === "vip";
-    if (isPaid) {
-      return { allowed: true, likesRemaining: 999 };
-    }
+    // MVP: no paid-tier bypass. Every tier follows the same configured daily limit.
+    void activeTier;
     const remaining = Math.max(0, dailyLimit - likesUsedToday);
     return {
       allowed: likesUsedToday < dailyLimit,
@@ -126,14 +124,16 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       expect(result.likesRemaining).toBe(0);
     });
 
-    test("active paid tiers have unlimited likes and are never blocked", () => {
-      const premiumResult = evaluateSwipeQuota("premium", 50, 10);
-      expect(premiumResult.allowed).toBe(true);
-      expect(premiumResult.likesRemaining).toBe(999);
+    test("paid tiers get no like-quota bypass in the MVP", () => {
+      const premiumResult = evaluateSwipeQuota("premium", 10, 10);
+      expect(premiumResult.allowed).toBe(false);
+      expect(premiumResult.likesRemaining).toBe(0);
 
       const vipResult = evaluateSwipeQuota("vip", 120, 10);
-      expect(vipResult.allowed).toBe(true);
-      expect(vipResult.likesRemaining).toBe(999);
+      expect(vipResult.allowed).toBe(false);
+      expect(vipResult.likesRemaining).toBe(0);
+
+      expect(evaluateSwipeQuota("plus", 3, 10).likesRemaining).toBe(7);
     });
 
     test("expired paid users immediately fall back to 10-like limit", () => {

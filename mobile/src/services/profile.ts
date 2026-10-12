@@ -8,7 +8,7 @@ export async function fetchMyProfile(userId: string, email: string): Promise<MeP
     supabase
       .from("profiles")
       .select(
-        "id, name, gender, seeking, city, bio, work, education, intents, interests, languages, lifestyle, prompt, photos, onboarded",
+        "id, name, gender, seeking, city, bio, work, education, intents, interests, languages, lifestyle, prompt, onboarded",
       )
       .eq("id", userId)
       .maybeSingle(),
@@ -19,18 +19,21 @@ export async function fetchMyProfile(userId: string, email: string): Promise<MeP
   const row = profileRes.data as any;
   // dob is not readable via table select (privacy); fetch own dob through a dedicated RPC.
   const { data: ownDob } = await supabase.rpc("get_my_dob");
-  const photoPaths = Array.isArray(row?.photos) ? (row.photos as any[]).map((p) => p.path).filter(Boolean) : [];
+  // photos is not readable via table select (privacy stopgap); fetch own photos through a dedicated RPC.
+  const { data: ownPhotos } = await supabase.rpc("get_my_photos");
+  const ownPhotoRows: any[] = Array.isArray(ownPhotos) ? (ownPhotos as any[]) : [];
+  const photoPaths = ownPhotoRows.map((p) => p.path).filter(Boolean);
   const signed = await getSignedUrls("photos", photoPaths);
   const stateData = stateRes.data?.data ?? {};
 
-  const photos: PhotoItem[] = Array.isArray(row?.photos)
-    ? (row.photos as any[]).map((p, idx) => ({
+  const photos: PhotoItem[] = Array.isArray(ownPhotos)
+    ? ownPhotoRows.map((p, idx) => ({
         id: p.id || `photo_${idx}`,
         uri: p.path ? signed[p.path] || "" : p.src || "",
         path: p.path,
         thumbPath: p.thumbPath,
         isMain: idx === 0,
-        status: p.status || "approved",
+        status: p.status === "approved" || p.status === "rejected" ? p.status : "pending",
       }))
     : [];
 
@@ -107,7 +110,6 @@ export async function saveProfile(
         id: p.id,
         path: p.path || "",
         thumbPath: p.thumbPath || p.path || "",
-        status: p.status,
       }));
     }
 
@@ -151,19 +153,24 @@ export async function saveProfile(
   }
 }
 
+function uniqueSuffix(): string {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export async function uploadProfilePhoto(
   userId: string,
   photoId: string,
   uri: string,
 ): Promise<{ path: string; thumbPath: string }> {
-  const extension = "jpg";
-  const filePath = `${userId}/${photoId}.${extension}`;
+  // Unique path per upload + upsert:false: a stored photo is never overwritten in place, so a
+  // moderation approval can never silently apply to different content.
+  const filePath = `${userId}/${photoId}-${uniqueSuffix()}.jpg`;
 
   const { blob, mimeType } = await sanitizeAndPrepareImageUpload(uri, "image/jpeg");
 
   const { error } = await supabase.storage.from("photos").upload(filePath, blob, {
     contentType: mimeType,
-    upsert: true,
+    upsert: false,
   });
 
   if (error) throw error;
@@ -172,4 +179,16 @@ export async function uploadProfilePhoto(
     path: filePath,
     thumbPath: filePath,
   };
+}
+
+/** Verification selfies live under <uid>/verification/ and are never shown to other users. */
+export async function uploadVerificationSelfie(userId: string, uri: string): Promise<string> {
+  const filePath = `${userId}/verification/selfie-${uniqueSuffix()}.jpg`;
+  const { blob, mimeType } = await sanitizeAndPrepareImageUpload(uri, "image/jpeg");
+  const { error } = await supabase.storage.from("photos").upload(filePath, blob, {
+    contentType: mimeType,
+    upsert: false,
+  });
+  if (error) throw error;
+  return filePath;
 }

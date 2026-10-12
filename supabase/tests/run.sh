@@ -33,7 +33,7 @@ setup_db() {
 
 echo "== functional / RLS / storage / deletion =="
 setup_db milo_test_func || exit 1
-for f in 10_functional_rls.sql 20_storage_deletion.sql 90_assert.sql; do
+for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 35_uniform_quota.sql 90_assert.sql; do
   $P -d milo_test_func -f "$f" > /tmp/milo_test.out 2>&1; rc=$?
   [ "$f" = 90_assert.sql ] && cat /tmp/milo_test.out
   # Keep going after a failing file so 90_assert.sql still reports every recorded check.

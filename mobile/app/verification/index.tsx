@@ -9,7 +9,7 @@ import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { Header } from "../../src/components/ui/Header";
 import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
-import { saveProfile, uploadProfilePhoto } from "../../src/services/profile";
+import { saveProfile, uploadVerificationSelfie } from "../../src/services/profile";
 import { pushNotificationToInbox } from "../../src/services/notifications";
 
 export default function VerificationScreen() {
@@ -42,9 +42,8 @@ export default function VerificationScreen() {
     setSubmitting(true);
     try {
       // Upload selfie photo to secure storage under verification directory
-      const photoId = `selfie_${Date.now()}`;
       try {
-        await uploadProfilePhoto(user.id, photoId, selfieUri);
+        await uploadVerificationSelfie(user.id, selfieUri);
       } catch (uploadErr) {
         console.warn("Selfie upload warning (proceeding with status update):", uploadErr);
       }
