@@ -118,21 +118,32 @@ export async function fetchMessagesForMatch(
   currentUserId: string,
 ): Promise<Message[]> {
   try {
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("match_id", matchId)
-      .order("created_at", { ascending: true });
+    // Call server-side RPC get_match_messages (which masks read_at for non-Plus/VIP users)
+    let rows: any[] = [];
+    const { data: rpcData, error: rpcErr } = await supabase.rpc("get_match_messages", {
+      _match_id: matchId,
+    });
 
-    if (error || !data) {
-      return [];
+    if (!rpcErr && Array.isArray(rpcData)) {
+      rows = rpcData;
+    } else {
+      // Fallback to table select if RPC is not yet applied
+      const { data: tableData, error: tableErr } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("match_id", matchId)
+        .order("created_at", { ascending: true });
+      if (tableErr || !tableData) return [];
+      rows = tableData;
     }
+
+    if (rows.length === 0) return [];
 
     const signed = await getSignedUrls(
       "chat",
-      data.map((m) => m.image_path).filter(Boolean) as string[],
+      rows.map((m: any) => m.image_path).filter(Boolean) as string[],
     );
-    return data.map((m) => ({
+    return rows.map((m: any) => ({
       id: m.id,
       matchId: m.match_id,
       sender: m.sender,

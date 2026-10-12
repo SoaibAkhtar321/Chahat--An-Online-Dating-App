@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Gem,
   Award,
+  Clock,
+  Lock,
 } from "lucide-react-native";
 import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
 import { Header } from "../../src/components/ui/Header";
@@ -18,9 +20,8 @@ import { Dialog } from "../../src/components/ui/Dialog";
 import { Alert } from "../../src/utils/alert";
 import {
   PLANS,
-  BILLING_DURATIONS,
+  PREMIUM_BILLING_DURATIONS,
   getUserSubscription,
-  activateSubscription,
   type PlanTier,
   type UserSubscription,
 } from "../../src/services/subscription";
@@ -29,38 +30,20 @@ export default function PremiumScreen() {
   const [selectedTier, setSelectedTier] = useState<PlanTier>("premium");
   const [selectedDuration, setSelectedDuration] = useState<"1m" | "3m" | "6m" | "12m">("1m");
   const [currentSub, setCurrentSub] = useState<UserSubscription | null>(null);
-  const [confirmDialogVisible, setConfirmDialogVisible] = useState(false);
-  const [processing, setProcessing] = useState(false);
+  const [comingSoonVisible, setComingSoonVisible] = useState(false);
 
   useEffect(() => {
     getUserSubscription().then((sub) => {
       setCurrentSub(sub);
       if (sub.tier !== "free") {
         setSelectedTier(sub.tier);
-        setSelectedDuration(sub.duration);
       }
     });
   }, []);
 
-  const handleActivate = async () => {
-    setProcessing(true);
-    try {
-      const updated = await activateSubscription(selectedTier, selectedDuration);
-      setCurrentSub(updated);
-      setConfirmDialogVisible(false);
-      Alert.alert(
-        "🎉 Upgrade Successful!",
-        `Welcome to ${PLANS[selectedTier].name}! Your premium benefits are now active.`,
-      );
-    } catch {
-      Alert.alert("Subscription error", "Could not complete activation. Please try again.");
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const activeDurationObj =
-    BILLING_DURATIONS.find((d) => d.id === selectedDuration) || BILLING_DURATIONS[0]!;
+    PREMIUM_BILLING_DURATIONS.find((d) => d.id === selectedDuration) ||
+    PREMIUM_BILLING_DURATIONS[0]!;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,7 +65,7 @@ export default function PremiumScreen() {
             <View style={styles.currentActiveBadge}>
               <Award size={14} color={Colors.primaryForeground} />
               <Text style={styles.currentActiveBadgeText}>
-                Active: {PLANS[currentSub.tier].name} ({currentSub.duration})
+                Active: {PLANS[currentSub.tier].name}
               </Text>
             </View>
           )}
@@ -94,43 +77,59 @@ export default function PremiumScreen() {
           <View style={styles.safetyGuaranteeContent}>
             <Text style={styles.safetyGuaranteeTitle}>Safety is Always Free</Text>
             <Text style={styles.safetyGuaranteeText}>
-              Selfie verification, privacy controls, blocking, and reporting are free for every single user.
+              Selfie verification, privacy controls, blocking, and reporting are 100% free for all users.
             </Text>
           </View>
         </View>
 
-        {/* Billing Duration Selector */}
-        <Text style={styles.sectionHeading}>1. SELECT DURATION / अवधि चुनें</Text>
-        <View style={styles.durationGrid}>
-          {BILLING_DURATIONS.map((dur) => {
-            const isSelected = selectedDuration === dur.id;
-            return (
-              <TouchableOpacity
-                key={dur.id}
-                style={[styles.durationCard, isSelected && styles.durationCardSelected]}
-                onPress={() => setSelectedDuration(dur.id)}
-                activeOpacity={0.8}
-              >
-                {dur.popular && (
-                  <View style={styles.durationBadge}>
-                    <Text style={styles.durationBadgeText}>BEST VALUE</Text>
-                  </View>
-                )}
-                <Text style={[styles.durationLabel, isSelected && styles.durationLabelSelected]}>
-                  {dur.label}
-                </Text>
-                <Text style={[styles.durationPrice, isSelected && styles.durationPriceSelected]}>
-                  ₹{dur.totalPrice}
-                </Text>
-                {dur.savings && (
-                  <Text style={[styles.durationSavings, isSelected && styles.durationSavingsSelected]}>
-                    {dur.savings}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* Billing Duration Selector (Approved for Premium only) */}
+        {selectedTier === "premium" ? (
+          <>
+            <Text style={styles.sectionHeading}>1. SELECT PREMIUM DURATION / अवधि चुनें</Text>
+            <View style={styles.durationGrid}>
+              {PREMIUM_BILLING_DURATIONS.map((dur) => {
+                const isSelected = selectedDuration === dur.id;
+                return (
+                  <TouchableOpacity
+                    key={dur.id}
+                    style={[styles.durationCard, isSelected && styles.durationCardSelected]}
+                    onPress={() => setSelectedDuration(dur.id)}
+                    activeOpacity={0.8}
+                  >
+                    {dur.popular && (
+                      <View style={styles.durationBadge}>
+                        <Text style={styles.durationBadgeText}>BEST VALUE</Text>
+                      </View>
+                    )}
+                    <Text style={[styles.durationLabel, isSelected && styles.durationLabelSelected]}>
+                      {dur.label}
+                    </Text>
+                    <Text style={[styles.durationPrice, isSelected && styles.durationPriceSelected]}>
+                      ₹{dur.totalPrice}
+                    </Text>
+                    {dur.savings && (
+                      <Text
+                        style={[
+                          styles.durationSavings,
+                          isSelected && styles.durationSavingsSelected,
+                        ]}
+                      >
+                        {dur.savings}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        ) : selectedTier === "plus" || selectedTier === "vip" ? (
+          <View style={styles.singleMonthNoteBox}>
+            <Text style={styles.singleMonthNoteTitle}>Monthly Plan Pricing</Text>
+            <Text style={styles.singleMonthNoteText}>
+              {selectedTier === "plus" ? "CHAHAT Plus: ₹199/month" : "CHAHAT VIP: ₹399/month"} (Multi-month packages currently unapproved).
+            </Text>
+          </View>
+        ) : null}
 
         {/* Plan Tiers Selection */}
         <Text style={styles.sectionHeading}>2. CHOOSE YOUR PLAN / प्लान चुनें</Text>
@@ -158,45 +157,46 @@ export default function PremiumScreen() {
                 )}
 
                 <View style={styles.planHeader}>
-                  <View>
-                    <View style={styles.planTitleRow}>
+                  <View style={styles.planTitleCol}>
+                    <View style={styles.planNameRow}>
                       <Text style={styles.planName}>{plan.name}</Text>
-                      {tierKey === "vip" && <Gem size={16} color={Colors.accent} />}
-                      {tierKey === "premium" && <Zap size={16} color={Colors.primary} />}
+                      {isCurrent && (
+                        <View style={styles.currentPill}>
+                          <Text style={styles.currentPillText}>Current</Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.planHindi}>{plan.hindiName}</Text>
+                    <Text style={styles.planTagline}>{plan.tagline}</Text>
                   </View>
 
-                  <View style={styles.planPriceWrapper}>
-                    <Text style={styles.planPriceNumber}>
-                      {plan.monthlyPrice === 0 ? "₹0" : `₹${plan.monthlyPrice}`}
+                  <View style={styles.planPriceCol}>
+                    <Text style={styles.planPrice}>
+                      {plan.monthlyPrice === 0 ? "Free" : `₹${plan.monthlyPrice}`}
                     </Text>
-                    <Text style={styles.planPricePeriod}>
-                      {plan.monthlyPrice === 0 ? "/ forever" : "/ महीना"}
-                    </Text>
+                    {plan.monthlyPrice > 0 && <Text style={styles.planPeriod}>/month</Text>}
                   </View>
                 </View>
 
-                <Text style={styles.planTagline}>{plan.tagline}</Text>
-
-                <View style={styles.featureDivider} />
-
-                <View style={styles.featureList}>
+                {/* Features List */}
+                <View style={styles.featuresList}>
                   {plan.features.map((feat, idx) => (
-                    <View key={idx} style={styles.featureItemRow}>
-                      <Check
-                        size={16}
-                        color={isSelected ? Colors.primary : Colors.mutedForeground}
-                        strokeWidth={2.5}
-                      />
-                      <Text style={styles.featureItemText}>{feat}</Text>
+                    <View key={idx} style={styles.featureItem}>
+                      <CheckCircle2 size={16} color={Colors.primary} />
+                      <Text style={styles.featureText}>{feat}</Text>
                     </View>
                   ))}
                 </View>
 
-                <View style={styles.selectRadioRow}>
-                  <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
-                    {isSelected && <View style={styles.radioInnerDot} />}
+                {/* Bottom select button */}
+                <View style={[styles.selectBtn, isSelected && styles.selectBtnSelected]}>
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      isSelected && styles.radioCircleSelected,
+                    ]}
+                  >
+                    {isSelected && <View style={styles.radioDot} />}
                   </View>
                   <Text style={[styles.selectText, isSelected && styles.selectTextSelected]}>
                     {isCurrent ? "Current Plan" : isSelected ? "Selected Plan" : "Choose this plan"}
@@ -207,11 +207,12 @@ export default function PremiumScreen() {
           })}
         </View>
 
-        {/* Action Button */}
+        {/* Action Button Card */}
         <View style={styles.ctaCard}>
           <View style={styles.ctaSummaryRow}>
             <Text style={styles.ctaPlanSummary}>
-              {PLANS[selectedTier].name} · {activeDurationObj.label}
+              {PLANS[selectedTier].name}
+              {selectedTier === "premium" ? ` · ${activeDurationObj.label}` : ""}
             </Text>
             <Text style={styles.ctaTotalAmount}>
               ₹
@@ -220,41 +221,50 @@ export default function PremiumScreen() {
                 : selectedTier === "premium"
                   ? activeDurationObj.totalPrice
                   : selectedTier === "plus"
-                    ? Math.round(activeDurationObj.totalPrice * 2)
-                    : Math.round(activeDurationObj.totalPrice * 4)}
+                    ? 199
+                    : 399}
             </Text>
           </View>
 
-          <Button
-            title={
-              selectedTier === "free"
-                ? "Continue with Free Plan"
-                : `Upgrade to ${PLANS[selectedTier].name}`
-            }
-            onPress={() => {
-              if (selectedTier === "free") {
-                Alert.alert("Free Plan Active", "You are enjoying free matching and chatting!");
-              } else {
-                setConfirmDialogVisible(true);
-              }
-            }}
-          />
+          {/* T6 Strict Requirement: Say "Coming soon" until server verification exists */}
+          {selectedTier === "free" ? (
+            <Button
+              title="Free Plan Active (10 Likes/Day)"
+              onPress={() => {
+                Alert.alert(
+                  "Free Plan Active",
+                  "You have 10 free likes daily, resetting at midnight IST.",
+                );
+              }}
+            />
+          ) : (
+            <TouchableOpacity
+              style={styles.comingSoonCtaBtn}
+              onPress={() => setComingSoonVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Lock size={18} color={Colors.primaryForeground} />
+              <Text style={styles.comingSoonCtaText}>Coming soon</Text>
+            </TouchableOpacity>
+          )}
 
-          <Text style={styles.legalNotice}>
-            Payment processed securely via Google Play Billing. Auto-renews unless cancelled at least 24 hours before the end of the current period in Play Store Subscriptions.
-          </Text>
+          <View style={styles.comingSoonNoticeBox}>
+            <Clock size={14} color={Colors.mutedForeground} />
+            <Text style={styles.comingSoonNoticeText}>
+              In-app purchases via Google Play Billing are coming soon. Paid tiers require server-side purchase token verification and cannot be granted client-side.
+            </Text>
+          </View>
         </View>
       </ScrollView>
 
-      {/* Confirmation Dialog */}
+      {/* Coming Soon Dialog */}
       <Dialog
-        visible={confirmDialogVisible}
-        title={`Activate ${PLANS[selectedTier].name}?`}
-        body={`You are subscribing for ${activeDurationObj.label}. You will unlock all premium entitlements immediately.`}
-        confirmText={processing ? "Activating…" : "Confirm Subscription"}
-        cancelText="Cancel"
-        onConfirm={handleActivate}
-        onCancel={() => setConfirmDialogVisible(false)}
+        visible={comingSoonVisible}
+        title="Coming Soon"
+        body={`Paid subscriptions for ${PLANS[selectedTier].name} are coming soon with Google Play Billing integration and server-side token verification.\n\nAll basic safety, verification, and discovery features remain 100% free.`}
+        confirmText="Got it"
+        onConfirm={() => setComingSoonVisible(false)}
+        onCancel={() => setComingSoonVisible(false)}
       />
     </SafeAreaView>
   );
@@ -299,73 +309,74 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: Typography.weights.semibold,
     marginTop: 2,
-    marginBottom: 6,
   },
   heroSubtitle: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     textAlign: "center",
+    marginTop: 6,
     lineHeight: 18,
   },
   currentActiveBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Colors.success,
+    backgroundColor: Colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: Radii.full,
-    marginTop: 12,
+    marginTop: 10,
   },
   currentActiveBadgeText: {
-    fontSize: 11,
-    fontWeight: Typography.weights.bold,
     color: Colors.primaryForeground,
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
   },
   safetyGuaranteeBox: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
     backgroundColor: Colors.secondary,
     padding: 14,
     borderRadius: Radii.xl,
-    gap: 12,
-    marginBottom: 18,
     borderWidth: 1,
     borderColor: Colors.border,
+    marginBottom: 20,
   },
   safetyGuaranteeContent: {
     flex: 1,
   },
   safetyGuaranteeTitle: {
-    fontSize: Typography.sizes.sm,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
   },
   safetyGuaranteeText: {
-    fontSize: Typography.sizes.xs,
+    fontSize: 11,
     color: Colors.mutedForeground,
     marginTop: 2,
     lineHeight: 16,
   },
   sectionHeading: {
-    fontSize: 12,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.mutedForeground,
     letterSpacing: 0.5,
     marginBottom: 10,
-    marginTop: 6,
+    marginLeft: 4,
   },
   durationGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   durationCard: {
-    width: "48%",
+    flexBasis: "48%",
+    flexGrow: 1,
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 12,
+    padding: 14,
     borderWidth: 1.5,
     borderColor: Colors.border,
     position: "relative",
@@ -377,7 +388,7 @@ const styles = StyleSheet.create({
   durationBadge: {
     position: "absolute",
     top: -8,
-    right: 8,
+    right: 12,
     backgroundColor: Colors.accent,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -386,15 +397,15 @@ const styles = StyleSheet.create({
   durationBadgeText: {
     fontSize: 9,
     fontWeight: Typography.weights.bold,
-    color: Colors.accentForeground,
+    color: "#fff",
   },
   durationLabel: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.medium,
-    color: Colors.mutedForeground,
+    color: Colors.foreground,
   },
   durationLabelSelected: {
-    color: Colors.foreground,
+    color: Colors.primary,
     fontWeight: Typography.weights.bold,
   },
   durationPrice: {
@@ -415,30 +426,47 @@ const styles = StyleSheet.create({
   durationSavingsSelected: {
     color: Colors.success,
   },
+  singleMonthNoteBox: {
+    backgroundColor: Colors.card,
+    borderRadius: Radii.lg,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 16,
+  },
+  singleMonthNoteTitle: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  singleMonthNoteText: {
+    fontSize: 11,
+    color: Colors.mutedForeground,
+    marginTop: 2,
+  },
   plansContainer: {
-    gap: 14,
-    marginBottom: 20,
+    gap: 16,
+    marginBottom: 24,
   },
   planCard: {
     backgroundColor: Colors.card,
-    borderRadius: Radii.xl,
-    padding: 16,
+    borderRadius: Radii.xxl,
+    padding: 18,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    ...Shadows.card,
+    position: "relative",
   },
   planCardSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.card,
   },
   planCardPopular: {
-    position: "relative",
+    borderColor: Colors.accent,
   },
   planBadge: {
     position: "absolute",
     top: -10,
-    right: 14,
-    backgroundColor: Colors.primary,
+    left: 20,
+    backgroundColor: Colors.accent,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: Radii.full,
@@ -446,116 +474,134 @@ const styles = StyleSheet.create({
   planBadgeText: {
     fontSize: 10,
     fontWeight: Typography.weights.bold,
-    color: Colors.primaryForeground,
+    color: "#fff",
   },
   planHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    marginBottom: 14,
   },
-  planTitleRow: {
+  planTitleCol: {
+    flex: 1,
+  },
+  planNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
   },
   planName: {
-    fontSize: Typography.sizes.base,
+    fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
   },
-  planHindi: {
-    fontSize: 11,
-    color: Colors.mutedForeground,
-    marginTop: 2,
+  currentPill: {
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radii.full,
   },
-  planPriceWrapper: {
-    alignItems: "flex-end",
-  },
-  planPriceNumber: {
-    fontSize: Typography.sizes.xl,
-    fontWeight: Typography.weights.bold,
+  currentPillText: {
+    fontSize: 9,
     color: Colors.primary,
+    fontWeight: Typography.weights.bold,
   },
-  planPricePeriod: {
-    fontSize: 10,
-    color: Colors.mutedForeground,
+  planHindi: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.primary,
+    marginTop: 2,
+    fontWeight: Typography.weights.medium,
   },
   planTagline: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 4,
+    marginTop: 2,
   },
-  featureDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 12,
+  planPriceCol: {
+    alignItems: "flex-end",
   },
-  featureList: {
+  planPrice: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.foreground,
+  },
+  planPeriod: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+  },
+  featuresList: {
     gap: 8,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
-  featureItemRow: {
+  featureItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
-  featureItemText: {
+  featureText: {
     fontSize: Typography.sizes.xs,
     color: Colors.foreground,
     flex: 1,
-    lineHeight: 16,
+    lineHeight: 18,
   },
-  selectRadioRow: {
+  selectBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 14,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    gap: 10,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.secondary,
+  },
+  selectBtnSelected: {
+    backgroundColor: Colors.primary,
   },
   radioCircle: {
     width: 18,
     height: 18,
-    borderRadius: 9,
+    borderRadius: Radii.full,
     borderWidth: 2,
     borderColor: Colors.mutedForeground,
     alignItems: "center",
     justifyContent: "center",
   },
   radioCircleSelected: {
-    borderColor: Colors.primary,
+    borderColor: Colors.primaryForeground,
   },
-  radioInnerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Colors.primary,
+  radioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primaryForeground,
   },
   selectText: {
     fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    fontWeight: Typography.weights.medium,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.foreground,
   },
   selectTextSelected: {
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
+    color: Colors.primaryForeground,
   },
   ctaCard: {
     backgroundColor: Colors.card,
-    borderRadius: Radii.xl,
-    padding: 16,
+    borderRadius: Radii.xxl,
+    padding: 18,
     borderWidth: 1,
     borderColor: Colors.border,
+    gap: 12,
+    ...Shadows.card,
   },
   ctaSummaryRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "space-between",
   },
   ctaPlanSummary: {
     fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
+    fontWeight: Typography.weights.bold,
     color: Colors.foreground,
   },
   ctaTotalAmount: {
@@ -563,11 +609,30 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     color: Colors.primary,
   },
-  legalNotice: {
-    fontSize: 10,
+  comingSoonCtaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    borderRadius: Radii.full,
+  },
+  comingSoonCtaText: {
+    color: Colors.primaryForeground,
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.bold,
+  },
+  comingSoonNoticeBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 4,
+  },
+  comingSoonNoticeText: {
+    flex: 1,
+    fontSize: 11,
     color: Colors.mutedForeground,
-    textAlign: "center",
-    marginTop: 10,
-    lineHeight: 14,
+    lineHeight: 16,
   },
 });
