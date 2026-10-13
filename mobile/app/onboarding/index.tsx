@@ -665,7 +665,7 @@ export default function OnboardingScreen() {
           <View>
             <Text style={styles.stepTitle}>Add your photos</Text>
             <Text style={styles.stepSubtitle}>
-              1 to 6 photos. Clear, recent photos work best. The star photo is your main one.
+              1 to 4 photos. Clear, recent photos work best. The star photo is your main one.
             </Text>
             <PhotoUploader photos={photos} onChange={setPhotos} />
           </View>

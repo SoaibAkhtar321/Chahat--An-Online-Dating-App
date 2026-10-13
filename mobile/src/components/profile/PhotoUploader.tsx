@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
+import React, { useEffect, useMemo, useRef } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from "react-native";
 import { Alert } from "../../utils/alert";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -7,9 +7,13 @@ import { Plus, X, Star, ArrowLeft, ArrowRight } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { PhotoItem } from "../../types";
+import { compressToUnderLimit } from "../../utils/compressImage";
 
 const { width } = Dimensions.get("window");
 const ITEM_WIDTH = (width - 64) / 3;
+
+// Set to false to skip the Android crop screen (it can silently return "canceled" on some devices).
+const ALLOW_CROP = true;
 
 interface PhotoUploaderProps {
   photos: PhotoItem[];
@@ -20,42 +24,90 @@ interface PhotoUploaderProps {
 export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   photos,
   onChange,
-  maxPhotos = 6,
+  maxPhotos = 4,
 }) => {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
-  const pickImage = async (index: number) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(
-        "Permission required",
-        "Chahat needs photo permissions to upload profile pictures.",
-      );
-      return;
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  const busyRef = useRef(false);
+
+  // Compresses the picked image to under 1 MB, then adds it to the list.
+  const addPhoto = async (asset: { uri: string; width?: number }, index: number) => {
+    const compressedUri = await compressToUnderLimit(asset.uri, asset.width);
+    const current = photosRef.current;
+    const newPhoto: PhotoItem = {
+      id: `photo_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      uri: compressedUri,
+      status: "pending",
+      isMain: index === 0,
+    };
+    const updated = [...current];
+    if (index < updated.length) {
+      updated[index] = newPhoto;
+    } else if (updated.length < maxPhotos) {
+      updated.push(newPhoto);
     }
+    onChange(updated);
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      const newPhoto: PhotoItem = {
-        id: `photo_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-        uri: result.assets[0].uri,
-        status: "pending",
-        isMain: index === 0,
-      };
-
-      const updated = [...photos];
-      if (index < updated.length) {
-        updated[index] = newPhoto;
-      } else {
-        updated.push(newPhoto);
+  // Android can destroy the activity while the system picker is open; the result is then only
+  // available through getPendingResultAsync after the app comes back.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pending = await ImagePicker.getPendingResultAsync();
+        if (cancelled || !pending || Array.isArray(pending)) return;
+        const asset = pending.canceled ? undefined : pending.assets?.[0];
+        if (asset?.uri) await addPhoto(asset, photosRef.current.length);
+      } catch (e) {
+        console.warn("PhotoUploader: pending result check failed", e);
       }
-      onChange(updated);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pickImage = async (index: number) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission required",
+          "Chahat needs photo permissions to upload profile pictures.",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: ALLOW_CROP,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+
+      console.log("PhotoUploader: picker result", JSON.stringify(result));
+
+      if (result.canceled) return;
+
+      const asset = result.assets?.[0];
+      if (!asset?.uri) {
+        Alert.alert("Photo not added", "The selected photo could not be read. Please try another one.");
+        return;
+      }
+
+      await addPhoto(asset, index);
+    } catch (err: any) {
+      console.error("PhotoUploader: pickImage failed", err);
+      Alert.alert("Could not add photo", err?.message || "Something went wrong while selecting the photo.");
+    } finally {
+      busyRef.current = false;
     }
   };
 
