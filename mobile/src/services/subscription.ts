@@ -84,7 +84,6 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     popular: true,
     badge: "Most Popular",
     features: [
-      "Unlimited Likes (असीमित लाइक्स)",
       "किसने Like किया देखें (See Who Liked You)",
       "Undo Last Swipe (Rewind Pass)",
       "Smart Icebreakers (Hindi, English, Hinglish)",
@@ -194,7 +193,6 @@ export async function getUserSubscription(): Promise<UserSubscription> {
 export function hasEntitlement(
   tier: PlanTier,
   feature:
-    | "unlimitedLikes"
     | "seeWhoLikedYou"
     | "undoPass"
     | "readReceipts"
@@ -208,7 +206,6 @@ export function hasEntitlement(
   }
   if (tier === "premium") {
     return (
-      feature === "unlimitedLikes" ||
       feature === "seeWhoLikedYou" ||
       feature === "undoPass"
     );
@@ -216,6 +213,13 @@ export function hasEntitlement(
   // Free tier
   return false;
 }
+
+// Google Play subscription product IDs (must match Play Console; unverified until configured).
+export const PLAY_PRODUCT_IDS = {
+  premium: { "1m": "chahat_premium_1m", "3m": "chahat_premium_3m", "6m": "chahat_premium_6m", "12m": "chahat_premium_12m" },
+  plus: { "1m": "chahat_plus_1m" },
+  vip: { "1m": "chahat_vip_1m" },
+} as const;
 
 export interface PurchaseResult {
   success: boolean;
@@ -255,11 +259,13 @@ export async function purchaseSubscription(
       };
     }
 
-    // In preview / sandbox mode, return clean integration boundary response
+    // Real Google Play Billing is NOT integrated yet (no native billing library, no
+    // purchase-token verification backend). Never imply a payment is in progress.
+    void durationId;
     return {
       success: false,
-      status: "pending",
-      error: "Google Play Store payment sheet is connecting. Please ensure your Google account is linked to Google Play Billing.",
+      status: "failed",
+      error: "Subscriptions are not available in this build yet. You have not been charged.",
     };
   } catch (err: any) {
     return {

@@ -159,12 +159,12 @@ export default function MeScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.planCardTitle}>
-                {planTier === "free" ? "Free Plan · 10 Likes/Day" : `CHAHAT ${subscription?.tier ? subscription.tier.toUpperCase() : ""}`}
+                {planTier === "free" ? "Free Plan · 20 Likes/Day" : `CHAHAT ${subscription?.tier ? subscription.tier.toUpperCase() : ""}`}
               </Text>
               <Text style={styles.planCardSubtitle}>
                 {planTier === "free"
                   ? `${likesRemaining} likes left today · Resets midnight`
-                  : "Unlimited Likes · Priority Matching · Active"}
+                  : `${likesRemaining} likes left today · Active`}
               </Text>
             </View>
             <View style={styles.planUpgradeBtn}>

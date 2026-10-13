@@ -145,7 +145,7 @@ export default function PremiumScreen() {
           </View>
 
           {[
-            { name: "Daily Likes (प्रतिदिन लाइक्स)", free: "20 / day", prem: "असीमित (Unlimited)", plus: "असीमित", vip: "असीमित" },
+            { name: "Daily Likes (प्रतिदिन लाइक्स)", free: "20 / day", prem: "20 / day", plus: "20 / day", vip: "20 / day" },
             { name: "See Who Liked You (किसने Like किया)", free: "—", prem: "✓", plus: "✓", vip: "✓" },
             { name: "Rewind Pass (अनडू स्वाइप)", free: "—", prem: "✓", plus: "✓", vip: "✓" },
             { name: "Smart Icebreakers (बातचीत की शुरुआत)", free: "—", prem: "✓", plus: "✓", vip: "✓" },

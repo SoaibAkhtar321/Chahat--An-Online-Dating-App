@@ -355,13 +355,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
               {currentAge >= 18 ? (
                 <View style={styles.ageBadge}>
                   <Text style={styles.ageBadgeText}>
-                    {currentAge} years old (Eligible for Milo)
+                    {currentAge} years old (Eligible for Chahat)
                   </Text>
                 </View>
               ) : (
                 <View style={styles.ageBadgeInvalid}>
                   <Text style={styles.ageBadgeInvalidText}>
-                    Under 18 ({currentAge} years old) - Milo is strictly 18+
+                    Under 18 ({currentAge} years old) - Chahat is strictly 18+
                   </Text>
                 </View>
               )}

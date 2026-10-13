@@ -39,19 +39,10 @@ const INITIAL_NOTICES: NoticeItem[] = [
   {
     id: "notif_welcome_1",
     kind: "safety",
-    title: "Welcome to Milo",
+    title: "Welcome to Chahat",
     text: "Complete photo verification to unlock your verified badge and get more responses.",
     timeAgo: "Just now",
     timestamp: Date.now() - 3600000,
-    read: false,
-  },
-  {
-    id: "notif_welcome_2",
-    kind: "like",
-    title: "New Profile View",
-    text: "Someone liked your profile in your preferred city.",
-    timeAgo: "2h ago",
-    timestamp: Date.now() - 7200000,
     read: false,
   },
 ];

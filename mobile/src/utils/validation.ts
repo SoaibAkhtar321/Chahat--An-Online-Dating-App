@@ -19,7 +19,7 @@ export function validateDob(dobString: string): { valid: boolean; error?: string
   if (isNaN(d.getTime())) return { valid: false, error: "Invalid date format" };
   if (d > new Date()) return { valid: false, error: "Date of birth cannot be in the future" };
   const age = calculateAge(dobString);
-  if (age < 18) return { valid: false, error: "You must be 18 or older to use Milo", age };
+  if (age < 18) return { valid: false, error: "You must be 18 or older to use Chahat", age };
   if (age > 100) return { valid: false, error: "Please verify your date of birth", age };
   return { valid: true, age };
 }

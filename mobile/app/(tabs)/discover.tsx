@@ -123,12 +123,12 @@ export default function DiscoverScreen() {
           <View style={styles.premiumStatusRow}>
             <Crown size={14} color={Colors.accent} />
             <Text style={styles.premiumStatusText}>
-              CHAHAT {subscription.tier.toUpperCase()} · Unlimited Likes
+              CHAHAT {subscription.tier.toUpperCase()} · {likesRemaining} likes left today
             </Text>
           </View>
         ) : (
           <Text style={styles.quotaText}>
-            {likesRemaining} likes left today · <Text style={styles.upgradeLinkText}>Get Unlimited</Text>
+            {likesRemaining} likes left today · <Text style={styles.upgradeLinkText}>See plans</Text>
           </Text>
         )}
         {isBoosting && (
