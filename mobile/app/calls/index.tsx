@@ -1,13 +1,16 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { PhoneCall, Video, Info, MessageCircle, ShieldCheck, Clock } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { useMilo } from "../../src/context/MiloContext";
 
 export default function CallsScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { matches } = useMilo();
 
@@ -106,7 +109,7 @@ export default function CallsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

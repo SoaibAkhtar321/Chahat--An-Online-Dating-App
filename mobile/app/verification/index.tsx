@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { BadgeCheck, Camera, Clock } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
@@ -13,6 +14,8 @@ import { saveProfile, uploadVerificationSelfie } from "../../src/services/profil
 import { pushNotificationToInbox } from "../../src/services/notifications";
 
 export default function VerificationScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const { user, profile, refreshProfile } = useAuth();
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -169,7 +172,7 @@ export default function VerificationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

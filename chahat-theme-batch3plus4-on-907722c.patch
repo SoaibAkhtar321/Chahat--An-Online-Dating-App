@@ -1,0 +1,806 @@
+diff --git a/__tests__/themeCoverage.test.ts b/__tests__/themeCoverage.test.ts
+new file mode 100644
+index 0000000..219222c
+--- /dev/null
++++ b/__tests__/themeCoverage.test.ts
+@@ -0,0 +1,93 @@
++import * as fs from "fs";
++import * as path from "path";
++import { LightColors, DarkColors } from "../mobile/src/constants/theme";
++
++const MOBILE = path.join(__dirname, "..", "mobile");
++
++function listTsx(dir: string): string[] {
++  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
++    const p = path.join(dir, e.name);
++    if (e.isDirectory()) return listTsx(p);
++    return p.endsWith(".tsx") ? [p] : [];
++  });
++}
++
++describe("theme token parity", () => {
++  it("Light and Dark palettes define exactly the same tokens", () => {
++    expect(Object.keys(DarkColors).sort()).toEqual(Object.keys(LightColors).sort());
++  });
++
++  it("Dark palette differs from Light for core surface tokens", () => {
++    expect(DarkColors.background).not.toBe(LightColors.background);
++    expect(DarkColors.card).not.toBe(LightColors.card);
++    expect(DarkColors.foreground).not.toBe(LightColors.foreground);
++  });
++});
++
++describe("theme coverage", () => {
++  const files = [
++    ...listTsx(path.join(MOBILE, "app")),
++    ...listTsx(path.join(MOBILE, "src", "components")),
++  ];
++
++  it("finds screens and components to scan", () => {
++    expect(files.length).toBeGreaterThan(30);
++  });
++
++  it("no screen or component imports the static light-only Colors", () => {
++    const offenders = files.filter((f) =>
++      /import\s*\{[^}]*\bColors\b[^}]*\}\s*from\s*["'][^"']*constants\/theme["']/.test(
++        fs.readFileSync(f, "utf8"),
++      ),
++    );
++    expect(offenders.map((f) => path.relative(MOBILE, f))).toEqual([]);
++  });
++});
++
++// Files whose remaining hex/rgba literals were reviewed and are intentional:
++// photo overlays, white text over photos, brand tints and semantic tints.
++// Any NEW file with hardcoded colors must be reviewed for Dark Mode, then added here.
++const REVIEWED_HARDCODED_COLOR_FILES = [
++  "app/(auth)/welcome.tsx",
++  "app/(tabs)/likes.tsx",
++  "app/call/[id].tsx",
++  "app/explore/index.tsx",
++  "app/match/[id].tsx",
++  "app/premium/index.tsx",
++  "app/profile/[id].tsx",
++  "src/components/chat/ChatBubble.tsx",
++  "src/components/chat/CoupleGamesModal.tsx",
++  "src/components/discovery/DiscoveryCard.tsx",
++  "src/components/profile/PhotoUploader.tsx",
++  "src/components/ui/DatePicker.tsx",
++  "src/components/ui/Slider.tsx",
++];
++
++describe("hardcoded color regression guard", () => {
++  const files = [
++    ...listTsx(path.join(MOBILE, "app")),
++    ...listTsx(path.join(MOBILE, "src", "components")),
++  ];
++
++  it("only reviewed files contain hex/rgb(a) literals", () => {
++    const withLiterals = files
++      .filter((f) => /#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(fs.readFileSync(f, "utf8")))
++      .map((f) => path.relative(MOBILE, f).split(path.sep).join("/"))
++      .sort();
++    const unreviewed = withLiterals.filter((f) => !REVIEWED_HARDCODED_COLOR_FILES.includes(f));
++    expect(unreviewed).toEqual([]);
++  });
++});
++
++describe("native appearance config", () => {
++  const cfg = JSON.parse(fs.readFileSync(path.join(MOBILE, "app.json"), "utf8")).expo;
++
++  it("follows the device appearance", () => {
++    expect(cfg.userInterfaceStyle).toBe("automatic");
++  });
++
++  it("has a dark splash matching the dark background token", () => {
++    expect(cfg.splash.backgroundColor).toBe(LightColors.background);
++    expect(cfg.splash.dark.backgroundColor).toBe(DarkColors.background);
++  });
++});
+diff --git a/app.json b/app.json
+index 7835a2d..57c06a3 100644
+--- a/app.json
++++ b/app.json
+@@ -11,7 +11,11 @@
+     "splash": {
+       "image": "./assets/splash-icon.png",
+       "resizeMode": "contain",
+-      "backgroundColor": "#FAF7F5"
++      "backgroundColor": "#FAF7F5",
++      "dark": {
++        "image": "./assets/splash-icon.png",
++        "backgroundColor": "#161014"
++      }
+     },
+     "android": {
+       "package": "com.milo.dating",
+diff --git a/mobile/app.json b/mobile/app.json
+index 8a3362f..5b4df70 100644
+--- a/mobile/app.json
++++ b/mobile/app.json
+@@ -11,7 +11,11 @@
+     "splash": {
+       "image": "./assets/splash-icon.png",
+       "resizeMode": "contain",
+-      "backgroundColor": "#FAF7F5"
++      "backgroundColor": "#FAF7F5",
++      "dark": {
++        "image": "./assets/splash-icon.png",
++        "backgroundColor": "#161014"
++      }
+     },
+     "ios": {
+       "supportsTablet": false,
+diff --git a/mobile/app/(tabs)/chats.tsx b/mobile/app/(tabs)/chats.tsx
+index 72d2115..188ecba 100644
+--- a/mobile/app/(tabs)/chats.tsx
++++ b/mobile/app/(tabs)/chats.tsx
+@@ -1,14 +1,17 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+ import { Image } from "expo-image";
+ import { MessageCircle, PhoneCall } from "lucide-react-native";
+-import { Colors, Radii, Typography } from "../../src/constants/theme";
++import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { useMilo } from "../../src/context/MiloContext";
+ import { Button } from "../../src/components/ui/Button";
+ 
+ export default function ChatsScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { matches } = useMilo();
+ 
+@@ -146,7 +149,7 @@ export default function ChatsScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/(tabs)/discover.tsx b/mobile/app/(tabs)/discover.tsx
+index 09c49b2..abc706a 100644
+--- a/mobile/app/(tabs)/discover.tsx
++++ b/mobile/app/(tabs)/discover.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState } from "react";
++import React, { useState, useMemo } from "react";
+ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
+ import { Alert } from "../../src/utils/alert";
+ import { SafeAreaView } from "react-native-safe-area-context";
+@@ -14,12 +14,15 @@ import {
+   MapPin,
+   Crown,
+ } from "lucide-react-native";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
+ import { FilterModal } from "../../src/components/discovery/FilterModal";
+ import { useMilo } from "../../src/context/MiloContext";
+ 
+ export default function DiscoverScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const {
+     currentProfile,
+@@ -247,7 +250,7 @@ export default function DiscoverScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/(tabs)/likes.tsx b/mobile/app/(tabs)/likes.tsx
+index f7b5346..a614abc 100644
+--- a/mobile/app/(tabs)/likes.tsx
++++ b/mobile/app/(tabs)/likes.tsx
+@@ -1,10 +1,11 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+ import { Image } from "expo-image";
+ import { Lock, Heart } from "lucide-react-native";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { useMilo } from "../../src/context/MiloContext";
+ import { Button } from "../../src/components/ui/Button";
+ 
+@@ -12,6 +13,8 @@ const { width } = Dimensions.get("window");
+ const CARD_SIZE = (width - 48) / 2;
+ 
+ export default function LikesScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { deck, swipeCard } = useMilo();
+ 
+@@ -106,7 +109,7 @@ export default function LikesScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/(tabs)/me.tsx b/mobile/app/(tabs)/me.tsx
+index 75409f2..feda6cc 100644
+--- a/mobile/app/(tabs)/me.tsx
++++ b/mobile/app/(tabs)/me.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState } from "react";
++import React, { useState, useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+@@ -17,13 +17,16 @@ import {
+   HeartHandshake,
+   Zap,
+ } from "lucide-react-native";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { useAuth } from "../../src/context/AuthContext";
+ import { useMilo } from "../../src/context/MiloContext";
+ import { calculateAge } from "../../src/services/profile";
+ import { Dialog } from "../../src/components/ui/Dialog";
+ 
+ export default function MeScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { profile, signOut } = useAuth();
+   const { subscription, likesRemaining } = useMilo();
+@@ -219,7 +222,7 @@ export default function MeScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/_layout.tsx b/mobile/app/_layout.tsx
+index cfcbe92..1a9ed96 100644
+--- a/mobile/app/_layout.tsx
++++ b/mobile/app/_layout.tsx
+@@ -1,4 +1,4 @@
+-import React from "react";
++import React, { useEffect } from "react";
+ 
+ // Safe isomorphic fallback to avoid server-side useLayoutEffect warnings
+ if (typeof window === "undefined") {
+@@ -6,6 +6,7 @@ if (typeof window === "undefined") {
+ }
+ import { Stack } from "expo-router";
+ import { StatusBar } from "expo-status-bar";
++import * as SystemUI from "expo-system-ui";
+ import { SafeAreaProvider } from "react-native-safe-area-context";
+ import { AuthProvider } from "../src/context/AuthContext";
+ import { MiloProvider } from "../src/context/MiloContext";
+@@ -17,6 +18,12 @@ export { ErrorBoundary } from "expo-router";
+ function RootNavigation() {
+   const { isDark, colors } = useTheme();
+ 
++  // Keep the native window background (visible behind screens and during
++  // keyboard/resize transitions) in sync with the resolved theme.
++  useEffect(() => {
++    SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
++  }, [colors.background]);
++
+   return (
+     <>
+       <StatusBar
+diff --git a/mobile/app/call/[id].tsx b/mobile/app/call/[id].tsx
+index 423bb79..31e141e 100644
+--- a/mobile/app/call/[id].tsx
++++ b/mobile/app/call/[id].tsx
+@@ -1,15 +1,18 @@
+-import React, { useState, useEffect } from "react";
++import React, { useState, useEffect, useMemo } from "react";
+ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useLocalSearchParams, useRouter } from "expo-router";
+ import { Image } from "expo-image";
+ import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff } from "lucide-react-native";
+-import { Colors, Radii, Typography } from "../../src/constants/theme";
++import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { DEMO_PROFILES } from "../../src/services/discovery";
+ import { useMilo } from "../../src/context/MiloContext";
+ import { Alert } from "../../src/utils/alert";
+ 
+ export default function CallScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { id } = useLocalSearchParams<{ id: string }>();
+   const { matches, subscription } = useMilo();
+@@ -102,7 +105,7 @@ export default function CallScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.ink,
+diff --git a/mobile/app/calls/index.tsx b/mobile/app/calls/index.tsx
+index 96f5448..1e54153 100644
+--- a/mobile/app/calls/index.tsx
++++ b/mobile/app/calls/index.tsx
+@@ -1,13 +1,16 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+ import { PhoneCall, Video, Info, MessageCircle, ShieldCheck, Clock } from "lucide-react-native";
+-import { Colors, Radii, Typography } from "../../src/constants/theme";
++import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ import { useMilo } from "../../src/context/MiloContext";
+ 
+ export default function CallsScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { matches } = useMilo();
+ 
+@@ -106,7 +109,7 @@ export default function CallsScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/chat/[id].tsx b/mobile/app/chat/[id].tsx
+index 600720b..4a89817 100644
+--- a/mobile/app/chat/[id].tsx
++++ b/mobile/app/chat/[id].tsx
+@@ -1,4 +1,4 @@
+-import React, { useEffect, useState, useRef } from "react";
++import React, { useEffect, useState, useRef, useMemo } from "react";
+ import {
+   View,
+   Text,
+@@ -29,7 +29,8 @@ import {
+   ChevronDown,
+   ChevronUp,
+ } from "lucide-react-native";
+-import { Colors, Radii, Typography } from "../../src/constants/theme";
++import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { ChatBubble } from "../../src/components/chat/ChatBubble";
+ import { Dialog } from "../../src/components/ui/Dialog";
+ import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
+@@ -47,6 +48,8 @@ import { supabase } from "../../src/services/supabase";
+ import type { Message, Profile } from "../../src/types";
+ 
+ export default function ChatDetailScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { id: matchId } = useLocalSearchParams<{ id: string }>();
+   const { user } = useAuth();
+@@ -529,7 +532,7 @@ export default function ChatDetailScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/explore/index.tsx b/mobile/app/explore/index.tsx
+index efeec9e..d80ade4 100644
+--- a/mobile/app/explore/index.tsx
++++ b/mobile/app/explore/index.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState } from "react";
++import React, { useState, useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+@@ -18,7 +18,8 @@ import {
+   BadgeCheck,
+   ChevronRight,
+ } from "lucide-react-native";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ import { useMilo } from "../../src/context/MiloContext";
+ 
+@@ -82,6 +83,8 @@ const COMMUNITIES = [
+ ];
+ 
+ export default function ExploreScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { setFilters, deck } = useMilo();
+ 
+@@ -224,7 +227,7 @@ export default function ExploreScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/legal/privacy.tsx b/mobile/app/legal/privacy.tsx
+index d2c70dd..f18b567 100644
+--- a/mobile/app/legal/privacy.tsx
++++ b/mobile/app/legal/privacy.tsx
+@@ -1,10 +1,13 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+-import { Colors, Typography } from "../../src/constants/theme";
++import { Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ 
+ export default function PrivacyScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   return (
+     <SafeAreaView style={styles.container}>
+       <Header title="Privacy Policy" />
+@@ -42,7 +45,7 @@ export default function PrivacyScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/legal/terms.tsx b/mobile/app/legal/terms.tsx
+index 673079b..e4a259c 100644
+--- a/mobile/app/legal/terms.tsx
++++ b/mobile/app/legal/terms.tsx
+@@ -1,10 +1,13 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+-import { Colors, Typography } from "../../src/constants/theme";
++import { Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ 
+ export default function TermsScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   return (
+     <SafeAreaView style={styles.container}>
+       <Header title="Terms of Service" />
+@@ -38,7 +41,7 @@ export default function TermsScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/match/[id].tsx b/mobile/app/match/[id].tsx
+index f9beac1..9d9f0b5 100644
+--- a/mobile/app/match/[id].tsx
++++ b/mobile/app/match/[id].tsx
+@@ -1,14 +1,17 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useLocalSearchParams, useRouter } from "expo-router";
+ import { Image } from "expo-image";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { useAuth } from "../../src/context/AuthContext";
+ import { useMilo } from "../../src/context/MiloContext";
+ import { DEMO_PROFILES } from "../../src/services/discovery";
+ 
+ export default function MatchScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { id } = useLocalSearchParams<{ id: string }>();
+   const { profile: myProfile } = useAuth();
+@@ -81,7 +84,7 @@ export default function MatchScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.primary,
+diff --git a/mobile/app/notifications/index.tsx b/mobile/app/notifications/index.tsx
+index c414414..03d911d 100644
+--- a/mobile/app/notifications/index.tsx
++++ b/mobile/app/notifications/index.tsx
+@@ -1,9 +1,10 @@
+-import React, { useEffect, useState, useCallback } from "react";
++import React, { useEffect, useState, useCallback, useMemo } from "react";
+ import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+ import { Bell, Heart, MessageCircle, ShieldCheck, CheckCheck } from "lucide-react-native";
+-import { Colors, Radii, Typography } from "../../src/constants/theme";
++import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ import {
+   fetchNotificationInbox,
+@@ -13,6 +14,8 @@ import {
+ } from "../../src/services/notifications";
+ 
+ export default function NotificationsScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const [notices, setNotices] = useState<NoticeItem[]>([]);
+   const [refreshing, setRefreshing] = useState(false);
+@@ -120,7 +123,7 @@ export default function NotificationsScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+@@ -151,7 +154,7 @@ const styles = StyleSheet.create({
+   },
+   itemUnread: {
+     borderColor: Colors.primary,
+-    backgroundColor: "#FFF9F8",
++    backgroundColor: Colors.surfaceSecondary,
+   },
+   unreadDot: {
+     width: 8,
+diff --git a/mobile/app/premium/index.tsx b/mobile/app/premium/index.tsx
+index a7c587b..0da06ea 100644
+--- a/mobile/app/premium/index.tsx
++++ b/mobile/app/premium/index.tsx
+@@ -15,7 +15,7 @@ import {
+   RefreshCw,
+   Info,
+ } from "lucide-react-native";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography } from "../../src/constants/theme";
+ import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ import { Button } from "../../src/components/ui/Button";
+diff --git a/mobile/app/profile/[id].tsx b/mobile/app/profile/[id].tsx
+index 90d31f4..e42ec05 100644
+--- a/mobile/app/profile/[id].tsx
++++ b/mobile/app/profile/[id].tsx
+@@ -1,4 +1,4 @@
+-import React, { useState } from "react";
++import React, { useState, useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useLocalSearchParams, useRouter } from "expo-router";
+@@ -17,7 +17,8 @@ import {
+   HeartHandshake,
+ } from "lucide-react-native";
+ import { VoiceIntroPlayer } from "../../src/components/profile/VoiceIntroPlayer";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { useAuth } from "../../src/context/AuthContext";
+ import { useMilo } from "../../src/context/MiloContext";
+ import { DEMO_PROFILES } from "../../src/services/discovery";
+@@ -29,6 +30,8 @@ import type { Profile } from "../../src/types";
+ const { width } = Dimensions.get("window");
+ 
+ export default function ProfileDetailScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+   const { id } = useLocalSearchParams<{ id: string }>();
+   const { profile: myProfile } = useAuth();
+@@ -279,7 +282,7 @@ export default function ProfileDetailScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+@@ -303,7 +306,7 @@ const styles = StyleSheet.create({
+     width: 40,
+     height: 40,
+     borderRadius: Radii.full,
+-    backgroundColor: "rgba(255, 255, 255, 0.9)",
++    backgroundColor: Colors.card,
+     alignItems: "center",
+     justifyContent: "center",
+     ...Shadows.card,
+diff --git a/mobile/app/safety/index.tsx b/mobile/app/safety/index.tsx
+index 3bde136..07b3ede 100644
+--- a/mobile/app/safety/index.tsx
++++ b/mobile/app/safety/index.tsx
+@@ -1,4 +1,4 @@
+-import React from "react";
++import React, { useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+@@ -13,10 +13,13 @@ import {
+   Search,
+   Lock,
+ } from "lucide-react-native";
+-import { Colors, Radii, Typography } from "../../src/constants/theme";
++import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ 
+ export default function SafetyScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const router = useRouter();
+ 
+   return (
+@@ -153,7 +156,7 @@ export default function SafetyScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/settings/index.tsx b/mobile/app/settings/index.tsx
+index c6efe1b..f5372aa 100644
+--- a/mobile/app/settings/index.tsx
++++ b/mobile/app/settings/index.tsx
+@@ -1,10 +1,10 @@
+-import React, { useRef, useState } from "react";
++import React, { useRef, useState, useMemo } from "react";
+ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+ import { Alert } from "../../src/utils/alert";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useRouter } from "expo-router";
+ import { ChevronRight } from "lucide-react-native";
+-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
++import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+ import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ import { Toggle } from "../../src/components/ui/Toggle";
+@@ -23,6 +23,8 @@ export default function SettingsScreen() {
+   const router = useRouter();
+   const { profile, user, signOut } = useAuth();
+   const { mode, colors, setMode } = useTheme();
++  const Colors = colors;
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+ 
+   // Settings state
+   const [showInDiscover, setShowInDiscover] = useState(true);
+@@ -306,7 +308,7 @@ export default function SettingsScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/app/verification/index.tsx b/mobile/app/verification/index.tsx
+index 6a75275..f866f8f 100644
+--- a/mobile/app/verification/index.tsx
++++ b/mobile/app/verification/index.tsx
+@@ -1,11 +1,12 @@
+-import React, { useState } from "react";
++import React, { useState, useMemo } from "react";
+ import { View, Text, StyleSheet } from "react-native";
+ import { Alert } from "../../src/utils/alert";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { Image } from "expo-image";
+ import * as ImagePicker from "expo-image-picker";
+ import { BadgeCheck, Camera, Clock } from "lucide-react-native";
+-import { Colors, Radii, Typography } from "../../src/constants/theme";
++import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
++import { useTheme } from "../../src/context/ThemeContext";
+ import { Header } from "../../src/components/ui/Header";
+ import { Button } from "../../src/components/ui/Button";
+ import { useAuth } from "../../src/context/AuthContext";
+@@ -13,6 +14,8 @@ import { saveProfile, uploadVerificationSelfie } from "../../src/services/profil
+ import { pushNotificationToInbox } from "../../src/services/notifications";
+ 
+ export default function VerificationScreen() {
++  const { colors: Colors } = useTheme();
++  const styles = useMemo(() => createStyles(Colors), [Colors]);
+   const { user, profile, refreshProfile } = useAuth();
+   const [selfieUri, setSelfieUri] = useState<string | null>(null);
+   const [submitting, setSubmitting] = useState(false);
+@@ -169,7 +172,7 @@ export default function VerificationScreen() {
+   );
+ }
+ 
+-const styles = StyleSheet.create({
++const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: Colors.background,
+diff --git a/mobile/package-lock.json b/mobile/package-lock.json
+index 668878c..d925f46 100644
+--- a/mobile/package-lock.json
++++ b/mobile/package-lock.json
+@@ -22,6 +22,7 @@
+         "expo-router": "~4.0.17",
+         "expo-secure-store": "~14.0.1",
+         "expo-status-bar": "~2.0.1",
++        "expo-system-ui": "~4.0.9",
+         "lucide-react-native": "^0.475.0",
+         "query-string": "^7.1.3",
+         "react": "18.3.1",
+@@ -7324,6 +7325,32 @@
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-system-ui": {
++      "version": "4.0.9",
++      "resolved": "https://registry.npmjs.org/expo-system-ui/-/expo-system-ui-4.0.9.tgz",
++      "integrity": "sha512-hqBc0EWeK/BTB8i4H84vqNjje8GgxhapYrcWdg5qriaRA/u+bNNxhmpZXdAjFuhonOP4SmAbF+gjoJJWsTrhUg==",
++      "license": "MIT",
++      "dependencies": {
++        "@react-native/normalize-colors": "0.76.8",
++        "debug": "^4.3.2"
++      },
++      "peerDependencies": {
++        "expo": "*",
++        "react-native": "*",
++        "react-native-web": "*"
++      },
++      "peerDependenciesMeta": {
++        "react-native-web": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/expo-system-ui/node_modules/@react-native/normalize-colors": {
++      "version": "0.76.8",
++      "resolved": "https://registry.npmjs.org/@react-native/normalize-colors/-/normalize-colors-0.76.8.tgz",
++      "integrity": "sha512-FRjRvs7RgsXjkbGSOjYSxhX5V70c0IzA/jy3HXeYpATMwD9fOR1DbveLW497QGsVdCa0vThbJUtR8rIzAfpHQA==",
++      "license": "MIT"
++    },
+     "node_modules/expo/node_modules/expo-file-system": {
+       "version": "18.0.12",
+       "resolved": "https://registry.npmjs.org/expo-file-system/-/expo-file-system-18.0.12.tgz",
+diff --git a/mobile/package.json b/mobile/package.json
+index a8dd8fb..9633b10 100644
+--- a/mobile/package.json
++++ b/mobile/package.json
+@@ -25,6 +25,7 @@
+     "expo-router": "~4.0.17",
+     "expo-secure-store": "~14.0.1",
+     "expo-status-bar": "~2.0.1",
++    "expo-system-ui": "~4.0.9",
+     "lucide-react-native": "^0.475.0",
+     "query-string": "^7.1.3",
+     "react": "18.3.1",

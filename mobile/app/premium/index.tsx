@@ -15,7 +15,7 @@ import {
   RefreshCw,
   Info,
 } from "lucide-react-native";
-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
+import { Radii, Shadows, Typography } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Button } from "../../src/components/ui/Button";

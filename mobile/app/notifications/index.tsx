@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Bell, Heart, MessageCircle, ShieldCheck, CheckCheck } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import {
   fetchNotificationInbox,
@@ -13,6 +14,8 @@ import {
 } from "../../src/services/notifications";
 
 export default function NotificationsScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const [notices, setNotices] = useState<NoticeItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -120,7 +123,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -151,7 +154,7 @@ const styles = StyleSheet.create({
   },
   itemUnread: {
     borderColor: Colors.primary,
-    backgroundColor: "#FFF9F8",
+    backgroundColor: Colors.surfaceSecondary,
   },
   unreadDot: {
     width: 8,

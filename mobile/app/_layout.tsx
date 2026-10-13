@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 // Safe isomorphic fallback to avoid server-side useLayoutEffect warnings
 if (typeof window === "undefined") {
@@ -6,6 +6,7 @@ if (typeof window === "undefined") {
 }
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../src/context/AuthContext";
 import { MiloProvider } from "../src/context/MiloContext";
@@ -16,6 +17,12 @@ export { ErrorBoundary } from "expo-router";
 
 function RootNavigation() {
   const { isDark, colors } = useTheme();
+
+  // Keep the native window background (visible behind screens and during
+  // keyboard/resize transitions) in sync with the resolved theme.
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+  }, [colors.background]);
 
   return (
     <>

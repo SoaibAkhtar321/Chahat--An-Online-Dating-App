@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -29,7 +29,8 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { ChatBubble } from "../../src/components/chat/ChatBubble";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
@@ -47,6 +48,8 @@ import { supabase } from "../../src/services/supabase";
 import type { Message, Profile } from "../../src/types";
 
 export default function ChatDetailScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { id: matchId } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -529,7 +532,7 @@ export default function ChatDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

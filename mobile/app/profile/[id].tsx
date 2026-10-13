@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,7 +17,8 @@ import {
   HeartHandshake,
 } from "lucide-react-native";
 import { VoiceIntroPlayer } from "../../src/components/profile/VoiceIntroPlayer";
-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
 import { DEMO_PROFILES } from "../../src/services/discovery";
@@ -29,6 +30,8 @@ import type { Profile } from "../../src/types";
 const { width } = Dimensions.get("window");
 
 export default function ProfileDetailScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile: myProfile } = useAuth();
@@ -279,7 +282,7 @@ export default function ProfileDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -303,7 +306,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: Radii.full,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
     ...Shadows.card,

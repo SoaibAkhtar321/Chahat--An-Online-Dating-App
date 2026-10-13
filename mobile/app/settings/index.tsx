@@ -1,10 +1,10 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Toggle } from "../../src/components/ui/Toggle";
@@ -23,6 +23,8 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { profile, user, signOut } = useAuth();
   const { mode, colors, setMode } = useTheme();
+  const Colors = colors;
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
 
   // Settings state
   const [showInDiscover, setShowInDiscover] = useState(true);
@@ -306,7 +308,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
