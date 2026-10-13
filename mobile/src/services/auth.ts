@@ -32,6 +32,12 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
           error: "An account with this email already exists. Please log in.",
         };
       }
+      if (/rate.*limit|too many requests|over_email_send_rate_limit/i.test(error.message)) {
+        return {
+          success: false,
+          error: "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
+        };
+      }
       return { success: false, error: error.message };
     }
 
@@ -41,6 +47,12 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
 
     return { success: true };
   } catch (err: any) {
+    if (/rate.*limit|too many requests/i.test(err?.message || "")) {
+      return {
+        success: false,
+        error: "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
+      };
+    }
     return { success: false, error: err.message || "Failed to sign up" };
   }
 }
@@ -69,6 +81,12 @@ export async function signInUser(email: string, password: string): Promise<AuthR
           error: "Please verify your email address to continue.",
         };
       }
+      if (/rate.*limit|too many requests/i.test(error.message)) {
+        return {
+          success: false,
+          error: "Too many sign-in attempts. Please wait 60 seconds before trying again.",
+        };
+      }
       if (/invalid/i.test(error.message)) {
         return { success: false, error: "Incorrect email or password." };
       }
@@ -77,6 +95,12 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 
     return { success: true };
   } catch (err: any) {
+    if (/rate.*limit|too many requests/i.test(err?.message || "")) {
+      return {
+        success: false,
+        error: "Too many sign-in attempts. Please wait 60 seconds before trying again.",
+      };
+    }
     return { success: false, error: err.message || "Failed to sign in" };
   }
 }

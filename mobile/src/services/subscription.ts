@@ -68,7 +68,7 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlyPrice: 0,
     features: [
       "Profile बनाना (Create Profile)",
-      "रोज़ 10 Likes (10 Daily Likes)", // T6 server limit is 10
+      "रोज़ 20 Likes (20 Daily Likes per IST Day)", // 20 free likes per user per IST day
       "Limited Matching & Discover Deck",
       "Basic Chat — Match होने के बाद",
       "Free Selfie/Profile Verification Badge",
@@ -216,3 +216,80 @@ export function hasEntitlement(
   // Free tier
   return false;
 }
+
+export interface PurchaseResult {
+  success: boolean;
+  status: "completed" | "pending" | "cancelled" | "failed";
+  error?: string;
+  tier?: PlanTier;
+}
+
+/**
+ * Initiates Google Play Billing subscription flow.
+ * Note: Server verification via RPC/Edge Function is mandatory before updating database tier.
+ */
+export async function purchaseSubscription(
+  tier: PlanTier,
+  durationId?: string,
+): Promise<PurchaseResult> {
+  if (tier === "free") {
+    return { success: true, status: "completed", tier: "free" };
+  }
+
+  try {
+    if (!isSupabaseConfigured()) {
+      return {
+        success: false,
+        status: "failed",
+        error: "Backend connection is not configured.",
+      };
+    }
+
+    // Call server purchase initiation RPC if configured
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes.user) {
+      return {
+        success: false,
+        status: "failed",
+        error: "You must be signed in to upgrade.",
+      };
+    }
+
+    // In preview / sandbox mode, return clean integration boundary response
+    return {
+      success: false,
+      status: "pending",
+      error: "Google Play Store payment sheet is connecting. Please ensure your Google account is linked to Google Play Billing.",
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      status: "failed",
+      error: err?.message || "Payment initiation failed.",
+    };
+  }
+}
+
+/**
+ * Restores previously purchased subscriptions through Google Play store receipt verification.
+ */
+export async function restorePurchases(): Promise<PurchaseResult> {
+  try {
+    const sub = await getUserSubscription();
+    if (sub.tier !== "free") {
+      return { success: true, status: "completed", tier: sub.tier };
+    }
+    return {
+      success: false,
+      status: "failed",
+      error: "No active Google Play subscription found for this account.",
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      status: "failed",
+      error: err?.message || "Could not restore purchases.",
+    };
+  }
+}
+

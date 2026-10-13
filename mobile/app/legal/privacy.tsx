@@ -9,9 +9,9 @@ export default function PrivacyScreen() {
     <SafeAreaView style={styles.container}>
       <Header title="Privacy Policy" />
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.heading}>Milo Privacy Policy</Text>
+        <Text style={styles.heading}>Chahat Privacy Policy</Text>
         <Text style={styles.paragraph}>
-          Your privacy is foundational to our product. This policy explains what information Milo
+          Your privacy is foundational to our product. This policy explains what information Chahat
           collects, how we use it, and how your data is protected under Indian data protection
           principles (DPDP Act).
         </Text>
@@ -21,7 +21,7 @@ export default function PrivacyScreen() {
           • Account info: Email address and authentication credentials.{"\n"}• Profile info: Name,
           date of birth (used strictly to calculate age, never displayed publicly), gender,
           relationship intents, city, work, education, and photos.{"\n"}• Discovery location:
-          City-level location only. Milo never reveals your precise coordinates or physical address
+          City-level location only. Chahat never reveals your precise coordinates or physical address
           to other users.
         </Text>
 

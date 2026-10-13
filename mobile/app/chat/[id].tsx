@@ -132,7 +132,7 @@ export default function ChatDetailScreen() {
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission required", "Milo needs photo permissions to share images.");
+      Alert.alert("Permission required", "Chahat needs photo permissions to share images.");
       return;
     }
 
@@ -180,7 +180,7 @@ export default function ChatDetailScreen() {
       if (rep.success) {
         Alert.alert(
           "Report submitted",
-          "Thank you for helping keep Milo safe. Our team will review this.",
+          "Thank you for helping keep Chahat safe. Our team will review this.",
         );
       } else {
         Alert.alert("Could not report", rep.error || "Please try again later.");
@@ -335,7 +335,7 @@ export default function ChatDetailScreen() {
       <View style={styles.safetyNotice}>
         <ShieldCheck size={14} color={Colors.mutedForeground} />
         <Text style={styles.safetyNoticeText}>
-          Keep conversations on Milo. Never share OTP or bank details.
+          Keep conversations on Chahat. Never share OTP or bank details.
         </Text>
       </View>
 

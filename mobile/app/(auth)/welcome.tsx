@@ -61,10 +61,10 @@ export default function WelcomeScreen() {
           >
             <View style={styles.logoRow}>
               <Text style={styles.logoText}>
-                mi<Text style={styles.logoAccent}>l</Text>o
+                cha<Text style={styles.logoAccent}>h</Text>at
               </Text>
               <View style={styles.badgePill}>
-                <Text style={styles.badgeText}>Dating in India</Text>
+                <Text style={styles.badgeText}>Online Friendship App</Text>
               </View>
             </View>
           </LinearGradient>

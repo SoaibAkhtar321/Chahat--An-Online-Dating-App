@@ -17,15 +17,15 @@ describe("Like Quotas & India Standard Time Calculations", () => {
     expect(istString).toBe("2026-10-10");
   });
 
-  test("calculates remaining free daily likes accurately", () => {
-    const dailyLimit = 10;
+  test("calculates remaining free daily likes accurately (20 daily limit)", () => {
+    const dailyLimit = 20;
     const used = 4;
-    expect(Math.max(0, dailyLimit - used)).toBe(6);
+    expect(Math.max(0, dailyLimit - used)).toBe(16);
   });
 
   test("clamps negative remaining likes to zero", () => {
-    const dailyLimit = 10;
-    const used = 12;
+    const dailyLimit = 20;
+    const used = 25;
     expect(Math.max(0, dailyLimit - used)).toBe(0);
   });
 });

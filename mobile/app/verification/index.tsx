@@ -20,20 +20,51 @@ export default function VerificationScreen() {
   const status = profile?.verificationStatus || "none";
 
   const handleTakeSelfie = async () => {
-    const { status: perm } = await ImagePicker.requestCameraPermissionsAsync();
-    if (perm !== "granted") {
-      Alert.alert("Camera permission", "Milo requires camera access for identity verification.");
-      return;
-    }
+    try {
+      const { status: perm } = await ImagePicker.requestCameraPermissionsAsync();
+      if (perm !== "granted") {
+        Alert.alert(
+          "Camera permission required",
+          "Chahat needs camera access to capture your verification selfie and ensure genuine profiles.",
+        );
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        cameraType: ImagePicker.CameraType.front,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      setSelfieUri(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setSelfieUri(result.assets[0].uri);
+      }
+    } catch (camErr: any) {
+      console.warn("Camera launch encountered error, offering gallery fallback:", camErr);
+      Alert.alert(
+        "Camera Unavailable",
+        "Could not open device camera directly. Would you like to select a recent selfie from your photo library instead?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Choose Selfie",
+            onPress: async () => {
+              const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (libPerm.status !== "granted") return;
+              const pickRes = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+              });
+              if (!pickRes.canceled && pickRes.assets[0]) {
+                setSelfieUri(pickRes.assets[0].uri);
+              }
+            },
+          },
+        ],
+      );
     }
   };
 
@@ -98,7 +129,7 @@ export default function VerificationScreen() {
         ) : (
           <View style={styles.box}>
             <BadgeCheck size={48} color={Colors.primary} />
-            <Text style={styles.title}>Get Verified on Milo</Text>
+            <Text style={styles.title}>Get Verified on Chahat</Text>
             <Text style={styles.subtitle}>
               Take a quick selfie to confirm your identity. Verified profiles receive up to 3x more
               matches.

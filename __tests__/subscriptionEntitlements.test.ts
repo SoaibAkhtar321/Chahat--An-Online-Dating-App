@@ -268,8 +268,8 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       ]);
     });
 
-    test("free plan explicitly states 10 daily likes in feature list", () => {
-      const likeFeature = PLANS.free.features.find((f) => f.includes("10 Likes"));
+    test("free plan explicitly states 20 daily likes in feature list", () => {
+      const likeFeature = PLANS.free.features.find((f) => f.includes("20 Likes"));
       expect(likeFeature).toBeDefined();
     });
   });

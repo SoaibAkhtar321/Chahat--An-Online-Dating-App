@@ -160,7 +160,7 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
 
   return {
     id: r.id,
-    name: r.name || "Milo Member",
+    name: r.name || "Chahat Member",
     age: r.age || 25,
     city: r.city || "Mumbai",
     distanceKm: r.distanceKm || 5,

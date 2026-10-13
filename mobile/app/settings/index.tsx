@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Toggle } from "../../src/components/ui/Toggle";
 import { Dialog } from "../../src/components/ui/Dialog";
@@ -21,6 +22,7 @@ import {
 export default function SettingsScreen() {
   const router = useRouter();
   const { profile, user, signOut } = useAuth();
+  const { mode, colors, setMode } = useTheme();
 
   // Settings state
   const [showInDiscover, setShowInDiscover] = useState(true);
@@ -117,6 +119,39 @@ export default function SettingsScreen() {
               <Text style={styles.rowLabel}>Edit Profile & Photos</Text>
               <ChevronRight size={18} color={Colors.mutedForeground} />
             </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Appearance & Theme Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>APPEARANCE / थीम</Text>
+          <View style={styles.card}>
+            <View style={styles.themeRow}>
+              {(["system", "light", "dark"] as const).map((tMode) => {
+                const isActive = mode === tMode;
+                const label = tMode === "system" ? "System" : tMode === "light" ? "Light" : "Dark";
+                return (
+                  <TouchableOpacity
+                    key={tMode}
+                    style={[
+                      styles.themeOptionBtn,
+                      isActive && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                    onPress={() => setMode(tMode)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.themeOptionText,
+                        isActive && { color: colors.primaryForeground, fontWeight: Typography.weights.bold },
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         </View>
 
@@ -338,5 +373,25 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.destructive,
+  },
+  themeRow: {
+    flexDirection: "row",
+    padding: 12,
+    gap: 8,
+  },
+  themeOptionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.secondary,
+  },
+  themeOptionText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.foreground,
   },
 });

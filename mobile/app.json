@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Milo",
+    "name": "Chahat — Online Friendship App",
     "slug": "chahat",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "milo",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -29,8 +29,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -44,7 +43,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Milo needs access to your photos so you can add pictures to your dating profile."
+          "photosPermission": "Chahat needs access to your photos so you can add pictures to your friendship profile."
         }
       ],
       "expo-asset",
@@ -52,15 +51,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "d40a4e1f-fbf8-4b44-93af-7c4e1fe39b8a"
-      }
-    },
-    "owner": "chahat-org"
+    }
   }
 }

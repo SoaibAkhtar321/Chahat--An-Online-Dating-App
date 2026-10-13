@@ -34,7 +34,7 @@ export default function VerifyScreen() {
         <Text style={styles.title}>Check your inbox</Text>
         <Text style={styles.subtitle}>
           We sent a verification link to your email address. Please click the link to activate your
-          Milo account.
+          Chahat account.
         </Text>
 
         {resent ? (

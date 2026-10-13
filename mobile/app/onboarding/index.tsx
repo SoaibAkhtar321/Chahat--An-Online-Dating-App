@@ -235,9 +235,13 @@ export default function OnboardingScreen() {
               thumbPath,
               status: "approved",
             });
-          } catch (uploadErr) {
-            console.warn("Failed to upload photo:", p.id, uploadErr);
-            processedPhotos.push(p);
+          } catch (uploadErr: any) {
+            console.error("Failed to upload photo:", p.id, uploadErr);
+            Alert.alert(
+              "Photo upload failed",
+              `Could not upload photo: ${uploadErr?.message || "Please check your connection and retry."}`,
+            );
+            return;
           }
         } else {
           processedPhotos.push(p);
@@ -299,7 +303,7 @@ export default function OnboardingScreen() {
         return (
           <View>
             <Text style={styles.stepTitle}>What's your first name?</Text>
-            <Text style={styles.stepSubtitle}>This is how you'll appear on Milo.</Text>
+            <Text style={styles.stepSubtitle}>This is how you'll appear on Chahat.</Text>
             <Input
               placeholder="First name"
               value={name}
@@ -317,8 +321,8 @@ export default function OnboardingScreen() {
             <Text style={styles.stepTitle}>When's your birthday?</Text>
             <Text style={styles.stepSubtitle}>
               {isExistingDobSaved
-                ? "Your date of birth is verified and saved on your account. To request an update, contact Milo Support."
-                : "Only your age is shown. Milo is strictly 18+. Date of birth cannot be changed once saved."}
+                ? "Your date of birth is verified and saved on your account. To request an update, contact Chahat Support."
+                : "Only your age is shown. Chahat is strictly 18+. Date of birth cannot be changed once saved."}
             </Text>
             <DatePicker
               value={dob}
@@ -338,7 +342,7 @@ export default function OnboardingScreen() {
         return (
           <View>
             <Text style={styles.stepTitle}>I am a…</Text>
-            <Text style={styles.stepSubtitle}>Milo matches men with women.</Text>
+            <Text style={styles.stepSubtitle}>Chahat connects genuine people looking for meaningful friendship and relationships.</Text>
             <View style={styles.chipRow}>
               <Chip
                 label="Man"
@@ -710,7 +714,7 @@ export default function OnboardingScreen() {
         return (
           <View>
             <Text style={styles.stepTitle}>Looking good, {name}!</Text>
-            <Text style={styles.stepSubtitle}>Your Milo dating profile is ready.</Text>
+            <Text style={styles.stepSubtitle}>Your Chahat profile is ready.</Text>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryName}>
                 {name}, {calculateAge(dob)}

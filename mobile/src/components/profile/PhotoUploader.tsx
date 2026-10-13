@@ -26,7 +26,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     if (status !== "granted") {
       Alert.alert(
         "Permission required",
-        "Milo needs photo permissions to upload profile pictures.",
+        "Chahat needs photo permissions to upload profile pictures.",
       );
       return;
     }

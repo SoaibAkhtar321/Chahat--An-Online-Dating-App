@@ -135,10 +135,12 @@ export const PROMPTS = [
 ];
 
 export const LIFESTYLE: Record<string, string[]> = {
-  Drinking: ["Never", "Socially", "Often"],
-  Smoking: ["Never", "Socially", "Regularly"],
+  Height: ["Under 5'4\"", "5'4\" - 5'7\"", "5'8\" - 5'11\"", "6'0\" - 6'2\"", "Over 6'2\"", "Prefer not to say"],
+  Exercise: ["Daily", "Often", "Sometimes", "Rarely", "Never", "Prefer not to say"],
+  Drinking: ["Never", "Socially", "Often", "Prefer not to say"],
+  Smoking: ["Never", "Socially", "Regularly", "Prefer not to say"],
   Workout: ["Rarely", "Sometimes", "Often"],
-  Diet: ["Vegetarian", "Eggetarian", "Non-veg", "Vegan", "Jain"],
+  Diet: ["Vegetarian", "Eggetarian", "Non-veg", "Vegan", "Jain", "Prefer not to say"],
 };
 
 export const LANGUAGES = [

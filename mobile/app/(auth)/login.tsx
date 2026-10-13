@@ -146,7 +146,7 @@ export default function LoginScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              New to Milo?{" "}
+              New to Chahat?{" "}
               <Text style={styles.signupLink} onPress={() => router.push("/(auth)/signup")}>
                 Create an account
               </Text>

@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Milo Dating",
-    "slug": "milo-dating",
+    "name": "Chahat — Online Friendship App",
+    "slug": "chahat",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "milo",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -46,7 +46,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Milo needs access to your photos so you can add pictures to your dating profile."
+          "photosPermission": "Chahat needs access to your photos so you can add pictures to your friendship profile."
         }
       ]
     ],

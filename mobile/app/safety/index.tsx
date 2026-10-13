@@ -42,7 +42,7 @@ export default function SafetyScreen() {
           </View>
           <Text style={styles.guaranteeText}>
             Profile Verification, Block, Report, Privacy Controls, and Safety Centre access are
-            100% free for all users on Milo & CHAHAT.
+            100% free for all users on Chahat.
           </Text>
         </View>
 

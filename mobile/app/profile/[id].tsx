@@ -40,7 +40,7 @@ export default function ProfileDetailScreen() {
   const targetProfile: Profile = deck.find((p) => p.id === id) ||
     DEMO_PROFILES.find((p) => p.id === id) || {
       id: id || "unknown",
-      name: "Milo Member",
+      name: "Chahat Member",
       age: 26,
       city: "Mumbai",
       distanceKm: 5,
@@ -248,7 +248,7 @@ export default function ProfileDetailScreen() {
         body={
           dialogAction === "block"
             ? "They will no longer appear in your discovery deck or be able to message you."
-            : "Help us keep Milo genuine and safe. Please confirm your report."
+            : "Help us keep Chahat genuine and safe. Please confirm your report."
         }
         confirmText={dialogAction === "block" ? "Block" : "Submit Report"}
         danger={dialogAction === "block"}
@@ -266,7 +266,7 @@ export default function ProfileDetailScreen() {
             );
             setDialogAction(null);
             if (rep.success) {
-              Alert.alert("Report submitted", "Thank you for helping keep Milo safe.");
+              Alert.alert("Report submitted", "Thank you for helping keep Chahat safe.");
               router.back();
             } else {
               Alert.alert("Could not report", rep.error || "Please try again later.");

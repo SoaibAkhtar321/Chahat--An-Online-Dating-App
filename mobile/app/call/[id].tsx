@@ -7,11 +7,12 @@ import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff } from "lucide-reac
 import { Colors, Radii, Typography } from "../../src/constants/theme";
 import { DEMO_PROFILES } from "../../src/services/discovery";
 import { useMilo } from "../../src/context/MiloContext";
+import { Alert } from "../../src/utils/alert";
 
 export default function CallScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { matches } = useMilo();
+  const { matches, subscription } = useMilo();
 
   const [muted, setMuted] = useState(false);
   const [videoOff, setVideoOff] = useState(false);
@@ -20,12 +21,26 @@ export default function CallScreen() {
   const partner =
     matches.find((m) => m.otherUser.id === id || m.id === id)?.otherUser || DEMO_PROFILES[0]!;
 
+  const isPaidUser = subscription?.tier && subscription.tier !== "free";
+  const MAX_FREE_CALL_SECONDS = 60;
+
   useEffect(() => {
     const timer = setInterval(() => {
-      setSeconds((prev) => prev + 1);
+      setSeconds((prev) => {
+        const next = prev + 1;
+        if (!isPaidUser && next >= MAX_FREE_CALL_SECONDS) {
+          clearInterval(timer);
+          Alert.alert(
+            "Free Call Limit Reached",
+            "Your 60-second free video call allowance has concluded. Upgrade to CHAHAT Premium for unlimited calling.",
+            [{ text: "OK", onPress: () => router.back() }],
+          );
+        }
+        return next;
+      });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isPaidUser]);
 
   const formatTimer = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -38,6 +53,13 @@ export default function CallScreen() {
       <View style={styles.topBar}>
         <Text style={styles.partnerName}>{partner.name}</Text>
         <Text style={styles.timer}>{formatTimer(seconds)}</Text>
+        {!isPaidUser && (
+          <View style={styles.freeAllowanceBadge}>
+            <Text style={styles.freeAllowanceText}>
+              Free allowance: {Math.max(0, MAX_FREE_CALL_SECONDS - seconds)}s remaining
+            </Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.videoArea}>
@@ -146,5 +168,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.destructive,
     alignItems: "center",
     justifyContent: "center",
+  },
+  freeAllowanceBadge: {
+    marginTop: 8,
+    backgroundColor: "rgba(200, 70, 48, 0.85)",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+  },
+  freeAllowanceText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: Typography.weights.semibold,
   },
 });

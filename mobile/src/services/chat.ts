@@ -3,6 +3,7 @@ import type { Message, MatchItem, Profile } from "../types";
 import { getSignedUrls, getSignedUrl, sanitizeAndPrepareImageUpload } from "./storage";
 import { DEMO_PROFILES } from "./discovery";
 import { pushNotificationToInbox } from "./notifications";
+import { generateUUID, isValidUUID } from "../utils/validation";
 
 export async function fetchUserMatches(currentUserId: string): Promise<MatchItem[]> {
   try {
@@ -118,6 +119,10 @@ export async function fetchMessagesForMatch(
   currentUserId: string,
 ): Promise<Message[]> {
   try {
+    if (!matchId || !isValidUUID(matchId)) {
+      return [];
+    }
+
     // Call server-side RPC get_match_messages (which masks read_at for non-Plus/VIP users)
     let rows: any[] = [];
     const { data: rpcData, error: rpcErr } = await supabase.rpc("get_match_messages", {
@@ -165,7 +170,31 @@ export async function sendChatMessage(
   imageUri?: string,
 ): Promise<{ success: boolean; message?: Message; error?: string }> {
   try {
-    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    if (!matchId || !senderId) {
+      return { success: false, error: "Missing matchId or senderId." };
+    }
+
+    // Validate that matchId is a valid UUID for database integrity
+    if (!isValidUUID(matchId)) {
+      // In demo/test preview mode where match is a non-UUID demo string:
+      if (!isSupabaseConfigured() || matchId.startsWith("demo_")) {
+        const demoMsg: Message = {
+          id: generateUUID(),
+          matchId,
+          sender: senderId,
+          from: "me",
+          text,
+          image: imageUri,
+          at: Date.now(),
+          status: "sent",
+        };
+        return { success: true, message: demoMsg };
+      }
+      return { success: false, error: "Invalid match reference. Please select a valid match." };
+    }
+
+    // Generate valid UUID for PostgreSQL messages.id column
+    const messageId = generateUUID();
     let imagePath: string | null = null;
 
     if (imageUri) {
@@ -212,6 +241,7 @@ export async function sendChatMessage(
 
 export async function markChatRead(matchId: string, currentUserId: string): Promise<void> {
   try {
+    if (!matchId || !isValidUUID(matchId)) return;
     await supabase
       .from("messages")
       .update({ read_at: new Date().toISOString() })
