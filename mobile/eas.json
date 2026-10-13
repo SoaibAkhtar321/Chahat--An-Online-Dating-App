@@ -12,12 +12,16 @@
       }
     },
     "preview": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=arm64-v8a"
-      }
-    },
+  "distribution": "internal",
+  "env": {
+    "EXPO_PUBLIC_SUPABASE_URL": "https://tuptdzbdowqtmbyhazet.supabase.co",
+    "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_WZ6MjKenrw6TI6hg0c0JuQ_1JIkJHth"
+  },
+  "android": {
+    "buildType": "apk",
+    "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=arm64-v8a"
+  }
+},
     "preview-compat": {
       "distribution": "internal",
       "android": {
