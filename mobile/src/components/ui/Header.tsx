@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 
 interface HeaderProps {
   title: string;
@@ -18,6 +19,9 @@ export const Header: React.FC<HeaderProps> = ({
   rightElement,
 }) => {
   const router = useRouter();
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
+
 
   const handleBack = () => {
     if (onBackPress) {
@@ -48,7 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   header: {
     height: 60,
     flexDirection: "row",

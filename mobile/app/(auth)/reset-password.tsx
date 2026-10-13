@@ -1,14 +1,17 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Colors, Typography } from "../../src/constants/theme";
+import { Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { resetPassword } from "../../src/services/auth";
 
 export default function ResetPasswordScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -77,7 +80,7 @@ export default function ResetPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

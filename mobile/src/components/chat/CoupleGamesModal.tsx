@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from "react-native";
 import { X, Sparkles, Trophy, CheckCircle2 } from "lucide-react-native";
-import { Colors, Radii, Shadows, Typography } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 
 interface CoupleGamesModalProps {
   visible: boolean;
@@ -43,6 +44,8 @@ export const CoupleGamesModal: React.FC<CoupleGamesModalProps> = ({
   onClose,
   onSendGameAnswer,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [activeTab, setActiveTab] = useState<"thisOrThat" | "quiz">("thisOrThat");
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
 
@@ -199,7 +202,7 @@ export const CoupleGamesModal: React.FC<CoupleGamesModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

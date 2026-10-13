@@ -1,14 +1,17 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { MailCheck } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Button } from "../../src/components/ui/Button";
 import { Input } from "../../src/components/ui/Input";
 import { resendConfirmation } from "../../src/services/auth";
 
 export default function VerifyScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [resent, setResent] = useState(false);
@@ -70,7 +73,7 @@ export default function VerifyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

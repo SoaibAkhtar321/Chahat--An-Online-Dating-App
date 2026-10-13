@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
 import { Alert } from "../../utils/alert";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { Plus, X, Star, ArrowLeft, ArrowRight } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import type { PhotoItem } from "../../types";
 
 const { width } = Dimensions.get("window");
@@ -21,6 +22,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   onChange,
   maxPhotos = 6,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const pickImage = async (index: number) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -148,7 +151,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",

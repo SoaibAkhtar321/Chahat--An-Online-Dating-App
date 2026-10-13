@@ -1,9 +1,15 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
-import { useColorScheme as useDeviceColorScheme } from "react-native";
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
+import { View, useColorScheme as useDeviceColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LightColors, DarkColors, ThemeColors } from "../constants/theme";
+import {
+  ThemeMode,
+  THEME_STORAGE_KEY,
+  isThemeMode,
+  resolveIsDark,
+} from "../utils/resolveTheme";
 
-export type ThemeMode = "system" | "light" | "dark";
+export type { ThemeMode } from "../utils/resolveTheme";
 
 interface ThemeContextType {
   mode: ThemeMode;
@@ -11,8 +17,6 @@ interface ThemeContextType {
   colors: ThemeColors;
   setMode: (mode: ThemeMode) => Promise<void>;
 }
-
-const THEME_STORAGE_KEY = "@chahat_theme_mode";
 
 const ThemeContext = createContext<ThemeContextType>({
   mode: "system",
@@ -27,44 +31,48 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-        if (saved === "light" || saved === "dark" || saved === "system") {
+        if (!cancelled && isThemeMode(saved)) {
           setModeState(saved);
         }
       } catch (e) {
         console.warn("Failed to load theme preference:", e);
       } finally {
-        setIsLoaded(true);
+        if (!cancelled) setIsLoaded(true);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const setMode = async (newMode: ThemeMode) => {
+  const setMode = useCallback(async (newMode: ThemeMode) => {
     setModeState(newMode);
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, newMode);
     } catch (e) {
       console.warn("Failed to save theme preference:", e);
     }
-  };
+  }, []);
 
-  const isDark = useMemo(() => {
-    if (mode === "dark") return true;
-    if (mode === "light") return false;
-    return deviceColorScheme === "dark";
-  }, [mode, deviceColorScheme]);
+  const isDark = useMemo(() => resolveIsDark(mode, deviceColorScheme), [mode, deviceColorScheme]);
+  const colors = isDark ? DarkColors : LightColors;
 
-  const colors = useMemo(() => {
-    return isDark ? DarkColors : LightColors;
-  }, [isDark]);
-
-  return (
-    <ThemeContext.Provider value={{ mode, isDark, colors, setMode }}>
-      {children}
-    </ThemeContext.Provider>
+  const value = useMemo(
+    () => ({ mode, isDark, colors, setMode }),
+    [mode, isDark, colors, setMode],
   );
+
+  // Hold rendering until the saved preference is read so the wrong theme never flashes.
+  if (!isLoaded) {
+    const fallback = resolveIsDark("system", deviceColorScheme) ? DarkColors : LightColors;
+    return <View style={{ flex: 1, backgroundColor: fallback.background }} />;
+  }
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
 
 export const useTheme = () => useContext(ThemeContext);

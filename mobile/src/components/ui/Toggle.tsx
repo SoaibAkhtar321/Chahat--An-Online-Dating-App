@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, Switch, StyleSheet, ViewStyle } from "react-native";
-import { Colors, Typography } from "../../constants/theme";
+import { Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 
 interface ToggleProps {
   label: string;
@@ -11,6 +12,9 @@ interface ToggleProps {
 }
 
 export const Toggle: React.FC<ToggleProps> = ({ label, hint, value, onValueChange, style }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
+
   return (
     <View style={[styles.container, style]}>
       <View style={styles.textContainer}>
@@ -27,7 +31,7 @@ export const Toggle: React.FC<ToggleProps> = ({ label, hint, value, onValueChang
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",

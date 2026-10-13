@@ -7,7 +7,8 @@ import {
   StyleSheet,
   ViewStyle,
 } from "react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import { calculateAge, validateDob } from "../../utils/validation";
 
 interface DatePickerProps {
@@ -53,6 +54,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   error,
   containerStyle,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   // Parse initial values if present
   const parsed = useMemo(() => {
     if (!value || value.length !== 10) return null;
@@ -388,7 +391,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     width: "100%",
     marginVertical: 12,

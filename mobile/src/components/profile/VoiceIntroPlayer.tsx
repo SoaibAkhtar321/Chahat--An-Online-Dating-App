@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Play, Pause, Mic, Volume2 } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 
 interface VoiceIntroPlayerProps {
   userName?: string;
@@ -12,6 +13,8 @@ export const VoiceIntroPlayer: React.FC<VoiceIntroPlayerProps> = ({
   userName = "Member",
   durationSec = 22,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSec, setCurrentSec] = useState(0);
 
@@ -92,7 +95,7 @@ export const VoiceIntroPlayer: React.FC<VoiceIntroPlayerProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   card: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,

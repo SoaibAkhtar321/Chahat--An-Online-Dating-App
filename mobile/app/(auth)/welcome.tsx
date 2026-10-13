@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors, Radii, Shadows, Typography } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Button } from "../../src/components/ui/Button";
 
 const { height: screenHeight } = Dimensions.get("window");
@@ -28,6 +29,8 @@ const SLIDES = [
 ];
 
 export default function WelcomeScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const [slideIndex, setSlideIndex] = useState(0);
 
@@ -140,7 +143,7 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: Colors.background,

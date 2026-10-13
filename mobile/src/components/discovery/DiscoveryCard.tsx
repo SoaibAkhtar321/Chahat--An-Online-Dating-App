@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { MapPin, Info, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
-import { Colors, Radii, Shadows, Typography } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import type { Profile } from "../../types";
 
 const { width } = Dimensions.get("window");
@@ -16,6 +17,8 @@ interface DiscoveryCardProps {
 }
 
 export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDetails }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [photoIndex, setPhotoIndex] = useState(0);
   const photos = profile.photos && profile.photos.length > 0 ? profile.photos : [];
   const currentPhoto =
@@ -139,7 +142,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,

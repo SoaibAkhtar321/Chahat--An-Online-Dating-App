@@ -1,10 +1,13 @@
-import React, { useEffect } from "react";
+import React, { useMemo, useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/context/AuthContext";
-import { Colors } from "../src/constants/theme";
+import { ThemeColors } from "../src/constants/theme";
+import { useTheme } from "../src/context/ThemeContext";
 
 export default function Index() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { isLoggedIn, isOnboarded, loading, profile, profileError, refreshProfile, signOut } = useAuth();
 
@@ -38,7 +41,7 @@ export default function Index() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

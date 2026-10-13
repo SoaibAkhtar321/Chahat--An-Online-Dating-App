@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   TouchableOpacity,
   Text,
@@ -8,7 +8,8 @@ import {
   StyleProp,
   TextStyle,
 } from "react-native";
-import { Colors, Radii, Shadows, Typography } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 
 interface ButtonProps {
   title: string;
@@ -33,6 +34,9 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   textStyle,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
+
   const getVariantStyle = (): ViewStyle => {
     switch (variant) {
       case "ghost":
@@ -93,7 +97,7 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   base: {
     flexDirection: "row",
     alignItems: "center",

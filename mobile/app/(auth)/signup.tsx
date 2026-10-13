@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,12 +11,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { signUpUser } from "../../src/services/auth";
 
 export default function SignupScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -132,7 +135,7 @@ export default function SignupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Modal,
   View,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
 } from "react-native";
-import { Colors, Radii, Shadows, Typography } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import { Button } from "./Button";
 
 interface DialogProps {
@@ -33,6 +34,9 @@ export const Dialog: React.FC<DialogProps> = ({
   onCancel,
   children,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
+
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
       <TouchableWithoutFeedback onPress={onCancel}>
@@ -64,7 +68,7 @@ export const Dialog: React.FC<DialogProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: Colors.overlay,

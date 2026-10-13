@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, TextInput, StyleSheet, TextInputProps, ViewStyle } from "react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -9,6 +10,9 @@ interface InputProps extends TextInputProps {
 }
 
 export const Input: React.FC<InputProps> = ({ label, error, containerStyle, style, ...props }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
+
   return (
     <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
@@ -22,7 +26,7 @@ export const Input: React.FC<InputProps> = ({ label, error, containerStyle, styl
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     width: "100%",
     marginBottom: 16,

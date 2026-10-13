@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { X, Check } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import type { Filters } from "../../types";
 import { INTERESTS, LANGUAGES, DEFAULT_FILTERS } from "../../types";
 import { Chip } from "../ui/Chip";
@@ -16,6 +17,8 @@ interface FilterModalProps {
 }
 
 export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onClose, onApply }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
 
   const toggleInterest = (interest: string) => {
@@ -129,7 +132,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,

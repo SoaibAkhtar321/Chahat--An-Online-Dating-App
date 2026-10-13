@@ -1,11 +1,13 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Compass, Heart, MessageCircle, User } from "lucide-react-native";
-import { Colors, Typography } from "../../src/constants/theme";
+import { Typography } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { useMilo } from "../../src/context/MiloContext";
 
 export default function TabsLayout() {
   const { totalUnreadCount } = useMilo();
+  const { colors: Colors } = useTheme();
 
   return (
     <Tabs

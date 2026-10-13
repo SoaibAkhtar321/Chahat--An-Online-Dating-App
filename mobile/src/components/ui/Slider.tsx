@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,8 @@ import {
   ViewStyle,
   Platform,
 } from "react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 
 interface SliderProps {
   label?: string;
@@ -35,6 +36,8 @@ export const Slider: React.FC<SliderProps> = ({
   onChange,
   containerStyle,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [trackWidth, setTrackWidth] = useState<number>(0);
   const trackRef = useRef<View>(null);
 
@@ -166,6 +169,8 @@ export const RangeSlider: React.FC<RangeSliderProps> = ({
   onChange,
   containerStyle,
 }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   return (
     <View style={[styles.container, containerStyle]}>
       {(label || unit) && (
@@ -256,7 +261,7 @@ export const RangeSlider: React.FC<RangeSliderProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     width: "100%",
     marginBottom: 16,

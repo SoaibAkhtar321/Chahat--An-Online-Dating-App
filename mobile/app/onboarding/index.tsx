@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plus, X, MapPin, Navigation, Compass } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { DatePicker } from "../../src/components/ui/DatePicker";
 import { Slider, RangeSlider } from "../../src/components/ui/Slider";
@@ -39,6 +40,8 @@ const STEPS = [
 ] as const;
 
 export default function OnboardingScreen() {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { user, profile, refreshProfile } = useAuth();
   const [step, setStep] = useState(0);
@@ -792,7 +795,7 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -1016,7 +1019,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   locMessageBadgeSuccess: {
-    backgroundColor: "#FDF2EF",
+    backgroundColor: Colors.primary + "1A",
     borderWidth: 1,
     borderColor: Colors.primary,
   },

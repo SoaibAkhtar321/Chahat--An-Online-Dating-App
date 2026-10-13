@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { Check, CheckCheck, AlertCircle } from "lucide-react-native";
-import { Colors, Radii, Typography } from "../../constants/theme";
+import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import type { Message } from "../../types";
 
 interface ChatBubbleProps {
@@ -11,6 +12,8 @@ interface ChatBubbleProps {
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader = false }) => {
+  const { colors: Colors } = useTheme();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const isMe = message.from === "me";
   const date = new Date(message.at);
   const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -73,7 +76,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader =
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     marginVertical: 4,
     paddingHorizontal: 16,
