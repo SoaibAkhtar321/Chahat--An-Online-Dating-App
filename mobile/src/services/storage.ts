@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { supabase } from "./supabase";
 
 // Photos and chat media live in PRIVATE buckets; the app only ever uses short-lived signed URLs.
@@ -108,46 +109,108 @@ export function stripExifAndGps(bytes: Uint8Array): Uint8Array {
   return bytes;
 }
 
+const B64_LOOKUP = (() => {
+  const table = new Uint8Array(256);
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  for (let i = 0; i < chars.length; i++) table[chars.charCodeAt(i)] = i;
+  return table;
+})();
+
+/** Decodes a base64 string into bytes (React Native has no reliable Blob.arrayBuffer / FileReader). */
+function base64ToBytes(b64: string): Uint8Array {
+  const clean = b64.replace(/[^A-Za-z0-9+/]/g, "");
+  const out = new Uint8Array(Math.floor((clean.length * 6) / 8));
+  let buffer = 0;
+  let bits = 0;
+  let p = 0;
+  for (let i = 0; i < clean.length; i++) {
+    buffer = (buffer << 6) | B64_LOOKUP[clean.charCodeAt(i)]!;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[p++] = (buffer >> bits) & 0xff;
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  return out;
+}
+
+function detectMimeType(bytes: Uint8Array, fallback: string): string {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return "image/png";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return fallback;
+}
+
 /**
  * Reads a local image URI, validates size/mime type, sanitizes EXIF/GPS metadata,
- * checks rate limits, and returns a clean Blob ready for upload.
+ * checks rate limits, and returns clean data ready for upload.
+ * Web returns a Blob; native (Android/iOS) returns an ArrayBuffer, because React Native's Blob
+ * has no arrayBuffer() and cannot be built from typed arrays.
  */
 export async function sanitizeAndPrepareImageUpload(
   uri: string,
   expectedType: "image/jpeg" | "image/png" | "image/webp" = "image/jpeg",
-): Promise<{ blob: Blob; mimeType: string }> {
+): Promise<{ blob: Blob | ArrayBuffer; mimeType: string }> {
   const rateLimitCheck = checkUploadRateLimit();
   if (!rateLimitCheck.allowed) {
     const seconds = Math.ceil((rateLimitCheck.retryAfterMs ?? 0) / 1000);
     throw new Error(`Upload rate limit reached. Please wait ${seconds} seconds before uploading again.`);
   }
 
-  const response = await fetch(uri);
-  const rawBlob = await response.blob();
+  let rawBytes: Uint8Array;
+  let mimeType: string;
 
-  if (rawBlob.size === 0) {
+  if (Platform.OS === "web") {
+    const response = await fetch(uri);
+    const rawBlob = await response.blob();
+    rawBytes = new Uint8Array(await rawBlob.arrayBuffer());
+    mimeType = (rawBlob.type as any) || expectedType;
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const FileSystem = require("expo-file-system");
+    const base64: string = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    rawBytes = base64ToBytes(base64);
+    mimeType = detectMimeType(rawBytes, expectedType);
+  }
+
+  if (rawBytes.length === 0) {
     throw new Error("Selected image is empty or invalid.");
   }
 
-  if (rawBlob.size > STORAGE_LIMITS.maxPhotoBytes) {
+  if (rawBytes.length > STORAGE_LIMITS.maxPhotoBytes) {
     const maxMb = STORAGE_LIMITS.maxPhotoBytes / (1024 * 1024);
     throw new Error(`Image size exceeds the maximum allowed limit of ${maxMb} MB.`);
   }
 
-  const mimeType = (rawBlob.type as any) || expectedType;
   if (!STORAGE_LIMITS.allowedMimeTypes.includes(mimeType as any)) {
     throw new Error(`Unsupported image type (${mimeType}). Please use JPEG, PNG, or WEBP.`);
   }
 
-  // Convert to ArrayBuffer -> Uint8Array to strip EXIF / GPS metadata
-  const arrayBuffer = await rawBlob.arrayBuffer();
-  const rawBytes = new Uint8Array(arrayBuffer);
+  // Strip EXIF / GPS metadata
   const sanitizedBytes = stripExifAndGps(rawBytes);
 
   recordUploadEvent();
 
-  const sanitizedBlob = new Blob([sanitizedBytes as any], { type: mimeType });
-  return { blob: sanitizedBlob, mimeType };
+  if (Platform.OS === "web") {
+    return { blob: new Blob([sanitizedBytes as any], { type: mimeType }), mimeType };
+  }
+
+  const arrayBuffer = sanitizedBytes.buffer.slice(
+    sanitizedBytes.byteOffset,
+    sanitizedBytes.byteOffset + sanitizedBytes.byteLength,
+  ) as ArrayBuffer;
+  return { blob: arrayBuffer, mimeType };
 }
 
 /** Returns a map path -> signed URL. Paths that cannot be signed (no access / missing) are omitted. */
