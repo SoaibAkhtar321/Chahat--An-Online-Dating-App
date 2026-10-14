@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { MapPin, Info, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
+import { AvatarPlaceholder } from "../ui/AvatarPlaceholder";
 import type { Profile } from "../../types";
 
 const { width } = Dimensions.get("window");
@@ -21,8 +22,8 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [photoIndex, setPhotoIndex] = useState(0);
   const photos = profile.photos && profile.photos.length > 0 ? profile.photos : [];
-  const currentPhoto =
-    photos[photoIndex] || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800";
+  const hasPhotos = photos.length > 0;
+  const currentPhoto = hasPhotos ? photos[photoIndex] : undefined;
 
   const nextPhoto = () => {
     if (photoIndex < photos.length - 1) {
@@ -42,18 +43,27 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
 
   return (
     <View style={styles.card}>
-      <Image
-        source={{ uri: currentPhoto }}
-        style={styles.image}
-        contentFit="cover"
-        transition={200}
-      />
+      {hasPhotos && currentPhoto ? (
+        <Image
+          source={{ uri: currentPhoto }}
+          style={styles.image}
+          contentFit="cover"
+          transition={200}
+        />
+      ) : (
+        <View style={styles.placeholderContainer}>
+          <AvatarPlaceholder name={profile.name} size={110} />
+          <Text style={styles.noPhotoText}>No approved photo yet</Text>
+        </View>
+      )}
 
       {/* Tap zones for photo navigation */}
-      <View style={styles.tapContainer}>
-        <Pressable style={styles.tapLeft} onPress={prevPhoto} />
-        <Pressable style={styles.tapRight} onPress={nextPhoto} />
-      </View>
+      {hasPhotos && (
+        <View style={styles.tapContainer}>
+          <Pressable style={styles.tapLeft} onPress={prevPhoto} />
+          <Pressable style={styles.tapRight} onPress={nextPhoto} />
+        </View>
+      )}
 
       {/* Top Floating Badges */}
       <View style={styles.topBadgesRow}>
@@ -155,6 +165,20 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
+  },
+  placeholderContainer: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.secondary,
+    paddingBottom: 60,
+  },
+  noPhotoText: {
+    marginTop: 12,
+    fontSize: 12,
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.medium,
   },
   tapContainer: {
     ...StyleSheet.absoluteFillObject,

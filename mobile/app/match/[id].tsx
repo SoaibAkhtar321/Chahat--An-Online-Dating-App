@@ -7,7 +7,7 @@ import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/the
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
-import { DEMO_PROFILES } from "../../src/services/discovery";
+import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 
 export default function MatchScreen() {
   const { colors: Colors } = useTheme();
@@ -17,24 +17,24 @@ export default function MatchScreen() {
   const { profile: myProfile } = useAuth();
   const { deck, matches } = useMilo();
 
-  const otherUser = deck.find((p) => p.id === id) ||
-    matches.find((m) => m.otherUser.id === id)?.otherUser ||
-    DEMO_PROFILES.find((p) => p.id === id) || {
+  const otherUser =
+    deck.find((p) => p.id === id) ||
+    matches.find((m) => m.otherUser.id === id || m.id === id)?.otherUser || {
       id: id || "unknown",
       name: "Your Match",
-      photos: ["https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800"],
+      photos: [],
     };
 
   const myPhotoUri =
-    myProfile?.photos && myProfile.photos.length > 0
-      ? myProfile.photos[0]!.uri
-      : "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800";
+    myProfile?.photos && myProfile.photos.length > 0 ? myProfile.photos[0]!.uri : undefined;
+  const otherPhotoUri =
+    otherUser.photos && otherUser.photos.length > 0 ? otherUser.photos[0] : undefined;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.logo}>
-          mi<Text style={styles.logoAccent}>l</Text>o
+          chaha<Text style={styles.logoAccent}>t</Text>
         </Text>
       </View>
 
@@ -44,16 +44,29 @@ export default function MatchScreen() {
 
         {/* Overlapping photo cards */}
         <View style={styles.photosWrapper}>
-          <Image
-            source={{ uri: myPhotoUri }}
-            style={[styles.photoCard, styles.photoLeft]}
-            contentFit="cover"
-          />
-          <Image
-            source={{ uri: otherUser.photos[0] }}
-            style={[styles.photoCard, styles.photoRight]}
-            contentFit="cover"
-          />
+          {myPhotoUri ? (
+            <Image
+              source={{ uri: myPhotoUri }}
+              style={[styles.photoCard, styles.photoLeft]}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.photoCard, styles.photoLeft, styles.photoPlaceholder]}>
+              <AvatarPlaceholder name={myProfile?.name || "You"} size={90} />
+            </View>
+          )}
+
+          {otherPhotoUri ? (
+            <Image
+              source={{ uri: otherPhotoUri }}
+              style={[styles.photoCard, styles.photoRight]}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.photoCard, styles.photoRight, styles.photoPlaceholder]}>
+              <AvatarPlaceholder name={otherUser.name} size={90} />
+            </View>
+          )}
         </View>
       </View>
 
@@ -139,6 +152,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderColor: Colors.primaryForeground,
     position: "absolute",
     ...Shadows.card,
+  },
+  photoPlaceholder: {
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
   },
   photoLeft: {
     left: 20,

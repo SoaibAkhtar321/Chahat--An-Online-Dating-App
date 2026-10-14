@@ -22,6 +22,7 @@ import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/the
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { useMilo } from "../../src/context/MiloContext";
+import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 
 const COMMUNITIES = [
   {
@@ -88,22 +89,11 @@ export default function ExploreScreen() {
   const router = useRouter();
   const { setFilters, deck } = useMilo();
 
-  // Daily pick from available profiles
-  const dailyPick = deck[0] || {
-    id: "daily_featured",
-    name: "Ananya",
-    age: 25,
-    city: "Mumbai",
-    distanceKm: 4,
-    bio: "Architecture enthusiast & weekend filter coffee seeker. Looking for meaningful connection.",
-    photos: ["https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800"],
-    interests: ["Coffee", "Art", "Books"],
-    intent: "Serious relationship",
-    isVerified: true,
-  };
+  // Daily pick from real deck
+  const dailyPick = deck && deck.length > 0 ? deck[0] : null;
 
   const handleSelectTopic = (interests: string[]) => {
-    setFilters((prev) => ({
+    setFilters((prev: any) => ({
       ...prev,
       interests,
     }));
@@ -125,37 +115,61 @@ export default function ExploreScreen() {
             Hand-picked profile matching your lifestyle & relationship intention for today.
           </Text>
 
-          <TouchableOpacity
-            style={styles.dailyCard}
-            onPress={() =>
-              router.push({
-                pathname: "/profile/[id]",
-                params: { id: dailyPick.id },
-              })
-            }
-            activeOpacity={0.85}
-          >
-            <Image
-              source={{ uri: dailyPick.photos[0] }}
-              style={styles.dailyPhoto}
-              contentFit="cover"
-            />
-            <View style={styles.dailyCardOverlay}>
-              <View style={styles.dailyBadge}>
-                <Flame size={12} color="#fff" />
-                <Text style={styles.dailyBadgeText}>Today's Featured Match</Text>
-              </View>
-              <View style={styles.dailyNameRow}>
-                <Text style={styles.dailyName}>
-                  {dailyPick.name}, {dailyPick.age}
+          {dailyPick ? (
+            <TouchableOpacity
+              style={styles.dailyCard}
+              onPress={() =>
+                router.push({
+                  pathname: "/profile/[id]",
+                  params: { id: dailyPick.id },
+                })
+              }
+              activeOpacity={0.85}
+            >
+              {dailyPick.photos && dailyPick.photos.length > 0 ? (
+                <Image
+                  source={{ uri: dailyPick.photos[0] }}
+                  style={styles.dailyPhoto}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={[styles.dailyPhoto, { backgroundColor: Colors.secondary, alignItems: "center", justifyContent: "center" }]}>
+                  <AvatarPlaceholder name={dailyPick.name} size={90} />
+                </View>
+              )}
+              <View style={styles.dailyCardOverlay}>
+                <View style={styles.dailyBadge}>
+                  <Flame size={12} color="#fff" />
+                  <Text style={styles.dailyBadgeText}>Today's Featured Match</Text>
+                </View>
+                <View style={styles.dailyNameRow}>
+                  <Text style={styles.dailyName}>
+                    {dailyPick.name}, {dailyPick.age}
+                  </Text>
+                  {(dailyPick.isVerified || dailyPick.verificationStatus === "approved") && (
+                    <BadgeCheck size={18} color={Colors.accent} fill={Colors.accent} />
+                  )}
+                </View>
+                <Text style={styles.dailyCity}>
+                  {dailyPick.city ? `${dailyPick.city} · ` : ""}Looking for {dailyPick.intent || "meaningful connection"}
                 </Text>
-                <BadgeCheck size={18} color={Colors.accent} fill={Colors.accent} />
               </View>
-              <Text style={styles.dailyCity}>
-                {dailyPick.city} · 89% Compatibility · Looking for {dailyPick.intent || "long-term"}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.dailyCard, { backgroundColor: Colors.card, justifyContent: "center", alignItems: "center", padding: 24 }]}
+              onPress={() => router.push("/(tabs)/discover")}
+              activeOpacity={0.8}
+            >
+              <Compass size={32} color={Colors.primary} />
+              <Text style={[styles.dailyName, { color: Colors.foreground, marginTop: 12, textAlign: "center" }]}>
+                Discover New Profiles
               </Text>
-            </View>
-          </TouchableOpacity>
+              <Text style={{ fontSize: 12, color: Colors.mutedForeground, marginTop: 4, textAlign: "center" }}>
+                Keep exploring your discovery feed to find new people near you.
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Daily Icebreaker Challenge */}

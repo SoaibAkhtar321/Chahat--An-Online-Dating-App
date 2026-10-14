@@ -23,6 +23,7 @@ import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
 import { calculateAge } from "../../src/services/profile";
 import { Dialog } from "../../src/components/ui/Dialog";
+import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 
 export default function MeScreen() {
   const { colors: Colors } = useTheme();
@@ -33,9 +34,7 @@ export default function MeScreen() {
   const [logoutVisible, setLogoutVisible] = useState(false);
 
   const mainPhotoUri =
-    profile?.photos && profile.photos.length > 0
-      ? profile.photos[0]!.uri
-      : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800";
+    profile?.photos && profile.photos.length > 0 ? profile.photos[0]!.uri : undefined;
 
   const age = profile?.dob ? calculateAge(profile.dob) : 25;
   const isVerified = profile?.verificationStatus === "approved";
@@ -146,7 +145,7 @@ export default function MeScreen() {
           ) : null}
 
           <Text style={styles.cityText}>
-            {profile?.city || "Mumbai"} · Profile {pct}% complete
+            {profile?.city ? `${profile.city} · ` : ""}Profile {pct}% complete
           </Text>
         </View>
 
