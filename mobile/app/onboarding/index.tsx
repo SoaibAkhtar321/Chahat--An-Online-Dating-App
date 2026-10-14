@@ -21,7 +21,13 @@ import { Button } from "../../src/components/ui/Button";
 import { Chip } from "../../src/components/ui/Chip";
 import { PhotoUploader } from "../../src/components/profile/PhotoUploader";
 import { useAuth } from "../../src/context/AuthContext";
-import { validateDob, calculateAge, saveProfile, uploadProfilePhoto } from "../../src/services/profile";
+import {
+  validateDob,
+  calculateAge,
+  saveProfile,
+  uploadProfilePhoto,
+  requestPhotoModeration,
+} from "../../src/services/profile";
 import { INTERESTS, CITIES, PROMPTS, LANGUAGES, LIFESTYLE, PhotoItem } from "../../src/types";
 
 const STEPS = [
@@ -279,6 +285,12 @@ export default function OnboardingScreen() {
         Alert.alert("Error saving profile", res.error || "Unknown error");
         return;
       }
+
+      // Ask the server to check the new photos (best effort; they stay hidden until approved).
+      await Promise.race([
+        requestPhotoModeration(),
+        new Promise((resolve) => setTimeout(resolve, 15000)),
+      ]);
 
       console.log("handleFinish: profile saved, refreshing");
       // Never let a slow/failed refresh trap the user on this screen: the profile is already saved.

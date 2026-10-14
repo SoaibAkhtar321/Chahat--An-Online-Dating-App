@@ -1,0 +1,292 @@
+diff --git a/__tests__/photoModerationPolicy.test.ts b/__tests__/photoModerationPolicy.test.ts
+new file mode 100644
+index 0000000..988fded
+--- /dev/null
++++ b/__tests__/photoModerationPolicy.test.ts
+@@ -0,0 +1,44 @@
++import { decide, REJECT_AT } from "../supabase/functions/moderate-photo/policy";
++
++const clean = { adult: "VERY_UNLIKELY", violence: "VERY_UNLIKELY", racy: "UNLIKELY", spoof: "UNLIKELY", medical: "UNLIKELY" };
++
++describe("photo moderation policy", () => {
++  it("approves a clean photo", () => {
++    expect(decide(clean).status).toBe("approved");
++  });
++
++  it("rejects adult content at LIKELY or above", () => {
++    expect(decide({ ...clean, adult: "POSSIBLE" }).status).toBe("approved");
++    expect(decide({ ...clean, adult: "LIKELY" }).status).toBe("rejected");
++    expect(decide({ ...clean, adult: "VERY_LIKELY" }).status).toBe("rejected");
++  });
++
++  it("rejects violence at LIKELY or above", () => {
++    expect(decide({ ...clean, violence: "LIKELY" }).status).toBe("rejected");
++  });
++
++  it("rejects racy content only at VERY_LIKELY", () => {
++    expect(decide({ ...clean, racy: "LIKELY" }).status).toBe("approved");
++    expect(decide({ ...clean, racy: "VERY_LIKELY" }).status).toBe("rejected");
++  });
++
++  it("ignores spoof and medical", () => {
++    expect(decide({ ...clean, spoof: "VERY_LIKELY", medical: "VERY_LIKELY" }).status).toBe("approved");
++  });
++
++  it("fails closed: missing or unknown data is never approved", () => {
++    expect(decide(null).status).toBe("pending");
++    expect(decide(undefined).status).toBe("pending");
++    expect(decide({}).status).toBe("pending");
++    expect(decide({ ...clean, adult: "UNKNOWN" }).status).toBe("pending");
++    expect(decide({ adult: "VERY_UNLIKELY", violence: "VERY_UNLIKELY" }).status).toBe("pending");
++  });
++
++  it("still rejects a clear violation when another category is unknown", () => {
++    expect(decide({ adult: "VERY_LIKELY", violence: "UNKNOWN", racy: "UNKNOWN" }).status).toBe("rejected");
++  });
++
++  it("keeps the documented thresholds", () => {
++    expect(REJECT_AT).toEqual({ adult: "LIKELY", violence: "LIKELY", racy: "VERY_LIKELY" });
++  });
++});
+diff --git a/mobile/app/onboarding/index.tsx b/mobile/app/onboarding/index.tsx
+index e6e189b..87b9384 100644
+--- a/mobile/app/onboarding/index.tsx
++++ b/mobile/app/onboarding/index.tsx
+@@ -21,7 +21,13 @@ import { Button } from "../../src/components/ui/Button";
+ import { Chip } from "../../src/components/ui/Chip";
+ import { PhotoUploader } from "../../src/components/profile/PhotoUploader";
+ import { useAuth } from "../../src/context/AuthContext";
+-import { validateDob, calculateAge, saveProfile, uploadProfilePhoto } from "../../src/services/profile";
++import {
++  validateDob,
++  calculateAge,
++  saveProfile,
++  uploadProfilePhoto,
++  requestPhotoModeration,
++} from "../../src/services/profile";
+ import { INTERESTS, CITIES, PROMPTS, LANGUAGES, LIFESTYLE, PhotoItem } from "../../src/types";
+ 
+ const STEPS = [
+@@ -280,6 +286,12 @@ export default function OnboardingScreen() {
+         return;
+       }
+ 
++      // Ask the server to check the new photos (best effort; they stay hidden until approved).
++      await Promise.race([
++        requestPhotoModeration(),
++        new Promise((resolve) => setTimeout(resolve, 15000)),
++      ]);
++
+       console.log("handleFinish: profile saved, refreshing");
+       // Never let a slow/failed refresh trap the user on this screen: the profile is already saved.
+       try {
+diff --git a/mobile/src/services/profile.ts b/mobile/src/services/profile.ts
+index 1c2268c..7f09792 100644
+--- a/mobile/src/services/profile.ts
++++ b/mobile/src/services/profile.ts
+@@ -192,3 +192,16 @@ export async function uploadVerificationSelfie(userId: string, uri: string): Pro
+   if (error) throw error;
+   return filePath;
+ }
++
++/**
++ * Asks the server to check this user's pending photos (Google Cloud Vision SafeSearch).
++ * Best effort: if it fails, the photos simply stay pending (hidden from other users).
++ */
++export async function requestPhotoModeration(): Promise<void> {
++  try {
++    const { error } = await supabase.functions.invoke("moderate-photo", { body: {} });
++    if (error) console.warn("requestPhotoModeration failed:", error.message);
++  } catch (err) {
++    console.warn("requestPhotoModeration error:", err);
++  }
++}
+diff --git a/supabase/config.toml b/supabase/config.toml
+index c803637..771ad8b 100644
+--- a/supabase/config.toml
++++ b/supabase/config.toml
+@@ -9,6 +9,9 @@ sql_paths = ["./seed.sql"]
+ [functions.delete-account]
+ verify_jwt = true
+ 
++[functions.moderate-photo]
++verify_jwt = true
++
+ # ---------------------------------------------------------------------------------------------
+ # Auth settings, codified (Phase 1 / issue O9).
+ # SCOPE: these values drive the LOCAL stack (`supabase start`) and document what the hosted project
+diff --git a/supabase/functions/moderate-photo/index.ts b/supabase/functions/moderate-photo/index.ts
+new file mode 100644
+index 0000000..5a08dc1
+--- /dev/null
++++ b/supabase/functions/moderate-photo/index.ts
+@@ -0,0 +1,111 @@
++// Supabase Edge Function: moderate-photo
++// STATUS: NOT DEPLOYED yet. Deploy with: supabase functions deploy moderate-photo
++//
++// Checks the CALLING user's pending profile photos with Google Cloud Vision SafeSearch and records
++// the result through the service_role-only review_photo() RPC.
++//   - The user id comes only from the verified JWT. The client sends no photo paths, so a caller can
++//     never trigger or influence the review of anyone else's photos.
++//   - Fail closed: any error (download, Vision, database) leaves the photo PENDING (hidden), never approved.
++//   - Idempotent: only rows with status 'pending' are processed, so calling it again is safe.
++// Required secret: GOOGLE_VISION_API_KEY (supabase secrets set GOOGLE_VISION_API_KEY=...).
++import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
++import { decide, type SafeSearchAnnotation } from "./policy.ts";
++
++const CORS = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
++};
++const json = (status: number, body: Record<string, unknown>) =>
++  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
++
++const VISION_URL = "https://vision.googleapis.com/v1/images:annotate";
++const MAX_PHOTOS_PER_CALL = 6;
++const MAX_BYTES = 5 * 1024 * 1024; // same as the bucket limit
++
++function toBase64(bytes: Uint8Array): string {
++  let binary = "";
++  const CHUNK = 0x8000;
++  for (let i = 0; i < bytes.length; i += CHUNK) {
++    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
++  }
++  return btoa(binary);
++}
++
++async function safeSearch(apiKey: string, base64: string): Promise<SafeSearchAnnotation | null> {
++  const res = await fetch(VISION_URL, {
++    method: "POST",
++    // Key goes in a header, not the URL, so it never ends up in logs.
++    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": apiKey },
++    body: JSON.stringify({
++      requests: [{ image: { content: base64 }, features: [{ type: "SAFE_SEARCH_DETECTION" }] }],
++    }),
++  });
++  if (!res.ok) throw new Error(`Vision HTTP ${res.status}`);
++  const data = await res.json();
++  const first = data?.responses?.[0];
++  if (!first || first.error) throw new Error(`Vision error ${first?.error?.code ?? "unknown"}`);
++  return first.safeSearchAnnotation ?? null;
++}
++
++Deno.serve(async (req) => {
++  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
++  if (req.method !== "POST") return json(405, { success: false, error: "Method not allowed" });
++
++  const url = Deno.env.get("SUPABASE_URL");
++  const anon = Deno.env.get("SUPABASE_ANON_KEY");
++  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
++  const visionKey = Deno.env.get("GOOGLE_VISION_API_KEY");
++  if (!url || !anon || !serviceKey || !visionKey) return json(500, { success: false, error: "Server misconfigured" });
++
++  const authHeader = req.headers.get("Authorization") ?? "";
++  if (!authHeader.startsWith("Bearer ")) return json(401, { success: false, error: "Authentication required" });
++
++  // 1. identify the caller from their own JWT
++  const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
++  const { data: userData, error: userErr } = await userClient.auth.getUser();
++  if (userErr || !userData.user) return json(401, { success: false, error: "Invalid or expired session" });
++  const uid = userData.user.id;
++
++  const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
++
++  // 2. this user's pending photos only
++  const { data: rows, error: listErr } = await admin
++    .from("photo_reviews")
++    .select("path")
++    .eq("owner_id", uid)
++    .eq("status", "pending")
++    .limit(MAX_PHOTOS_PER_CALL);
++  if (listErr) return json(500, { success: false, error: "Could not load photos" });
++
++  // 3. check each photo; any failure leaves it pending
++  const processOne = async (path: string): Promise<"approved" | "rejected" | "pending"> => {
++    try {
++      const { data: blob, error: dlErr } = await admin.storage.from("photos").download(path);
++      if (dlErr || !blob || blob.size === 0 || blob.size > MAX_BYTES) return "pending";
++      const bytes = new Uint8Array(await blob.arrayBuffer());
++
++      const decision = decide(await safeSearch(visionKey, toBase64(bytes)));
++      if (decision.status === "pending") return "pending";
++
++      const { error: rpcErr } = await admin.rpc("review_photo", {
++        _owner: uid,
++        _path: path,
++        _status: decision.status,
++        _reason: decision.status === "rejected" ? decision.reason : null,
++        _reviewer: null,
++      });
++      return rpcErr ? "pending" : decision.status;
++    } catch (e) {
++      console.error("moderate-photo: failed for one photo:", e instanceof Error ? e.message : "unknown error");
++      return "pending";
++    }
++  };
++
++  const results = await Promise.all((rows ?? []).map((r: { path: string }) => processOne(r.path)));
++  return json(200, {
++    success: true,
++    approved: results.filter((r) => r === "approved").length,
++    rejected: results.filter((r) => r === "rejected").length,
++    pending: results.filter((r) => r === "pending").length,
++  });
++});
+diff --git a/supabase/functions/moderate-photo/policy.ts b/supabase/functions/moderate-photo/policy.ts
+new file mode 100644
+index 0000000..d60edc6
+--- /dev/null
++++ b/supabase/functions/moderate-photo/policy.ts
+@@ -0,0 +1,52 @@
++// Pure decision logic for automatic photo moderation.
++// No Deno or network imports here, so it can be unit-tested (see __tests__/photoModerationPolicy.test.ts).
++
++export type Decision =
++  | { status: "approved" }
++  | { status: "rejected"; reason: string }
++  | { status: "pending" }; // could not decide: fail closed, the photo stays hidden
++
++export interface SafeSearchAnnotation {
++  adult?: string;
++  spoof?: string;
++  medical?: string;
++  violence?: string;
++  racy?: string;
++}
++
++// Google's likelihood scale. Missing or "UNKNOWN" counts as 0 (undecided).
++const RANK: Record<string, number> = {
++  VERY_UNLIKELY: 1,
++  UNLIKELY: 2,
++  POSSIBLE: 3,
++  LIKELY: 4,
++  VERY_LIKELY: 5,
++};
++
++/** A photo is rejected when a category reaches this level. Product decision: adjust here only. */
++export const REJECT_AT = {
++  adult: "LIKELY",
++  violence: "LIKELY",
++  racy: "VERY_LIKELY",
++} as const;
++
++export const REJECTION_REASON =
++  "This photo doesn't meet our community guidelines. Please choose a different photo.";
++
++const CATEGORIES = ["adult", "violence", "racy"] as const;
++
++const rank = (value?: string): number => (value ? (RANK[value] ?? 0) : 0);
++
++export function decide(annotation: SafeSearchAnnotation | null | undefined): Decision {
++  if (!annotation) return { status: "pending" };
++
++  // A clear violation is rejected even if another category is unknown.
++  if (CATEGORIES.some((c) => rank(annotation[c]) >= (RANK[REJECT_AT[c]] ?? 99))) {
++    return { status: "rejected", reason: REJECTION_REASON };
++  }
++
++  // Fail closed: if any checked category is missing or unknown, do not approve.
++  if (CATEGORIES.some((c) => rank(annotation[c]) === 0)) return { status: "pending" };
++
++  return { status: "approved" };
++}

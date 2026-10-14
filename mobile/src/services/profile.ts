@@ -192,3 +192,16 @@ export async function uploadVerificationSelfie(userId: string, uri: string): Pro
   if (error) throw error;
   return filePath;
 }
+
+/**
+ * Asks the server to check this user's pending photos (Google Cloud Vision SafeSearch).
+ * Best effort: if it fails, the photos simply stay pending (hidden from other users).
+ */
+export async function requestPhotoModeration(): Promise<void> {
+  try {
+    const { error } = await supabase.functions.invoke("moderate-photo", { body: {} });
+    if (error) console.warn("requestPhotoModeration failed:", error.message);
+  } catch (err) {
+    console.warn("requestPhotoModeration error:", err);
+  }
+}
