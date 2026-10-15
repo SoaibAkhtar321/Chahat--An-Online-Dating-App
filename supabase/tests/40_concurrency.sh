@@ -23,6 +23,8 @@ F=10000000-0000-0000-0000-000000000001; G=10000000-0000-0000-0000-000000000027
 q() { psql -X -q -At -d "$DB" -c "$1"; }
 fail=0; check() { if [ "$2" = "$3" ]; then echo "PASS  $1 ($2)"; else echo "FAIL  $1: expected $3, got $2"; fail=1; fi; }
 
+# Pin the daily like limit to 10 so the burst test is independent of the production default (20).
+q "insert into app_settings(key,value) values ('daily_like_limit','10'::jsonb) on conflict (key) do update set value=excluded.value" >/dev/null
 # Pre-create today's quota row (one sequential like) so the burst contends on the existing row's limit check,
 # not on the first-insert path, which would serialise the workers and hide a missing row lock.
 echo "$F 10000000-0000-0000-0000-000000000002 like" | burst
