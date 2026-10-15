@@ -8,10 +8,10 @@ INSERT INTO auth.users(id, email) VALUES
 SET ROLE service_role;
 SET request.jwt.claim.role = 'service_role';
 UPDATE public.profiles
-SET name = 'Push A', gender = 'man', seeking = 'woman', onboarded = true
+SET name = 'Push A', gender = 'man', seeking = 'woman'
 WHERE id = '00000000-0000-0000-0000-0000000000f1';
 UPDATE public.profiles
-SET name = 'Push B', gender = 'woman', seeking = 'man', onboarded = true
+SET name = 'Push B', gender = 'woman', seeking = 'man'
 WHERE id = '00000000-0000-0000-0000-0000000000f2';
 RESET ROLE;
 SET request.jwt.claim.role = 'authenticated';
