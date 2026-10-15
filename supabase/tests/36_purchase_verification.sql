@@ -7,6 +7,7 @@ INSERT INTO auth.users(id, email) VALUES
 CREATE TEMP TABLE purchase_test_times AS
 SELECT now() - interval '1 minute' AS starts_at,
        '2099-11-15T00:00:00Z'::timestamptz AS expires_at;
+GRANT SELECT ON purchase_test_times TO service_role;
 
 SET ROLE authenticated;
 CALL public.expect_fail(
