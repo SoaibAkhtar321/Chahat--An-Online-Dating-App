@@ -7,6 +7,12 @@ const mockGetExpoPushToken = jest.fn();
 const mockSecureGet = jest.fn();
 const mockSecureSet = jest.fn();
 const mockSecureDelete = jest.fn();
+let mockPushConfigured = true;
+
+// Expo inlines EXPO_PUBLIC_* at compile time (also under jest), so the flag is mocked here.
+jest.mock("../mobile/src/config/appConfig", () => ({
+  isServiceConfigured: () => mockPushConfigured,
+}));
 
 jest.mock(
   "@react-native-async-storage/async-storage",
@@ -87,6 +93,7 @@ import {
 
 describe("real Expo push registration", () => {
   beforeEach(() => {
+    mockPushConfigured = true;
     jest.clearAllMocks();
     mockGetUser.mockResolvedValue({
       data: { user: { id: "user-1" } },
@@ -111,6 +118,18 @@ describe("real Expo push registration", () => {
     mockSecureSet.mockResolvedValue(undefined);
     mockSecureDelete.mockResolvedValue(undefined);
     mockRpc.mockResolvedValue({ error: null });
+  });
+
+  it("does nothing while push is not configured (no prompt, no token, no RPC)", async () => {
+    mockPushConfigured = false;
+    await expect(registerPushNotificationToken("user-1")).resolves.toEqual({
+      status: "not_configured",
+    });
+    expect(mockRequestPermissions).not.toHaveBeenCalled();
+    expect(mockGetPermissions).not.toHaveBeenCalled();
+    expect(mockGetExpoPushToken).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockSecureSet).not.toHaveBeenCalled();
   });
 
   it("registers the real Expo token with the signed-in account and configured project", async () => {

@@ -8,7 +8,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest --config ../jest.config.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "eas-build-pre-install": "node scripts/check-release-env.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",

@@ -28,7 +28,7 @@ eas login
 # Build production Android App Bundle (.aab) for Google Play Store
 npm run build:bundle
 # Or directly:
-eas build --platform android --profile production
+cd mobile && eas build --platform android --profile production
 ```
 
 To build a standalone **test APK** for direct installation on physical Android devices:
@@ -36,7 +36,7 @@ To build a standalone **test APK** for direct installation on physical Android d
 ```bash
 npm run build:apk
 # Or directly:
-eas build --platform android --profile preview
+cd mobile && eas build --platform android --profile preview
 ```
 
 ### 2. Local Android Studio Build
@@ -74,8 +74,6 @@ npm run android
 │   ├── settings/                    # Settings, privacy, account controls
 │   └── _layout.tsx                  # Root navigation stack & auth gate
 ├── assets/                          # Android icons, adaptive icons, splash screens
-├── app.json                         # Expo configuration (com.milo.dating, permissions)
-├── eas.json                         # EAS Build profiles (production .aab, preview .apk)
 ├── metro.config.js                  # React Native Metro bundler
 ├── babel.config.js                  # Expo & React Native Babel preset
 ├── jest.config.js                   # React Native Jest test runner

@@ -4,3 +4,6 @@
 
 expo-env.d.ts
 # @end expo-cli
+# Firebase / FCM credentials (never commit)
+google-services.json
+GoogleService-Info.plist

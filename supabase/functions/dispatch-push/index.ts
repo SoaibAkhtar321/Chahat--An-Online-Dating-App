@@ -209,7 +209,7 @@ Deno.serve(async (request) => {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!dispatchSecret || !url || !serviceRoleKey) {
-    return json(500, { error: "Push dispatcher is not configured" });
+    return json(503, { error: "Push dispatcher is not configured", code: "push_not_configured" });
   }
   const suppliedSecret = request.headers.get("x-dispatch-secret") ?? "";
   if (!constantTimeEqual(suppliedSecret, dispatchSecret)) {

@@ -5,6 +5,7 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { isServiceConfigured } from "../config/appConfig";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 export interface NoticeItem {
@@ -29,7 +30,14 @@ export interface NotificationPreferences {
 }
 
 export type PushRegistrationResult =
-  | { status: "registered" | "disabled" | "permission_denied" | "unsupported" }
+  | {
+      status:
+        | "registered"
+        | "disabled"
+        | "permission_denied"
+        | "unsupported"
+        | "not_configured";
+    }
   | { status: "error"; error: string };
 
 export const DEFAULT_PREFERENCES: NotificationPreferences = {
@@ -196,6 +204,9 @@ export async function registerPushNotificationToken(
   userId: string,
 ): Promise<PushRegistrationResult> {
   try {
+    // Push stays OFF until EXPO_PUBLIC_FEATURE_PUSH=true (set after FCM/EAS credentials and the
+    // dispatch worker are attached; see docs/PUSH_SETUP.md). No permission prompt, no RPC.
+    if (!isServiceConfigured("push")) return { status: "not_configured" };
     if (!userId) return { status: "error", error: "A signed-in account is required." };
     if (Platform.OS !== "ios" && Platform.OS !== "android") {
       return { status: "unsupported" };
