@@ -331,10 +331,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
     test("verifyAndCreditPurchase rejects malformed or short purchase tokens", async () => {
       const res = await verifyAndCreditPurchase({
         store: "google_play",
-        productId: "chahat_premium_1m",
         purchaseToken: "short_tok",
-        tier: "premium",
-        durationMonths: 1,
       });
       expect(res.success).toBe(false);
       expect(res.status).toBe("failed");

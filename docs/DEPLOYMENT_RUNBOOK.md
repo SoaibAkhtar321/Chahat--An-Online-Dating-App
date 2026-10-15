@@ -125,7 +125,17 @@ supabase db push --dry-run
 supabase db push
 
 # 5.6 Deploy Edge Functions
-# Note: Ensure SUPABASE_SERVICE_ROLE_KEY and GOOGLE_VISION_API_KEY are configured in remote secrets
+# Configure these values as Supabase Edge Function secrets before deployment; never commit or print them:
+# GOOGLE_PLAY_PACKAGE_NAME=com.milo.dating
+# GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL=<service account with Android Publisher API access>
+# GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY=<service account private key>
+# The Play Console API must be enabled and the service account granted access to this app.
+# The future Billing client must set obfuscatedAccountId to lowercase SHA-256 hex of the Supabase user UUID.
+# verify-purchase rejects purchases without that matching account binding.
+# Pending payment states are not entitled or acknowledged. A verified completed purchase is persisted
+# before acknowledgement; same-account retries are idempotent, while cross-account/stale/downgrade
+# replays are rejected.
+# Also configure SUPABASE_SERVICE_ROLE_KEY and GOOGLE_VISION_API_KEY as remote secrets.
 supabase functions deploy delete-account
 supabase functions deploy verify-purchase
 supabase functions deploy moderate-photo
@@ -148,6 +158,7 @@ supabase functions deploy moderate-photo
 14. `20260101001300_critical_security_foundations.sql`
 15. `20260101001400_harden_verification_metadata_guard.sql`
 16. `20260101001500_subscription_orders_and_replay_protection.sql`
+17. `20260101001600_google_play_verified_purchase_expiry.sql`
 
 ---
 

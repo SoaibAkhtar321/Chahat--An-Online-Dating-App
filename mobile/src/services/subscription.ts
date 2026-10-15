@@ -277,18 +277,13 @@ export async function purchaseSubscription(
 }
 
 export interface VerifyPurchasePayload {
-  store: "google_play" | "stripe" | "manual_grant";
-  orderId?: string;
-  productId: string;
+  store: "google_play";
   purchaseToken: string;
-  tier: PlanTier;
-  amountInr?: number;
-  durationMonths: number;
 }
 
 /**
- * Submits a store purchase token to the server for verification and credentialing.
- * Strictly verifies JWT and relies on backend record_verified_purchase RPC to prevent token replay.
+ * Submits a Google Play purchase token for server-side verification. Product and entitlement
+ * details are determined by the server, not accepted from the app.
  */
 export async function verifyAndCreditPurchase(
   payload: VerifyPurchasePayload,
@@ -332,10 +327,19 @@ export async function verifyAndCreditPurchase(
       };
     }
 
+    const verifiedTier = data.tier;
+    if (!["premium", "plus", "vip"].includes(verifiedTier)) {
+      return {
+        success: false,
+        status: "failed",
+        error: "The server returned an invalid verified subscription tier.",
+      };
+    }
+
     return {
       success: true,
       status: "completed",
-      tier: payload.tier,
+      tier: verifiedTier,
     };
   } catch (err: any) {
     return {
@@ -382,4 +386,3 @@ export async function restorePurchases(): Promise<RestorePurchasesResult> {
     };
   }
 }
-
