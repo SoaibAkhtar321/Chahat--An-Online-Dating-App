@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
+import React, { useState, useMemo, useEffect } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
@@ -21,8 +21,10 @@ import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/the
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
-import { DEMO_PROFILES } from "../../src/services/discovery";
 import { blockUser, reportUser } from "../../src/services/moderation";
+import { supabase, isSupabaseConfigured } from "../../src/services/supabase";
+import { getSignedUrls } from "../../src/services/storage";
+import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { Alert } from "../../src/utils/alert";
 import type { Profile } from "../../src/types";
@@ -38,24 +40,90 @@ export default function ProfileDetailScreen() {
   const { deck, swipeCard } = useMilo();
 
   const [dialogAction, setDialogAction] = useState<"block" | "report" | null>(null);
+  const [fetchedProfile, setFetchedProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Search profile in deck or demo profiles
-  const targetProfile: Profile = deck.find((p) => p.id === id) ||
-    DEMO_PROFILES.find((p) => p.id === id) || {
-      id: id || "unknown",
-      name: "Chahat Member",
-      age: 26,
-      city: "Mumbai",
-      distanceKm: 5,
-      bio: "Looking for meaningful connections.",
-      photos: ["https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800"],
-      interests: ["Coffee", "Travel"],
-      intent: "Serious relationship",
+  // Search profile in deck first
+  const deckMatch = deck.find((p) => p.id === id);
+
+  useEffect(() => {
+    if (deckMatch || !id || !isSupabaseConfigured()) return;
+    let cancelled = false;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const { data: profRows, error } = await supabase.rpc("get_public_profile", { _id: id });
+        if (error || !profRows || (Array.isArray(profRows) && profRows.length === 0)) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
+        const prof = Array.isArray(profRows) ? profRows[0] : profRows;
+        const photoPaths = Array.isArray(prof.photos)
+          ? prof.photos.map((p: any) => p.path).filter(Boolean)
+          : [];
+        const signed = await getSignedUrls("photos", photoPaths);
+        const photos = Array.isArray(prof.photos)
+          ? prof.photos
+              .map((p: any) => (p.path ? signed[p.path] || "" : p.src || ""))
+              .filter(Boolean)
+          : [];
+
+        if (!cancelled) {
+          setFetchedProfile({
+            id: prof.id,
+            name: prof.name || "Member",
+            age: prof.age || 0,
+            city: prof.city || "",
+            distanceKm: 0,
+            bio: prof.bio || "",
+            photos,
+            interests: prof.interests || [],
+            intent: prof.intents?.[0] || "",
+            intents: prof.intents || [],
+            work: prof.work,
+            education: prof.education,
+            prompt: prof.prompt,
+            lifestyle: prof.lifestyle,
+            languages: prof.languages || [],
+          });
+          setLoading(false);
+        }
+      } catch (err) {
+        console.warn("get_public_profile failed:", err);
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
     };
+  }, [id, deckMatch]);
+
+  const targetProfile: Profile | null = deckMatch || fetchedProfile;
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!targetProfile) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <Text style={styles.errorText}>Profile not found</Text>
+        <TouchableOpacity style={styles.backBtnAlt} onPress={() => router.back()}>
+          <Text style={styles.backBtnText}>Go back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   // Compatibility score calculation based on shared interests & languages
   const myInterests = myProfile?.interests || [];
-  const sharedInterests = targetProfile.interests.filter((i) => myInterests.includes(i));
+  const sharedInterests = (targetProfile.interests || []).filter((i) => myInterests.includes(i));
   const score = Math.min(95, 60 + sharedInterests.length * 10);
 
   const handleAction = async (dir: "like" | "pass") => {
@@ -75,11 +143,17 @@ export default function ProfileDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Photo Gallery Header */}
         <View style={styles.photoContainer}>
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-            {targetProfile.photos.map((uri, idx) => (
-              <Image key={idx} source={{ uri }} style={styles.heroPhoto} contentFit="cover" />
-            ))}
-          </ScrollView>
+          {targetProfile.photos && targetProfile.photos.length > 0 ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              {targetProfile.photos.map((uri, idx) => (
+                <Image key={idx} source={{ uri }} style={styles.heroPhoto} contentFit="cover" />
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.heroPlaceholder}>
+              <AvatarPlaceholder name={targetProfile.name} size={120} />
+            </View>
+          )}
 
           <TouchableOpacity
             style={styles.backButton}
@@ -89,9 +163,11 @@ export default function ProfileDetailScreen() {
             <ArrowLeft size={20} color={Colors.foreground} />
           </TouchableOpacity>
 
-          <View style={styles.photoCountBadge}>
-            <Text style={styles.photoCountText}>{targetProfile.photos.length} photos</Text>
-          </View>
+          {targetProfile.photos && targetProfile.photos.length > 0 && (
+            <View style={styles.photoCountBadge}>
+              <Text style={styles.photoCountText}>{targetProfile.photos.length} photos</Text>
+            </View>
+          )}
         </View>
 
         {/* Profile Info */}
@@ -528,5 +604,32 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     ...Shadows.glow,
+  },
+  center: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  errorText: {
+    fontSize: Typography.sizes.base,
+    color: Colors.mutedForeground,
+    marginBottom: 16,
+  },
+  backBtnAlt: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary,
+    borderRadius: Radii.full,
+  },
+  backBtnText: {
+    color: Colors.primaryForeground,
+    fontWeight: Typography.weights.bold,
+  },
+  heroPlaceholder: {
+    width,
+    height: width * 1.33,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

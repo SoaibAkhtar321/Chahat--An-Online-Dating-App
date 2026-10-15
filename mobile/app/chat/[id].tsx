@@ -34,6 +34,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { ChatBubble } from "../../src/components/chat/ChatBubble";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
+import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 import { SMART_ICEBREAKERS, type Icebreaker } from "../../src/constants/icebreakers";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
@@ -75,11 +76,11 @@ export default function ChatDetailScreen() {
   const otherUser: Profile = matchItem?.otherUser || {
     id: "unknown",
     name: "Match",
-    age: 26,
-    city: "Mumbai",
-    distanceKm: 5,
+    age: 0,
+    city: "",
+    distanceKm: 0,
     bio: "",
-    photos: ["https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800"],
+    photos: [],
     interests: [],
     intent: "",
   };
@@ -213,7 +214,11 @@ export default function ChatDetailScreen() {
           }
           activeOpacity={0.8}
         >
-          <Image source={{ uri: otherUser.photos[0] }} style={styles.avatar} contentFit="cover" />
+          {otherUser.photos && otherUser.photos.length > 0 ? (
+            <Image source={{ uri: otherUser.photos[0] }} style={styles.avatar} contentFit="cover" />
+          ) : (
+            <AvatarPlaceholder name={otherUser.name} size={40} style={{ marginRight: 10 }} />
+          )}
           <View>
             <Text style={styles.partnerName} numberOfLines={1}>
               {otherUser.name}

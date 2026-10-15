@@ -276,25 +276,109 @@ export async function purchaseSubscription(
   }
 }
 
+export interface VerifyPurchasePayload {
+  store: "google_play" | "stripe" | "manual_grant";
+  orderId?: string;
+  productId: string;
+  purchaseToken: string;
+  tier: PlanTier;
+  amountInr?: number;
+  durationMonths: number;
+}
+
 /**
- * Restores previously purchased subscriptions through Google Play store receipt verification.
+ * Submits a store purchase token to the server for verification and credentialing.
+ * Strictly verifies JWT and relies on backend record_verified_purchase RPC to prevent token replay.
  */
-export async function restorePurchases(): Promise<PurchaseResult> {
-  try {
-    const sub = await getUserSubscription();
-    if (sub.tier !== "free") {
-      return { success: true, status: "completed", tier: sub.tier };
-    }
+export async function verifyAndCreditPurchase(
+  payload: VerifyPurchasePayload,
+): Promise<PurchaseResult> {
+  if (!isSupabaseConfigured()) {
     return {
       success: false,
       status: "failed",
-      error: "No active Google Play subscription found for this account.",
+      error: "Backend connection is not configured.",
+    };
+  }
+
+  if (!payload.purchaseToken || payload.purchaseToken.trim().length < 16) {
+    return {
+      success: false,
+      status: "failed",
+      error: "Invalid or malformed purchase token.",
+    };
+  }
+
+  try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes.user) {
+      return {
+        success: false,
+        status: "failed",
+        error: "You must be signed in to verify purchases.",
+      };
+    }
+
+    // Server-side verification Edge Function / RPC invocation
+    const { data, error } = await supabase.functions.invoke("verify-purchase", {
+      body: payload,
+    });
+
+    if (error || !data?.success) {
+      return {
+        success: false,
+        status: "failed",
+        error: data?.error || error?.message || "Purchase token verification failed.",
+      };
+    }
+
+    return {
+      success: true,
+      status: "completed",
+      tier: payload.tier,
     };
   } catch (err: any) {
     return {
       success: false,
       status: "failed",
-      error: err?.message || "Could not restore purchases.",
+      error: err?.message || "Could not complete purchase verification.",
+    };
+  }
+}
+
+export interface RestorePurchasesResult {
+  success: boolean;
+  tier?: PlanTier;
+  error?: string;
+}
+
+/**
+ * Queries server-side subscription state to restore entitlements.
+ */
+export async function restorePurchases(): Promise<RestorePurchasesResult> {
+  if (!isSupabaseConfigured()) {
+    return {
+      success: false,
+      error: "Backend connection is not configured.",
+    };
+  }
+
+  try {
+    const sub = await getUserSubscription();
+    if (sub.tier !== "free") {
+      return {
+        success: true,
+        tier: sub.tier,
+      };
+    }
+    return {
+      success: false,
+      error: "No active subscriptions found to restore.",
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Failed to restore purchases.",
     };
   }
 }

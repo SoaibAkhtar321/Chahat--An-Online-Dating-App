@@ -39,15 +39,18 @@ The old `delete_user_account()` RPC is dropped by `supabase/migrations/202601010
 - `search_path = public, pg_temp` enforced on all `SECURITY DEFINER` functions.
 - `is_demo` and `likes_you` removed from `get_discovery_feed` and revoked from `authenticated` on `profiles`.
 - Rate limits added: max 30 messages/minute per sender, max 10 reports/hour per reporter.
+- Approved-only photo visibility enforced in schema (`20260101001000_photo_visibility_approved_only.sql`).
+- Block isolation enforced at DB level: `is_match_member`, `chat_folder_member`, `get_public_profile`, and `matches` SELECT policy all check `NOT is_blocked_pair`.
+- Automatic database trigger `on_block_cleanup` cascades removal of matches and swipes upon block insertion.
+- Explicit `photo_reviews` deletion added to `purge_user_data` before profiles deletion (`20260101001300_critical_security_foundations.sql`).
+- Verification metadata tampering prevented via `account_state_guard` (`20260101001400_harden_verification_metadata_guard.sql`).
+- Client EXIF/GPS stripping and upload rate limits active in `mobile/src/services/storage.ts`.
+- Supabase Auth settings codified in `supabase/config.toml`.
 
 ## Open items & remaining concerns (Honest status)
-- Photo approval is NOT enforced in schema/storage policies (in-app privacy copy was reworded instead).
-- Signed URLs (1 hour) cannot be revoked on block, suspension, or deletion until they expire naturally.
-- No EXIF / GPS stripping or server-side re-encoding of uploaded images.
-- No upload rate limiting (only message and report rate limits implemented).
+- Signed URLs (1 hour) cannot be revoked on block, suspension, or deletion until they expire naturally on the storage CDN.
 - Reports and one `admin_audit` row are retained after account deletion (DPDP compliance check needed).
-- Supabase Auth settings (email confirmations, password rules, OTP limits) are not codified in `config.toml`.
-- All database test runs so far ran on plain PostgreSQL 16 with test stand-ins, not against a real Supabase instance.
+- All database test runs so far ran with stand-ins and unit test harnesses; execution against real Supabase / PostgreSQL 16 container required per deployment runbook.
 
 ## Migration order
 1. `supabase/migrations/20260101000000_core_schema.sql`
@@ -57,3 +60,12 @@ The old `delete_user_account()` RPC is dropped by `supabase/migrations/202601010
 5. `supabase/migrations/20260101000400_security_followups.sql`
 6. `supabase/migrations/20260101000500_privacy_and_rate_limits.sql`
 7. `supabase/migrations/20260101000600_trigger_function_hardening.sql`
+8. `supabase/migrations/20260101000700_subscription_entitlements_and_like_security.sql`
+9. `supabase/migrations/20260101000800_photo_visibility_stopgap.sql`
+10. `supabase/migrations/20260101000900_photo_reviews.sql`
+11. `supabase/migrations/20260101001000_photo_visibility_approved_only.sql`
+12. `supabase/migrations/20260101001100_uniform_like_quota.sql`
+13. `supabase/migrations/20260101001200_daily_like_limit_20.sql`
+14. `supabase/migrations/20260101001300_critical_security_foundations.sql`
+15. `supabase/migrations/20260101001400_harden_verification_metadata_guard.sql`
+16. `supabase/migrations/20260101001500_subscription_orders_and_replay_protection.sql`

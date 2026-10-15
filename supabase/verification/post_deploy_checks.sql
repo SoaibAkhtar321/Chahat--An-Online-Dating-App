@@ -7,7 +7,7 @@
 
 -- ----------------------------------------------------------------------------
 -- 1. All expected application tables exist with Row Level Security enabled
--- Expected: Every row returns true.
+-- Expected: Every row returns true (all 14 application tables).
 -- ----------------------------------------------------------------------------
 SELECT
   expected_table,
@@ -20,26 +20,35 @@ FROM (
   VALUES
     ('profiles'),
     ('user_roles'),
+    ('account_state'),
     ('swipes'),
     ('matches'),
     ('messages'),
     ('blocks'),
     ('reports'),
     ('user_daily_quotas'),
+    ('user_subscriptions'),
+    ('subscription_orders'),
+    ('photo_reviews'),
     ('app_settings'),
     ('admin_audit')
 ) AS t(expected_table);
 
 -- ----------------------------------------------------------------------------
 -- 2. Storage buckets are configured and private
--- Expected: Both 'photos' and 'chat' return is_private = true.
+-- Expected: Both 'photos' and 'chat' return exists_and_is_private = true.
+-- (Fails with false if either bucket is missing or public)
 -- ----------------------------------------------------------------------------
 SELECT
-  id AS bucket_name,
-  (public = false) AS is_private
-FROM storage.buckets
-WHERE id IN ('photos', 'chat')
-ORDER BY id;
+  b.expected_bucket AS bucket_name,
+  EXISTS(
+    SELECT 1 FROM storage.buckets
+    WHERE id = b.expected_bucket AND public = false
+  ) AS exists_and_is_private
+FROM (
+  VALUES ('photos'), ('chat')
+) AS b(expected_bucket)
+ORDER BY b.expected_bucket;
 
 -- ----------------------------------------------------------------------------
 -- 3. Legacy delete_user_account RPC is dropped (replaced by Edge Function)
@@ -53,18 +62,21 @@ SELECT
   ) AS delete_user_account_rpc_is_dropped;
 
 -- ----------------------------------------------------------------------------
--- 4. purge_user_data RPC is executable ONLY by service_role
--- Expected: anon_can_execute = false, authenticated_can_execute = false,
--- service_role_can_execute = true.
+-- 4. purge_user_data RPC exists and is executable ONLY by service_role
+-- Expected: function_exists = true, is_secure_service_role_only = true.
+-- (Fails with false if function is missing or granted to anon/authenticated)
 -- ----------------------------------------------------------------------------
 SELECT
-  p.proname,
-  has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_can_execute,
-  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated_can_execute,
-  has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role_can_execute
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public' AND p.proname = 'purge_user_data';
+  'purge_user_data(uuid)' AS function_signature,
+  (to_regprocedure('public.purge_user_data(uuid)') IS NOT NULL) AS function_exists,
+  CASE
+    WHEN to_regprocedure('public.purge_user_data(uuid)') IS NULL THEN false
+    ELSE (
+      NOT has_function_privilege('anon', 'public.purge_user_data(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.purge_user_data(uuid)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'public.purge_user_data(uuid)', 'EXECUTE')
+    )
+  END AS is_secure_service_role_only;
 
 -- ----------------------------------------------------------------------------
 -- 5. record_swipe RPC has ONLY the 2-argument signature (_to text, _kind text)
@@ -118,3 +130,49 @@ SELECT
 SELECT
   NOT has_column_privilege('authenticated', 'public.profiles', 'is_demo', 'SELECT') AS is_demo_hidden_from_authenticated,
   NOT has_column_privilege('authenticated', 'public.profiles', 'likes_you', 'SELECT') AS likes_you_hidden_from_authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 10. Security triggers exist AND are enabled:
+--     - on_block_cleanup on public.blocks
+--     - account_state_guard on public.account_state
+-- Expected: Both rows return exists_and_is_enabled = true.
+-- (tgenabled 'O' = origin/enabled, 'A' = always enabled)
+-- ----------------------------------------------------------------------------
+SELECT
+  t_req.table_name,
+  t_req.trigger_name,
+  EXISTS(
+    SELECT 1 FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = t_req.table_name
+      AND t.tgname = t_req.trigger_name
+      AND t.tgenabled IN ('O', 'A')
+  ) AS exists_and_is_enabled
+FROM (
+  VALUES
+    ('blocks', 'on_block_cleanup'),
+    ('account_state', 'account_state_guard')
+) AS t_req(table_name, trigger_name);
+
+-- ----------------------------------------------------------------------------
+-- 11. Static definition guard: security functions reference block isolation check
+-- Note: This static query verifies that the deployed definitions contain the
+-- subroutine call. Comprehensive behavioral enforcement (role-switching,
+-- blocked access denial, RLS) is verified via supabase/tests/28_security_foundations.sql.
+-- Expected: Both return true.
+-- ----------------------------------------------------------------------------
+SELECT
+  EXISTS(
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'is_match_member'
+      AND pg_get_functiondef(p.oid) LIKE '%is_blocked_pair%'
+  ) AS is_match_member_references_block_check,
+  EXISTS(
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'chat_folder_member'
+      AND pg_get_functiondef(p.oid) LIKE '%is_blocked_pair%'
+  ) AS chat_folder_member_references_block_check;

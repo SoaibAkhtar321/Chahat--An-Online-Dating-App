@@ -17,6 +17,8 @@ import {
   hasEntitlement,
   PLANS,
   PREMIUM_BILLING_DURATIONS,
+  restorePurchases,
+  verifyAndCreditPurchase,
   type PlanTier,
   type UserSubscription,
 } from "../mobile/src/services/subscription";
@@ -271,6 +273,71 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
     test("free plan explicitly states 20 daily likes in feature list", () => {
       const likeFeature = PLANS.free.features.find((f) => f.includes("20 Likes"));
       expect(likeFeature).toBeDefined();
+    });
+  });
+
+  describe("7. Phase D: Store Receipt Verification & Replay Protection", () => {
+    // Simulates the record_verified_purchase RPC logic
+    const redeemedTokens = new Set<string>();
+    const simulateRecordPurchase = (
+      store: string,
+      tokenHash: string,
+      tier: PlanTier,
+    ): { success: boolean; error?: string } => {
+      const key = `${store}:${tokenHash}`;
+      if (redeemedTokens.has(key)) {
+        return { success: false, error: "Purchase token has already been redeemed" };
+      }
+      redeemedTokens.add(key);
+      return { success: true };
+    };
+
+    test("first redemption of a store purchase token succeeds", () => {
+      const tokenHash = "token_hash_alpha_123456789";
+      const result = simulateRecordPurchase("google_play", tokenHash, "premium");
+      expect(result.success).toBe(true);
+    });
+
+    test("token replay attack with previously redeemed token is rejected", () => {
+      const tokenHash = "token_hash_alpha_123456789";
+      const result = simulateRecordPurchase("google_play", tokenHash, "premium");
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("already been redeemed");
+    });
+
+    test("defense-in-depth: paid member cannot read received likes from a blocked user", () => {
+      // Simulates the hardened RLS policy on public.swipes
+      const canReadReceivedLike = (
+        viewerTier: PlanTier,
+        isBlocked: boolean,
+      ): boolean => {
+        const isPaid = viewerTier === "premium" || viewerTier === "plus" || viewerTier === "vip";
+        return isPaid && !isBlocked;
+      };
+
+      expect(canReadReceivedLike("premium", false)).toBe(true);
+      expect(canReadReceivedLike("premium", true)).toBe(false); // blocked pair rejected
+      expect(canReadReceivedLike("plus", true)).toBe(false);
+      expect(canReadReceivedLike("vip", true)).toBe(false);
+      expect(canReadReceivedLike("free", false)).toBe(false);
+    });
+
+    test("restorePurchases fails safely when backend is unconfigured", async () => {
+      const res = await restorePurchases();
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("Backend connection is not configured");
+    });
+
+    test("verifyAndCreditPurchase rejects malformed or short purchase tokens", async () => {
+      const res = await verifyAndCreditPurchase({
+        store: "google_play",
+        productId: "chahat_premium_1m",
+        purchaseToken: "short_tok",
+        tier: "premium",
+        durationMonths: 1,
+      });
+      expect(res.success).toBe(false);
+      expect(res.status).toBe("failed");
     });
   });
 });

@@ -35,12 +35,10 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
     for (const m of matches) {
       const otherId = m.user_a === currentUserId ? m.user_b : m.user_a;
 
-      // Get other user's profile
-      let otherProfile = DEMO_PROFILES.find((p) => p.id === otherId);
-
-      if (!otherProfile) {
-        const { data: profRows } = await supabase.rpc("get_public_profile", { _id: otherId });
-        const prof = Array.isArray(profRows) ? (profRows[0] as any) : null;
+      // Get other user's profile from database
+      let otherProfile: Profile | undefined;
+      const { data: profRows } = await supabase.rpc("get_public_profile", { _id: otherId });
+      const prof = Array.isArray(profRows) ? (profRows[0] as any) : profRows;
 
         if (prof) {
           const signed = await getSignedUrls(
@@ -58,12 +56,11 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
             city: prof.city || "",
             distanceKm: 0,
             bio: prof.bio || "",
-            photos: photos.length > 0 ? photos : [DEMO_PROFILES[0]!.photos[0]!],
+            photos,
             interests: prof.interests || [],
             intent: prof.intents?.[0] || "",
           };
         }
-      }
 
       if (otherProfile) {
         // Fetch last message

@@ -6,9 +6,9 @@ import { Image } from "expo-image";
 import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
-import { DEMO_PROFILES } from "../../src/services/discovery";
 import { useMilo } from "../../src/context/MiloContext";
 import { Alert } from "../../src/utils/alert";
+import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 
 export default function CallScreen() {
   const { colors: Colors } = useTheme();
@@ -21,13 +21,20 @@ export default function CallScreen() {
   const [videoOff, setVideoOff] = useState(false);
   const [seconds, setSeconds] = useState(0);
 
-  const partner =
-    matches.find((m) => m.otherUser.id === id || m.id === id)?.otherUser || DEMO_PROFILES[0]!;
+  const partner = matches.find((m) => m.otherUser.id === id || m.id === id)?.otherUser;
+  const partnerPhoto = partner?.photos && partner.photos.length > 0 ? partner.photos[0] : undefined;
 
   const isPaidUser = subscription?.tier && subscription.tier !== "free";
   const MAX_FREE_CALL_SECONDS = 60;
 
   useEffect(() => {
+    if (!partner) {
+      Alert.alert("Call Ended", "Matched connection not found.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+      return;
+    }
+
     const timer = setInterval(() => {
       setSeconds((prev) => {
         const next = prev + 1;
@@ -43,13 +50,21 @@ export default function CallScreen() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isPaidUser]);
+  }, [isPaidUser, partner]);
 
   const formatTimer = (sec: number) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
+
+  if (!partner) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ color: Colors.inkForeground }}>Connecting...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -66,7 +81,13 @@ export default function CallScreen() {
       </View>
 
       <View style={styles.videoArea}>
-        <Image source={{ uri: partner.photos[0] }} style={styles.partnerPhoto} contentFit="cover" />
+        {partnerPhoto ? (
+          <Image source={{ uri: partnerPhoto }} style={styles.partnerPhoto} contentFit="cover" />
+        ) : (
+          <View style={[styles.partnerPhoto, { backgroundColor: "#1e1e24", alignItems: "center", justifyContent: "center" }]}>
+            <AvatarPlaceholder name={partner.name} size={120} />
+          </View>
+        )}
         {videoOff && (
           <View style={styles.videoDisabledOverlay}>
             <Text style={styles.disabledText}>Camera turned off</Text>

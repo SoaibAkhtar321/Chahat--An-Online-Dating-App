@@ -59,9 +59,13 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     (async () => {
       try {
         const pending = await ImagePicker.getPendingResultAsync();
-        if (cancelled || !pending || Array.isArray(pending)) return;
-        const asset = pending.canceled ? undefined : pending.assets?.[0];
-        if (asset?.uri) await addPhoto(asset, photosRef.current.length);
+        if (cancelled || !Array.isArray(pending)) return;
+        for (const item of pending) {
+          if ("canceled" in item && !item.canceled && item.assets?.[0]?.uri) {
+            await addPhoto(item.assets[0], photosRef.current.length);
+            break;
+          }
+        }
       } catch (e) {
         console.warn("PhotoUploader: pending result check failed", e);
       }

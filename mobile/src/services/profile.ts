@@ -132,12 +132,20 @@ export async function saveProfile(
     }
 
     // Update account_state for private preferences
-    const privateState = {
+    // Protection: Verification status cannot be self-approved by client.
+    const safeVerificationStatus =
+      profile.verificationStatus === "pending" || profile.verificationStatus === "none"
+        ? profile.verificationStatus
+        : undefined;
+
+    const privateState: Record<string, any> = {
       ageMin: profile.ageMin,
       ageMax: profile.ageMax,
       distance: profile.distance,
-      verification: { status: profile.verificationStatus },
     };
+    if (safeVerificationStatus !== undefined) {
+      privateState.verification = { status: safeVerificationStatus };
+    }
 
     const { error: stateError } = await supabase
       .from("account_state")

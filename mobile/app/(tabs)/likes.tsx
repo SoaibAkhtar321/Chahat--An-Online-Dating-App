@@ -8,6 +8,7 @@ import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/the
 import { useTheme } from "../../src/context/ThemeContext";
 import { useMilo } from "../../src/context/MiloContext";
 import { Button } from "../../src/components/ui/Button";
+import { hasEntitlement } from "../../src/services/subscription";
 
 const { width } = Dimensions.get("window");
 const CARD_SIZE = (width - 48) / 2;
@@ -16,11 +17,11 @@ export default function LikesScreen() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
-  const { deck, swipeCard } = useMilo();
+  const { deck, swipeCard, subscription } = useMilo();
 
   // Likers are profiles with likesYou = true
   const likers = deck.filter((p) => p.likesYou);
-  const isPremiumUser = false; // Initial MVP does not gate or charge; free matching stays primary
+  const isPremiumUser = hasEntitlement(subscription?.tier || "free", "seeWhoLikedYou");
 
   const handleLikeBack = async (id: string) => {
     const res = await swipeCard("like");

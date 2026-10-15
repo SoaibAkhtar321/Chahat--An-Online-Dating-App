@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 # Parallel-session tests. Expects DB $1 already migrated and seeded with 30_concurrency_setup.sql.
 set -u
-DB="$1"
+DB="${1:?FATAL: Missing database argument (arg 1)}"
+LOCK_KEY="${2:?FATAL: Missing mandatory concurrency lock argument (arg 2)}"
+
+if ! [[ "$LOCK_KEY" =~ ^[1-9][0-9]{3,9}$ ]] || [ "$LOCK_KEY" -gt 2147483647 ]; then
+  echo "FATAL: LOCK_KEY must be a positive 32-bit integer (1000..2147483647). Received: '$LOCK_KEY'" >&2
+  exit 2
+fi
+
 # Barrier: a holder session keeps an exclusive advisory lock; every worker connects first, then blocks on the
 # shared lock, so all swipes fire at the same instant when the holder releases (real contention, not staggered).
-swipe() { psql -X -q -At -d "$DB" -c "SET ROLE authenticated; SET request.jwt.claim.sub='$1'; SET request.jwt.claim.role='authenticated'; SELECT pg_advisory_lock_shared(777); SELECT public.record_swipe('$2','$3')" >/dev/null 2>&1; }
-export -f swipe; export DB
+swipe() { psql -X -q -At -d "$DB" -c "SET ROLE authenticated; SET request.jwt.claim.sub='$1'; SET request.jwt.claim.role='authenticated'; SELECT pg_advisory_lock_shared($LOCK_KEY); SELECT public.record_swipe('$2','$3')" >/dev/null 2>&1; }
+export -f swipe; export DB LOCK_KEY
 burst() { # reads "uid target kind" lines on stdin, fires them simultaneously
-  psql -X -q -At -d "$DB" -c "SELECT pg_advisory_lock(777); SELECT pg_sleep(4)" >/dev/null 2>&1 &
+  psql -X -q -At -d "$DB" -c "SELECT pg_advisory_lock($LOCK_KEY); SELECT pg_sleep(4)" >/dev/null 2>&1 &
   local holder=$!; sleep 1; local pids=()
   while read -r u t k; do swipe "$u" "$t" "$k" & pids+=($!); done
   wait "${pids[@]}" "$holder"
