@@ -1,8 +1,8 @@
 \set ON_ERROR_STOP on
 -- Task 1D: approved-only photo visibility. Owner g, viewer h.
 INSERT INTO auth.users(id,email) VALUES ('00000000-0000-0000-0000-0000000000f3','g@x'),('00000000-0000-0000-0000-0000000000f4','h@x');
-CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f3', 'G', '1995-01-01', 'man', 'woman', '00000000-0000-0000-0000-0000000000f3/a.jpg');
-CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f4', 'H', '1995-01-01', 'woman', 'man');
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f3', 'Gia', '1995-01-01', 'man', 'woman', '00000000-0000-0000-0000-0000000000f3/a.jpg');
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f4', 'Hana', '1995-01-01', 'woman', 'man');
 
 INSERT INTO storage.objects(id,bucket_id,name) VALUES
  ('aaaaaaaa-0000-0000-0000-000000000002','photos','00000000-0000-0000-0000-0000000000f3/a_t.jpg'),

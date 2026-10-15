@@ -21,9 +21,9 @@ BEGIN
       onboarded = true
   WHERE id = _uid::text;
 END $$;
-CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000a', 'A', '1995-01-01', 'man', 'woman');
-CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000b', 'B', '1996-01-01', 'woman', 'man');
-CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000c', 'C', '1996-01-01', 'woman', 'man');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000a', 'Alex', '1995-01-01', 'man', 'woman');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000b', 'Bea', '1996-01-01', 'woman', 'man');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000c', 'Cara', '1996-01-01', 'woman', 'man');
 CREATE TABLE public.t_results(name text, ok boolean, detail text);
 GRANT ALL ON public.t_results TO PUBLIC;
 CREATE OR REPLACE PROCEDURE public.expect_fail(_name text, _sql text) LANGUAGE plpgsql AS $$
@@ -75,8 +75,8 @@ RESET ROLE;
 UPDATE public.app_settings SET value='8' WHERE key='daily_like_limit';
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
 RESET ROLE; INSERT INTO auth.users(id,email) VALUES ('00000000-0000-0000-0000-00000000000d','d@x'),('00000000-0000-0000-0000-00000000000e','e@x');
-CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000e', 'E', '1996-01-01', 'man', 'woman');
-CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000d', 'D', '1996-01-01', 'woman', 'man');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000e', 'Eli', '1996-01-01', 'man', 'woman');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000d', 'Dee', '1996-01-01', 'woman', 'man');
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
 DO $$ DECLARE r jsonb; BEGIN
   r:=public.record_swipe('00000000-0000-0000-0000-00000000000d','like');
