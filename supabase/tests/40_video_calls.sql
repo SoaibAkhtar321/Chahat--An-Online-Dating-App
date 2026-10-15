@@ -51,7 +51,7 @@ CALL public.expect_fail('duplicate active call is rejected',
 CALL public.expect_fail('invalid call type rejected',
   'SELECT public.create_video_call(''dddddddd-0000-0000-0000-000000000002'', ''screen_share'')');
 CALL public.expect_fail('caller cannot impersonate recipient acceptance',
-  format('SELECT public.transition_video_call(%L, %L)', (SELECT id FROM first_call), 'accept'));
+  $q$SELECT public.transition_video_call((SELECT id FROM first_call), 'accept')$q$);
 RESET ROLE;
 
 SET ROLE authenticated;
@@ -69,7 +69,7 @@ SELECT 'free call receives server-owned 60-second allowance',
   free_seconds_remaining BETWEEN 1 AND 60, coalesce(free_seconds_remaining::text, 'null')
 FROM public.get_my_video_calls() WHERE id = (SELECT id FROM first_call);
 CALL public.expect_fail('decline after accept is invalid',
-  format('SELECT public.transition_video_call(%L, %L)', (SELECT id FROM first_call), 'decline'));
+  $q$SELECT public.transition_video_call((SELECT id FROM first_call), 'decline')$q$);
 RESET ROLE;
 
 SET ROLE authenticated;
