@@ -32,7 +32,9 @@ Stage 4 & Android Rebuild: Real accounts (email auth), profiles, photos, Likes, 
 - Secrets only in server environment variables (never in the app bundle). Expected: auth keys, storage keys, payment service account, video provider key/secret, FCM key, SMS/email keys, webhook signing secrets.
 - Rate limiting on auth, OTP, likes, messages, reports and uploads.
 - Row-level access rules: users read only their own private data; public profile fields only for eligible viewers.
-- Account deletion: remove profile from all views immediately, delete media, keep only legally required records for a defined period; data export on request.
+- Block isolation: enforced at database level across profile RPCs (get_public_profile), chat messages (is_match_member, get_match_messages), matches RLS, and storage objects (chat_folder_member). Automatic database trigger (on_block_cleanup) on public.blocks cascades removal of matches and swipes transactionally upon block insertion.
+- Verification protection: authoritative verification status cannot be self-approved by client; guarded by account_state_guard trigger in database and client-side sanitization.
+- Account deletion: remove profile from all views immediately, purge storage objects via delete-account Edge Function with retryable error boundaries, purge database rows via service_role purge_user_data (including photo_reviews), keep only legally required records for a defined period; data export on request.
 - Backups: daily database backups with point-in-time recovery; storage versioning; tested restore.
 - Legal: Terms, Privacy Policy and Community Guidelines in the app are drafts for legal review (India DPDP Act, IT Rules grievance officer).
 

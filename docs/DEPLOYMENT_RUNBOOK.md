@@ -1,14 +1,14 @@
 # Milo Deployment Runbook
 
 Target Project: `milo-dev` (Ref: `tuptdzbdowqtmbyhazet`)  
-Working Directory: `C:\vibe-swipe-frame (1)`  
-Shell: **Windows PowerShell**
+Working Directory: `<repository-root>`  
+Shell: **Windows PowerShell** (or **Bash** on Linux/macOS)
 
 ---
 
 ## Step 1: Local Pre-flight Verification
 
-Execute all local automated checks and the database regression suite using Docker + WSL.
+Execute all local automated checks and the database regression suite using Docker.
 
 ```powershell
 # 1.1 Root dependencies, linting, and unit tests
@@ -24,7 +24,14 @@ npm run build
 
 # 1.3 Database security and regression suite via scratch PostgreSQL 16
 docker run --name milo-pg -e POSTGRES_PASSWORD=postgres -p 5433:5432 -d postgres:16
-wsl bash -lc 'cd "/mnt/c/vibe-swipe-frame (1)/supabase/tests" && PGHOST=localhost PGPORT=5433 PGUSER=postgres PGPASSWORD=postgres bash run.sh'
+
+# On Windows PowerShell with WSL:
+$wslRepo = wsl wslpath -a (Get-Location).Path
+wsl bash -lc "cd `"$wslRepo/supabase/tests`" && PGHOST=localhost PGPORT=5433 PGUSER=postgres PGPASSWORD=postgres bash run.sh"
+
+# Alternatively, on native Linux / macOS (Bash):
+# cd supabase/tests && PGHOST=localhost PGPORT=5433 PGUSER=postgres PGPASSWORD=postgres bash run.sh
+
 docker rm -f milo-pg
 ```
 
@@ -117,8 +124,11 @@ supabase db push --dry-run
 # 5.5 Apply migrations to remote database (DO NOT use --include-seed)
 supabase db push
 
-# 5.6 Deploy the delete-account Edge Function
+# 5.6 Deploy Edge Functions
+# Note: Ensure SUPABASE_SERVICE_ROLE_KEY and GOOGLE_VISION_API_KEY are configured in remote secrets
 supabase functions deploy delete-account
+supabase functions deploy verify-purchase
+supabase functions deploy moderate-photo
 ```
 
 **Migration Sequence Applied:**
@@ -128,6 +138,16 @@ supabase functions deploy delete-account
 4. `20260101000300_mobile_security_hardening.sql`
 5. `20260101000400_security_followups.sql`
 6. `20260101000500_privacy_and_rate_limits.sql`
+7. `20260101000600_trigger_function_hardening.sql`
+8. `20260101000700_subscription_entitlements_and_like_security.sql`
+9. `20260101000800_photo_visibility_stopgap.sql`
+10. `20260101000900_photo_reviews.sql`
+11. `20260101001000_photo_visibility_approved_only.sql`
+12. `20260101001100_uniform_like_quota.sql`
+13. `20260101001200_daily_like_limit_20.sql`
+14. `20260101001300_critical_security_foundations.sql`
+15. `20260101001400_harden_verification_metadata_guard.sql`
+16. `20260101001500_subscription_orders_and_replay_protection.sql`
 
 ---
 
@@ -136,7 +156,7 @@ supabase functions deploy delete-account
 ### 6.1 Run Verification Queries
 1. Return to the Supabase Dashboard SQL Editor for `tuptdzbdowqtmbyhazet`.
 2. Paste and run the contents of `supabase/verification/post_deploy_checks.sql`.
-3. Verify that all 9 checks return `true` / `all valid` / `none`.
+3. Verify that all 11 checks return `true` / `all valid` / `none`.
 
 ### 6.2 Disposable Account Verification on Live System
 1. Sign up a temporary disposable account through the mobile app.

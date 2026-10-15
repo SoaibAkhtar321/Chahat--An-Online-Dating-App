@@ -5,13 +5,17 @@ export async function blockUser(targetId: string): Promise<boolean> {
     const uid = (await supabase.auth.getUser()).data.user?.id;
     if (!uid) return false;
 
-    // 1. Insert block
-    await supabase.from("blocks").insert({
+    // 1. Insert block (triggers automatic server-side on_block_cleanup of matches/swipes)
+    const { error: blockErr } = await supabase.from("blocks").insert({
       blocker: uid,
       blocked: targetId,
     });
+    if (blockErr) {
+      console.warn("blockUser: block insertion failed", blockErr.message);
+      return false;
+    }
 
-    // 2. Delete match if exists
+    // 2. Client-side match cleanup (defense-in-depth)
     await supabase
       .from("matches")
       .delete()

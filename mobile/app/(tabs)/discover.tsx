@@ -19,6 +19,8 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
 import { FilterModal } from "../../src/components/discovery/FilterModal";
 import { useMilo } from "../../src/context/MiloContext";
+import { hasEntitlement } from "../../src/services/subscription";
+import type { Filters } from "../../src/types";
 
 export default function DiscoverScreen() {
   const { colors: Colors } = useTheme();
@@ -68,6 +70,18 @@ export default function DiscoverScreen() {
   };
 
   const handleUndo = async () => {
+    if (!hasEntitlement(subscription?.tier || "free", "undoPass")) {
+      Alert.alert(
+        "Rewind Pass is Premium",
+        "Undo last swipe is a CHAHAT Premium feature. Upgrade to rewind any accidental passes.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Upgrade", onPress: () => router.push("/premium") },
+        ],
+      );
+      return;
+    }
+
     const ok = await undoPass();
     if (!ok) {
       Alert.alert("Undo Pass", "No recent pass to undo.");
@@ -75,6 +89,18 @@ export default function DiscoverScreen() {
   };
 
   const handleBoost = () => {
+    if (!hasEntitlement(subscription?.tier || "free", "priorityVisibility")) {
+      Alert.alert(
+        "Boost is CHAHAT Plus / VIP",
+        "Priority Visibility & Boost is available with CHAHAT Plus and VIP. Upgrade to jump to top profiles in your area.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Upgrade", onPress: () => router.push("/premium") },
+        ],
+      );
+      return;
+    }
+
     if (isBoosting) {
       Alert.alert(
         "Boost Active",
@@ -241,7 +267,7 @@ export default function DiscoverScreen() {
         visible={filterModalVisible}
         filters={filters}
         onClose={() => setFilterModalVisible(false)}
-        onApply={(newFilters) => {
+        onApply={(newFilters: Filters) => {
           setFilters(newFilters);
           refreshDeck();
         }}
