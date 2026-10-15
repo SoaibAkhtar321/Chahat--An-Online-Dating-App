@@ -1,15 +1,14 @@
 \set ON_ERROR_STOP on
 -- Task 1D: approved-only photo visibility. Owner g, viewer h.
 INSERT INTO auth.users(id,email) VALUES ('00000000-0000-0000-0000-0000000000f3','g@x'),('00000000-0000-0000-0000-0000000000f4','h@x');
-CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f3', 'Gia', '1995-01-01', 'man', 'woman', '00000000-0000-0000-0000-0000000000f3/a.jpg');
-CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f4', 'Hana', '1995-01-01', 'woman', 'man');
-
 INSERT INTO storage.objects(id,bucket_id,name) VALUES
  ('aaaaaaaa-0000-0000-0000-000000000002','photos','00000000-0000-0000-0000-0000000000f3/a_t.jpg'),
  ('aaaaaaaa-0000-0000-0000-000000000003','photos','00000000-0000-0000-0000-0000000000f3/b.jpg'),
  ('aaaaaaaa-0000-0000-0000-000000000004','photos','00000000-0000-0000-0000-0000000000f3/verification/self.jpg');
 UPDATE storage.objects SET owner='00000000-0000-0000-0000-0000000000f3'
 WHERE bucket_id='photos' AND name LIKE '00000000-0000-0000-0000-0000000000f3/%';
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f3', 'Gia', '1995-01-01', 'man', 'woman', '00000000-0000-0000-0000-0000000000f3/a.jpg');
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f4', 'Hana', '1995-01-01', 'woman', 'man');
 
 -- g sets owner-scoped uploaded photos as a client and attempts to forge approval.
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000f3';
