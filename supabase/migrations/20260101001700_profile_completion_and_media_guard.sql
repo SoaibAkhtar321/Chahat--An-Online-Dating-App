@@ -17,18 +17,18 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  IF jsonb_typeof(NEW.photos) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Profile is incomplete or contains unsupported values';
+  END IF;
+
   IF char_length(btrim(NEW.name)) < 2 OR NEW.dob IS NULL
      OR NEW.gender NOT IN ('man', 'woman') OR NEW.seeking NOT IN ('man', 'woman')
      OR char_length(btrim(NEW.city)) < 1 OR char_length(btrim(NEW.bio)) < 15
      OR cardinality(NEW.intents) < 1 OR cardinality(NEW.intents) > 6
      OR cardinality(NEW.interests) < 3 OR cardinality(NEW.interests) > 15
      OR cardinality(NEW.languages) > 16
-     OR jsonb_typeof(NEW.photos) IS DISTINCT FROM 'array'
-     OR CASE
-       WHEN jsonb_typeof(NEW.photos) = 'array'
-         THEN jsonb_array_length(NEW.photos) < 1 OR jsonb_array_length(NEW.photos) > 6
-       ELSE true
-     END THEN
+     OR jsonb_array_length(NEW.photos) < 1
+     OR jsonb_array_length(NEW.photos) > 6 THEN
     RAISE EXCEPTION 'Profile is incomplete or contains unsupported values';
   END IF;
 
