@@ -22,7 +22,7 @@ UPDATE public.profiles SET name='B3',dob='1996-01-01',gender='woman',seeking='ma
 INSERT INTO public.matches (id, user_a, user_b) VALUES
   ('bbbbbbbb-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b2');
 INSERT INTO public.messages (id, match_id, sender, body) VALUES
-  ('mmmmmmmm-0000-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b1', 'hello b2');
+  ('eeeeeeee-0000-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b1', 'hello b2');
 INSERT INTO public.swipes (from_id, to_id, kind) VALUES
   ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000b2', 'like'),
   ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-0000000000b1', 'like');
@@ -77,10 +77,10 @@ CALL public.expect_ok('client can update preference keys',
 RESET ROLE;
 
 -- 8. Legitimate server-side verification via service_role
-SET ROLE service_role;
+SET ROLE service_role; SET request.jwt.claim.role='service_role';
 CALL public.expect_ok('service_role can approve verification and set metadata',
   'UPDATE public.account_state SET data = ''{"ageMin":21,"ageMax":30,"distance":40,"verification":{"status":"approved","verified_at":"2026-01-01T00:00:00Z","reviewer":"admin"}}''::jsonb WHERE user_id = ''00000000-0000-0000-0000-0000000000b2''::uuid');
-RESET ROLE;
+RESET request.jwt.claim.role; RESET ROLE;
 
 -- 9. Verified status cannot be cleared or demoted by client
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000b2';
