@@ -2,12 +2,11 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Image } from "expo-image";
 import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
-import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 
 export default function MatchScreen() {
   const { colors: Colors } = useTheme();
@@ -44,29 +43,18 @@ export default function MatchScreen() {
 
         {/* Overlapping photo cards */}
         <View style={styles.photosWrapper}>
-          {myPhotoUri ? (
-            <Image
-              source={{ uri: myPhotoUri }}
-              style={[styles.photoCard, styles.photoLeft]}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.photoCard, styles.photoLeft, styles.photoPlaceholder]}>
-              <AvatarPlaceholder name={myProfile?.name || "You"} size={90} />
-            </View>
-          )}
-
-          {otherPhotoUri ? (
-            <Image
-              source={{ uri: otherPhotoUri }}
-              style={[styles.photoCard, styles.photoRight]}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.photoCard, styles.photoRight, styles.photoPlaceholder]}>
-              <AvatarPlaceholder name={otherUser.name} size={90} />
-            </View>
-          )}
+          <ProfilePhoto
+            uri={myPhotoUri}
+            name={myProfile?.name || "You"}
+            style={[styles.photoCard, styles.photoLeft]}
+            placeholderSize={90}
+          />
+          <ProfilePhoto
+            uri={otherPhotoUri}
+            name={otherUser.name}
+            style={[styles.photoCard, styles.photoRight]}
+            placeholderSize={90}
+          />
         </View>
       </View>
 

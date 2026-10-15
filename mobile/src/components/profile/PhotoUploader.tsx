@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from "react-native";
 import { Alert } from "../../utils/alert";
-import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { Plus, X, Star, ArrowLeft, ArrowRight } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { PhotoItem } from "../../types";
 import { compressToUnderLimit } from "../../utils/compressImage";
+import { ProfilePhoto } from "./ProfilePhoto";
+import { hasSelectedPhotoUri } from "../../services/profilePolicy";
 
 const { width } = Dimensions.get("window");
 const ITEM_WIDTH = (width - 64) / 3;
@@ -34,11 +35,13 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
   // Compresses the picked image to under 1 MB, then adds it to the list.
   const addPhoto = async (asset: { uri: string; width?: number }, index: number) => {
+    if (hasSelectedPhotoUri(photosRef.current, asset.uri)) return;
     const compressedUri = await compressToUnderLimit(asset.uri, asset.width);
     const current = photosRef.current;
     const newPhoto: PhotoItem = {
       id: `photo_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       uri: compressedUri,
+      sourceUri: asset.uri,
       status: "pending",
       isMain: index === 0,
     };
@@ -96,20 +99,24 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         quality: 0.8,
       });
 
-      console.log("PhotoUploader: picker result", JSON.stringify(result));
-
       if (result.canceled) return;
 
       const asset = result.assets?.[0];
       if (!asset?.uri) {
-        Alert.alert("Photo not added", "The selected photo could not be read. Please try another one.");
+        Alert.alert(
+          "Photo not added",
+          "The selected photo could not be read. Please try another one.",
+        );
         return;
       }
 
       await addPhoto(asset, index);
     } catch (err: any) {
       console.error("PhotoUploader: pickImage failed", err);
-      Alert.alert("Could not add photo", err?.message || "Something went wrong while selecting the photo.");
+      Alert.alert(
+        "Could not add photo",
+        err?.message || "Something went wrong while selecting the photo.",
+      );
     } finally {
       busyRef.current = false;
     }
@@ -138,7 +145,13 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         <View key={index} style={styles.slot}>
           {item ? (
             <View style={styles.photoContainer}>
-              <Image source={{ uri: item.uri }} style={styles.image} contentFit="cover" />
+              <ProfilePhoto
+                uri={item.uri}
+                name="Selected photo"
+                style={styles.image}
+                imageStyle={styles.image}
+                placeholderSize={40}
+              />
 
               {/* Star badge for main photo */}
               {index === 0 && (

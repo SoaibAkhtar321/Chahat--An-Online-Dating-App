@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
   validateDob,
   calculateAge,
   saveProfile,
+  removeUnreferencedProfilePhotos,
   uploadProfilePhoto,
   requestPhotoModeration,
 } from "../../src/services/profile";
@@ -76,6 +77,7 @@ export default function OnboardingScreen() {
   const [customInterest, setCustomInterest] = useState("");
   const [lifestyle, setLifestyle] = useState<Record<string, string>>(profile?.lifestyle || {});
   const [photos, setPhotos] = useState<PhotoItem[]>(profile?.photos || []);
+  const uploadedPhotoCache = useRef(new Map<string, PhotoItem>());
   const [ageMin, setAgeMin] = useState(profile?.ageMin || 21);
   const [ageMax, setAgeMax] = useState(profile?.ageMax || 35);
   const [distance, setDistance] = useState(profile?.distance || 50);
@@ -237,13 +239,21 @@ export default function OnboardingScreen() {
       for (const p of photos) {
         if (p.uri && (p.uri.startsWith("file:") || p.uri.startsWith("blob:") || p.uri.startsWith("data:") || p.uri.startsWith("ph:"))) {
           try {
-            const { path, thumbPath } = await uploadProfilePhoto(user.id, p.id, p.uri);
-            processedPhotos.push({
-              ...p,
-              path,
-              thumbPath,
-              status: "approved",
-            });
+            const cacheKey = `${p.id}:${p.uri}`;
+            const cached = uploadedPhotoCache.current.get(cacheKey);
+            if (cached) {
+              processedPhotos.push(cached);
+            } else {
+              const { path, thumbPath } = await uploadProfilePhoto(user.id, p.id, p.uri);
+              const uploaded = {
+                ...p,
+                path,
+                thumbPath,
+                status: "pending" as const,
+              };
+              uploadedPhotoCache.current.set(cacheKey, uploaded);
+              processedPhotos.push(uploaded);
+            }
           } catch (uploadErr: any) {
             console.error("Failed to upload photo:", p.id, uploadErr);
             Alert.alert(
@@ -286,6 +296,24 @@ export default function OnboardingScreen() {
         return;
       }
 
+      const retainedPaths = new Set(
+        processedPhotos.flatMap((photo) => [photo.path, photo.thumbPath]).filter(Boolean),
+      );
+      const oldPaths = (profile?.photos || []).flatMap((photo) => [photo.path, photo.thumbPath]);
+      const uploadedPaths = [...uploadedPhotoCache.current.values()].flatMap((photo) => [
+        photo.path,
+        photo.thumbPath,
+      ]);
+      const stalePaths = [...oldPaths, ...uploadedPaths].filter(
+        (path): path is string => !!path && !retainedPaths.has(path),
+      );
+      try {
+        await removeUnreferencedProfilePhotos(user.id, stalePaths);
+      } catch (cleanupErr) {
+        console.warn("handleFinish: unused photo cleanup deferred", cleanupErr);
+      }
+      uploadedPhotoCache.current.clear();
+
       // Ask the server to check the new photos (best effort; they stay hidden until approved).
       await Promise.race([
         requestPhotoModeration(),
@@ -297,8 +325,7 @@ export default function OnboardingScreen() {
       try {
         await Promise.race([
           refreshProfile(),
-          new Promise((resolve) => setTimeout(resolve, 8000)),
-        ]);
+          new Promise((resolve) => setTimeout(resolve, 8000))]);
       } catch (refreshErr) {
         console.warn("handleFinish: refreshProfile failed", refreshErr);
       }
@@ -357,7 +384,9 @@ export default function OnboardingScreen() {
         return (
           <View>
             <Text style={styles.stepTitle}>I am a…</Text>
-            <Text style={styles.stepSubtitle}>Chahat connects genuine people looking for meaningful friendship and relationships.</Text>
+            <Text style={styles.stepSubtitle}>
+              Chahat connects genuine people looking for meaningful friendship and relationships.
+            </Text>
             <View style={styles.chipRow}>
               <Chip
                 label="Man"

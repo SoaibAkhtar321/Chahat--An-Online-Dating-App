@@ -159,6 +159,7 @@ supabase functions deploy moderate-photo
 15. `20260101001400_harden_verification_metadata_guard.sql`
 16. `20260101001500_subscription_orders_and_replay_protection.sql`
 17. `20260101001600_google_play_verified_purchase_expiry.sql`
+18. `20260101001700_profile_completion_and_media_guard.sql`
 
 ---
 

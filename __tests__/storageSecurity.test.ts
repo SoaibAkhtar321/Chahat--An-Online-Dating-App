@@ -19,6 +19,7 @@ jest.mock("../mobile/src/services/supabase", () => ({
 import {
   STORAGE_LIMITS,
   checkUploadRateLimit,
+  detectImageMimeType,
   recordUploadEvent,
   resetUploadRateLimiter,
   stripExifAndGps,
@@ -30,6 +31,20 @@ describe("Photo Storage Security & EXIF Sanitization", () => {
   });
 
   describe("EXIF and GPS Metadata Sanitization", () => {
+    it("detects actual supported image formats and rejects unknown bytes", () => {
+      expect(detectImageMimeType(new Uint8Array([0xff, 0xd8, 0xff, 0x01]))).toBe("image/jpeg");
+      expect(
+        detectImageMimeType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+      ).toBe("image/png");
+      expect(detectImageMimeType(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBeUndefined();
+      expect(
+        detectImageMimeType(
+          new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50]),
+        ),
+      ).toBe("image/webp");
+      expect(detectImageMimeType(new Uint8Array([0x00, 0x01, 0x02, 0x03]))).toBeUndefined();
+    });
+
     it("strips APP1 (EXIF / GPS) segment from JPEG image bytes while retaining image data", () => {
       // Construct a mock JPEG with SOI (0xFF, 0xD8), APP1 EXIF segment (0xFF, 0xE1), and SOS (0xFF, 0xDA)
       const exifPayload = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00]; // 'Exif\0\0'

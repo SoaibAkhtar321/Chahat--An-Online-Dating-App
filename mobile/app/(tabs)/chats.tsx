@@ -2,10 +2,10 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Image } from "expo-image";
 import { MessageCircle, PhoneCall } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
 import { Button } from "../../src/components/ui/Button";
 
@@ -70,10 +70,10 @@ export default function ChatsScreen() {
                     }
                     activeOpacity={0.8}
                   >
-                    <Image
-                      source={{ uri: item.otherUser.photos[0] }}
+                    <ProfilePhoto
+                      uri={item.otherUser.photos[0]}
+                      name={item.otherUser.name}
                       style={styles.avatarNew}
-                      contentFit="cover"
                     />
                     <Text style={styles.matchAvatarName} numberOfLines={1}>
                       {item.otherUser.name}
@@ -112,10 +112,10 @@ export default function ChatsScreen() {
                   }
                   activeOpacity={0.7}
                 >
-                  <Image
-                    source={{ uri: item.otherUser.photos[0] }}
+                  <ProfilePhoto
+                    uri={item.otherUser.photos[0]}
+                    name={item.otherUser.name}
                     style={styles.convoAvatar}
-                    contentFit="cover"
                   />
                   <View style={styles.convoDetails}>
                     <View style={styles.convoTopRow}>

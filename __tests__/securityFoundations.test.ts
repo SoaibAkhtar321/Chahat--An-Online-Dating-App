@@ -87,7 +87,7 @@ describe("Phase B: Critical Security Foundations", () => {
         allMigrations.indexOf("20260101001300_critical_security_foundations.sql"),
       );
       expect(allMigrations[allMigrations.length - 1]).toBe(
-        "20260101001600_google_play_verified_purchase_expiry.sql",
+        "20260101001700_profile_completion_and_media_guard.sql",
       );
     });
 
@@ -170,10 +170,8 @@ describe("Phase B: Critical Security Foundations", () => {
     test("saveProfile ignores client-provided 'approved' verification status", async () => {
       await saveProfile({ verificationStatus: "approved" as any }, "user-123");
 
-      expect(mockUpsert).toHaveBeenCalled();
-      const upsertArg = mockUpsert.mock.calls[0][0];
-      // verification status 'approved' must not be written to account_state
-      expect(upsertArg.data.verification).toBeUndefined();
+      // An unsupported status is ignored entirely; it must not trigger an account_state write.
+      expect(mockUpsert).not.toHaveBeenCalled();
     });
 
     test("saveProfile permits legitimate transition to 'pending'", async () => {

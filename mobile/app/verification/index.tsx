@@ -79,7 +79,10 @@ export default function VerificationScreen() {
       try {
         await uploadVerificationSelfie(user.id, selfieUri);
       } catch (uploadErr) {
-        console.warn("Selfie upload warning (proceeding with status update):", uploadErr);
+        Alert.alert(
+          "Selfie upload failed", uploadErr instanceof Error ? uploadErr.message : "Check your connection and try again.",
+        );
+        return;
       }
 
       const res = await saveProfile(

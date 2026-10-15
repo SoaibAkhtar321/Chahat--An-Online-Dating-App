@@ -2,13 +2,12 @@ import React, { useState, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Image } from "expo-image";
 import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
 import { Alert } from "../../src/utils/alert";
-import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 
 export default function CallScreen() {
   const { colors: Colors } = useTheme();
@@ -81,13 +80,12 @@ export default function CallScreen() {
       </View>
 
       <View style={styles.videoArea}>
-        {partnerPhoto ? (
-          <Image source={{ uri: partnerPhoto }} style={styles.partnerPhoto} contentFit="cover" />
-        ) : (
-          <View style={[styles.partnerPhoto, { backgroundColor: "#1e1e24", alignItems: "center", justifyContent: "center" }]}>
-            <AvatarPlaceholder name={partner.name} size={120} />
-          </View>
-        )}
+        <ProfilePhoto
+          uri={partnerPhoto}
+          name={partner.name}
+          style={styles.partnerPhoto}
+          placeholderSize={120}
+        />
         {videoOff && (
           <View style={styles.videoDisabledOverlay}>
             <Text style={styles.disabledText}>Camera turned off</Text>
