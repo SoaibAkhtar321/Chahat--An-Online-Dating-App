@@ -172,6 +172,23 @@ describe("real Expo push registration", () => {
     );
   });
 
+  it("restores the prior server token if persisting a rotated token securely fails", async () => {
+    const previousToken = "ExponentPushToken[32345678-1234-1234-1234-123456789abc]";
+    const nextToken = "ExponentPushToken[12345678-1234-1234-1234-123456789abc]";
+    mockSecureGet.mockResolvedValue(previousToken);
+    mockSecureSet.mockRejectedValueOnce(new Error("secure storage unavailable"));
+
+    await expect(registerPushNotificationToken("user-1")).resolves.toMatchObject({
+      status: "error",
+      error: "secure storage unavailable",
+    });
+    expect(mockRpc).toHaveBeenNthCalledWith(
+      2,
+      "register_push_device",
+      expect.objectContaining({ _token: previousToken, _previous_token: nextToken }),
+    );
+  });
+
   it("rejects a mismatched auth identity and malformed provider token", async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: "other-user" } },

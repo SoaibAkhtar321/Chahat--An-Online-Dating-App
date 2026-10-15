@@ -2,19 +2,40 @@ const mockInvoke = jest.fn();
 const mockSignOut = jest.fn();
 const mockRpc = jest.fn();
 const mockFrom = jest.fn();
+const mockClearNotificationState = jest.fn();
 
-jest.mock("../mobile/src/services/supabase", () => ({
+jest.resetModules();
+
+jest.doMock("../mobile/node_modules/expo-linking", () => ({
+  createURL: (path: string, options?: { queryParams?: Record<string, string> }) => {
+    const query = options?.queryParams
+      ? `?${new URLSearchParams(options.queryParams).toString()}`
+      : "";
+    return `milo://${path}${query}`;
+  },
+}));
+
+jest.doMock("../mobile/src/services/notifications", () => ({
+  clearNotificationState: (...args: any[]) => mockClearNotificationState(...args),
+  unregisterPushNotificationToken: jest.fn(),
+}));
+
+jest.doMock("../mobile/src/services/supabase", () => ({
   supabase: {
     functions: { invoke: (...a: any[]) => mockInvoke(...a) },
     rpc: (...a: any[]) => mockRpc(...a),
     from: (...a: any[]) => mockFrom(...a),
-    auth: { signOut: (...a: any[]) => mockSignOut(...a) },
+    auth: {
+      getUser: jest.fn().mockResolvedValue({ data: { user: { id: "account-1" } }, error: null }),
+      signOut: (...a: any[]) => mockSignOut(...a),
+    },
   },
   isSupabaseConfigured: () => true,
   getConfigStatus: () => ({ configured: true, missing: [] }),
 }));
 
-import { deleteUserAccount } from "../mobile/src/services/auth";
+const { deleteUserAccount } =
+  require("../mobile/src/services/auth") as typeof import("../mobile/src/services/auth");
 
 /** Mimics supabase-js FunctionsHttpError: the Response is on `error.context`. */
 function httpError(status: number, body?: unknown) {
@@ -36,6 +57,8 @@ beforeEach(() => {
   mockSignOut.mockReset();
   mockRpc.mockReset();
   mockFrom.mockReset();
+  mockClearNotificationState.mockReset();
+  mockClearNotificationState.mockResolvedValue(undefined);
   mockSignOut.mockResolvedValue({ error: null });
 });
 
@@ -112,7 +135,10 @@ describe("deleteUserAccount (delete-account Edge Function)", () => {
   it("reports a connectivity problem when the request could not be sent", async () => {
     mockInvoke.mockResolvedValue({
       data: null,
-      error: { name: "FunctionsFetchError", message: "Failed to send a request to the Edge Function" },
+      error: {
+        name: "FunctionsFetchError",
+        message: "Failed to send a request to the Edge Function",
+      },
     });
     const res = await deleteUserAccount();
     expect(res.success).toBe(false);

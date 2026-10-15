@@ -79,8 +79,12 @@ export default function VerificationScreen() {
       try {
         await uploadVerificationSelfie(user.id, selfieUri);
       } catch (uploadErr) {
+        console.error("Selfie upload failed:", uploadErr);
         Alert.alert(
-          "Selfie upload failed", uploadErr instanceof Error ? uploadErr.message : "Check your connection and try again.",
+          "Upload failed",
+          uploadErr instanceof Error
+            ? uploadErr.message
+            : "Your selfie could not be uploaded. Check your connection and try again.",
         );
         return;
       }
@@ -98,11 +102,13 @@ export default function VerificationScreen() {
       }
 
       await refreshProfile();
-      pushNotificationToInbox({
+      void pushNotificationToInbox(user.id, {
         kind: "safety",
         title: "Verification Under Review",
         text: "Your selfie photo has been submitted. Our team will review your badge shortly.",
-      }).catch(() => {});
+      }).catch((notificationError) => {
+        console.warn("Could not add verification notice to the inbox:", notificationError);
+      });
 
       Alert.alert("Verification Submitted", "Your selfie has been submitted for review.");
     } finally {
@@ -175,74 +181,75 @@ export default function VerificationScreen() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    padding: 24,
-    flex: 1,
-    justifyContent: "center",
-  },
-  statusBox: {
-    alignItems: "center",
-    backgroundColor: Colors.card,
-    padding: 32,
-    borderRadius: Radii.xxl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  statusTitle: {
-    fontSize: Typography.sizes.xl,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginTop: 16,
-  },
-  statusDesc: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20,
-  },
-  box: {
-    alignItems: "center",
-    backgroundColor: Colors.card,
-    padding: 24,
-    borderRadius: Radii.xxl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  title: {
-    fontSize: Typography.sizes.xl,
-    fontWeight: Typography.weights.bold,
-    fontFamily: Typography.fontDisplay,
-    color: Colors.foreground,
-    marginTop: 12,
-  },
-  subtitle: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  selfieWrapper: {
-    width: 140,
-    height: 140,
-    borderRadius: Radii.full,
-    overflow: "hidden",
-    borderWidth: 3,
-    borderColor: Colors.primary,
-    marginBottom: 20,
-  },
-  selfie: {
-    width: "100%",
-    height: "100%",
-  },
-  actionBtn: {
-    width: "100%",
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    content: {
+      padding: 24,
+      flex: 1,
+      justifyContent: "center",
+    },
+    statusBox: {
+      alignItems: "center",
+      backgroundColor: Colors.card,
+      padding: 32,
+      borderRadius: Radii.xxl,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    statusTitle: {
+      fontSize: Typography.sizes.xl,
+      fontWeight: Typography.weights.bold,
+      color: Colors.foreground,
+      marginTop: 16,
+    },
+    statusDesc: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+      textAlign: "center",
+      marginTop: 8,
+      lineHeight: 20,
+    },
+    box: {
+      alignItems: "center",
+      backgroundColor: Colors.card,
+      padding: 24,
+      borderRadius: Radii.xxl,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    title: {
+      fontSize: Typography.sizes.xl,
+      fontWeight: Typography.weights.bold,
+      fontFamily: Typography.fontDisplay,
+      color: Colors.foreground,
+      marginTop: 12,
+    },
+    subtitle: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+      textAlign: "center",
+      marginTop: 8,
+      lineHeight: 20,
+      marginBottom: 20,
+    },
+    selfieWrapper: {
+      width: 140,
+      height: 140,
+      borderRadius: Radii.full,
+      overflow: "hidden",
+      borderWidth: 3,
+      borderColor: Colors.primary,
+      marginBottom: 20,
+    },
+    selfie: {
+      width: "100%",
+      height: "100%",
+    },
+    actionBtn: {
+      width: "100%",
+    },
+  });

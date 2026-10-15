@@ -98,4 +98,10 @@ INSERT INTO public.t_results SELECT 'purge_user_data removes profile', count(*)=
 INSERT INTO public.t_results SELECT 'purge_user_data removes account_state', count(*)=0, count(*)::text FROM public.account_state WHERE user_id='00000000-0000-0000-0000-0000000000b3'::uuid;
 INSERT INTO public.t_results SELECT 'purge_user_data removes matches', count(*)=0, count(*)::text FROM public.matches WHERE user_a='00000000-0000-0000-0000-0000000000b3' OR user_b='00000000-0000-0000-0000-0000000000b3';
 INSERT INTO public.t_results SELECT 'purge_user_data removes swipes', count(*)=0, count(*)::text FROM public.swipes WHERE from_id='00000000-0000-0000-0000-0000000000b3' OR to_id='00000000-0000-0000-0000-0000000000b3';
-INSERT INTO public.t_results SELECT 'purge_user_data writes admin_audit row', count(*)=1, count(*)::text FROM public.admin_audit WHERE target='00000000-0000-0000-0000-0000000000b3' AND action='account_self_deleted';
+INSERT INTO public.t_results
+SELECT 'purge_user_data writes anonymized admin_audit row',
+  count(*) = 1,
+  count(*)::text
+FROM public.admin_audit
+WHERE target = 'deleted:' || md5('00000000-0000-0000-0000-0000000000b3')
+  AND action = 'account_self_deleted';

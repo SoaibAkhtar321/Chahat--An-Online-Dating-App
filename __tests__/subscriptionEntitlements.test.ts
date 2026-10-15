@@ -50,7 +50,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
   const evaluateSwipeQuota = (
     activeTier: PlanTier,
     likesUsedToday: number,
-    dailyLimit: number = 10,
+    dailyLimit: number = 20,
   ): { allowed: boolean; likesRemaining: number } => {
     // MVP: no paid-tier bypass. Every tier follows the same configured daily limit.
     void activeTier;
@@ -116,38 +116,38 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
     });
   });
 
-  describe("2. Free Daily Likes Limit (T6 Strict 10/day Enforcement)", () => {
-    test("free users are allowed to swipe up to 10 times per IST day", () => {
-      const result = evaluateSwipeQuota("free", 4, 10);
+  describe("2. Daily like limit follows the server setting", () => {
+    test("free users are allowed up to the configured 20 likes per IST day", () => {
+      const result = evaluateSwipeQuota("free", 4, 20);
       expect(result.allowed).toBe(true);
-      expect(result.likesRemaining).toBe(6);
+      expect(result.likesRemaining).toBe(16);
     });
 
-    test("free users are strictly blocked on the 10th like limit", () => {
-      const result = evaluateSwipeQuota("free", 10, 10);
+    test("free users are blocked after the configured daily limit", () => {
+      const result = evaluateSwipeQuota("free", 20, 20);
       expect(result.allowed).toBe(false);
       expect(result.likesRemaining).toBe(0);
     });
 
-    test("free users attempting 11th swipe remain blocked at 0", () => {
-      const result = evaluateSwipeQuota("free", 11, 10);
+    test("free users attempting another swipe remain blocked at 0", () => {
+      const result = evaluateSwipeQuota("free", 21, 20);
       expect(result.allowed).toBe(false);
       expect(result.likesRemaining).toBe(0);
     });
 
     test("paid tiers get no like-quota bypass in the MVP", () => {
-      const premiumResult = evaluateSwipeQuota("premium", 10, 10);
+      const premiumResult = evaluateSwipeQuota("premium", 20, 20);
       expect(premiumResult.allowed).toBe(false);
       expect(premiumResult.likesRemaining).toBe(0);
 
-      const vipResult = evaluateSwipeQuota("vip", 120, 10);
+      const vipResult = evaluateSwipeQuota("vip", 120, 20);
       expect(vipResult.allowed).toBe(false);
       expect(vipResult.likesRemaining).toBe(0);
 
-      expect(evaluateSwipeQuota("plus", 3, 10).likesRemaining).toBe(7);
+      expect(evaluateSwipeQuota("plus", 3, 20).likesRemaining).toBe(17);
     });
 
-    test("expired paid users immediately fall back to 10-like limit", () => {
+    test("expired paid users immediately follow the configured like limit", () => {
       const serverTier = resolveActiveServerTier({
         tier: "premium",
         status: "active",
@@ -155,7 +155,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       });
       expect(serverTier).toBe("free");
 
-      const quotaResult = evaluateSwipeQuota(serverTier, 10, 10);
+      const quotaResult = evaluateSwipeQuota(serverTier, 20, 20);
       expect(quotaResult.allowed).toBe(false);
       expect(quotaResult.likesRemaining).toBe(0);
     });
@@ -277,8 +277,8 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       ]);
     });
 
-    test("free plan explicitly states 20 daily likes in feature list", () => {
-      const likeFeature = PLANS.free.features.find((f) => f.includes("20 Likes"));
+    test("free plan describes the server-configured daily limit", () => {
+      const likeFeature = PLANS.free.features.find((f) => f.includes("server-configured"));
       expect(likeFeature).toBeDefined();
     });
   });

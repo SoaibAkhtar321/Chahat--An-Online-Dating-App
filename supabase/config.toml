@@ -9,6 +9,9 @@ sql_paths = ["./seed.sql"]
 [functions.delete-account]
 verify_jwt = true
 
+[functions.verify-purchase]
+verify_jwt = true
+
 [functions.moderate-photo]
 verify_jwt = true
 
@@ -37,9 +40,9 @@ password_requirements = "letters_digits"
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
-# Deep-link scheme of the Expo app (mobile/app.json "scheme"). Review before any remote push.
+# Deep-link URLs of the Expo app (mobile/app.json "scheme"). Review before any remote push.
 site_url = "milo://"
-additional_redirect_urls = ["milo://"]
+additional_redirect_urls = ["milo://", "milo://callback"]
 
 [auth.email]
 enable_signup = true

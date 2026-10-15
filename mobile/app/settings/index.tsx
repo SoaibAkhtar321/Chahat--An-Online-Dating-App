@@ -41,17 +41,22 @@ export default function SettingsScreen() {
   const [notifLikes, setNotifLikes] = useState(true);
 
   React.useEffect(() => {
-    getNotificationPreferences()
+    if (!user?.id) return;
+    getNotificationPreferences(user.id)
       .then((prefs) => {
         setNotifMatches(prefs.matches);
         setNotifMessages(prefs.messages);
         setNotifLikes(prefs.likes);
       })
       .catch((error) => Alert.alert("Notifications unavailable", error.message));
-  }, []);
+  }, [user?.id]);
 
   const updateNotificationPreferences = async (next: NotificationPreferences) => {
-    const result = await saveNotificationPreferences(next);
+    if (!user?.id) {
+      Alert.alert("Sign in required", "Sign in to update notification preferences.");
+      return false;
+    }
+    const result = await saveNotificationPreferences(user.id, next);
     if (!result.success) {
       Alert.alert("Could not save setting", result.error || "Please try again.");
       return false;
@@ -77,23 +82,41 @@ export default function SettingsScreen() {
   };
 
   const handleToggleNotifMatches = async (val: boolean) => {
-    if (await updateNotificationPreferences({ matches: val, messages: notifMessages, likes: notifLikes })) {
+    if (
+      await updateNotificationPreferences({
+        matches: val,
+        messages: notifMessages,
+        likes: notifLikes,
+      })
+    ) {
       setNotifMatches(val);
-      await registerAfterEnable(val);
+      if (val) await registerAfterEnable(true);
     }
   };
 
   const handleToggleNotifMessages = async (val: boolean) => {
-    if (await updateNotificationPreferences({ matches: notifMatches, messages: val, likes: notifLikes })) {
+    if (
+      await updateNotificationPreferences({
+        matches: notifMatches,
+        messages: val,
+        likes: notifLikes,
+      })
+    ) {
       setNotifMessages(val);
-      await registerAfterEnable(val);
+      if (val) await registerAfterEnable(true);
     }
   };
 
   const handleToggleNotifLikes = async (val: boolean) => {
-    if (await updateNotificationPreferences({ matches: notifMatches, messages: notifMessages, likes: val })) {
+    if (
+      await updateNotificationPreferences({
+        matches: notifMatches,
+        messages: notifMessages,
+        likes: val,
+      })
+    ) {
       setNotifLikes(val);
-      await registerAfterEnable(val);
+      if (val) await registerAfterEnable(true);
     }
   };
 
@@ -119,8 +142,7 @@ export default function SettingsScreen() {
         setDeleteConfirmationText("");
         Alert.alert(
           "Account deleted",
-          "Your account and data have been removed." +
-            (res.warning ? `\n\n${res.warning}` : ""),
+          "Your account and data have been removed." + (res.warning ? `\n\n${res.warning}` : ""),
         );
         router.replace("/(auth)/welcome");
       },
@@ -182,7 +204,10 @@ export default function SettingsScreen() {
                     <Text
                       style={[
                         styles.themeOptionText,
-                        isActive && { color: colors.primaryForeground, fontWeight: Typography.weights.bold },
+                        isActive && {
+                          color: colors.primaryForeground,
+                          fontWeight: Typography.weights.bold,
+                        },
                       ]}
                     >
                       {label}
@@ -229,9 +254,21 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>NOTIFICATIONS</Text>
           <View style={styles.card}>
-            <Toggle label="New matches" value={notifMatches} onValueChange={handleToggleNotifMatches} />
-            <Toggle label="New messages" value={notifMessages} onValueChange={handleToggleNotifMessages} />
-            <Toggle label="Likes received" value={notifLikes} onValueChange={handleToggleNotifLikes} />
+            <Toggle
+              label="New matches"
+              value={notifMatches}
+              onValueChange={handleToggleNotifMatches}
+            />
+            <Toggle
+              label="New messages"
+              value={notifMessages}
+              onValueChange={handleToggleNotifMessages}
+            />
+            <Toggle
+              label="Likes received"
+              value={notifLikes}
+              onValueChange={handleToggleNotifLikes}
+            />
             <TouchableOpacity
               style={styles.navRow}
               onPress={() => openNotificationSettings()}
@@ -310,8 +347,17 @@ export default function SettingsScreen() {
         danger
         onConfirm={async () => {
           setLogoutVisible(false);
-          await signOut();
-          router.replace("/(auth)/welcome");
+          try {
+            await signOut();
+            router.replace("/(auth)/welcome");
+          } catch (error) {
+            Alert.alert(
+              "Could not sign out securely",
+              error instanceof Error
+                ? error.message
+                : "The device notification token could not be removed. Retry when connected.",
+            );
+          }
         }}
         onCancel={() => setLogoutVisible(false)}
       />
@@ -353,92 +399,93 @@ export default function SettingsScreen() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    letterSpacing: 1,
-    marginBottom: 8,
-    paddingLeft: 4,
-  },
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: Radii.xl,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.card,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  navRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 15,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  rowLabel: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.medium,
-    color: Colors.foreground,
-  },
-  rowValue: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-  },
-  actionSection: {
-    marginTop: 8,
-    gap: 16,
-  },
-  deleteBtn: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  deleteText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
-    color: Colors.destructive,
-  },
-  themeRow: {
-    flexDirection: "row",
-    padding: 12,
-    gap: 8,
-  },
-  themeOptionBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.secondary,
-  },
-  themeOptionText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.foreground,
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    content: {
+      padding: 20,
+      paddingBottom: 40,
+    },
+    section: {
+      marginBottom: 24,
+    },
+    sectionHeader: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.bold,
+      color: Colors.mutedForeground,
+      letterSpacing: 1,
+      marginBottom: 8,
+      paddingLeft: 4,
+    },
+    card: {
+      backgroundColor: Colors.card,
+      borderRadius: Radii.xl,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: Colors.border,
+      ...Shadows.card,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    navRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 15,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    rowLabel: {
+      fontSize: Typography.sizes.base,
+      fontWeight: Typography.weights.medium,
+      color: Colors.foreground,
+    },
+    rowValue: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+    },
+    actionSection: {
+      marginTop: 8,
+      gap: 16,
+    },
+    deleteBtn: {
+      alignItems: "center",
+      paddingVertical: 12,
+    },
+    deleteText: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.bold,
+      color: Colors.destructive,
+    },
+    themeRow: {
+      flexDirection: "row",
+      padding: 12,
+      gap: 8,
+    },
+    themeOptionBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: Radii.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      backgroundColor: Colors.secondary,
+    },
+    themeOptionText: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.medium,
+      color: Colors.foreground,
+    },
+  });

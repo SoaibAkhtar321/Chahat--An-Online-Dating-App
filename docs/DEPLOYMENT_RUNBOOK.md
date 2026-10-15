@@ -1,4 +1,4 @@
-# Milo Deployment Runbook
+# Chahat Deployment Runbook
 
 Target Project: `milo-dev` (Ref: `tuptdzbdowqtmbyhazet`)  
 Working Directory: `<repository-root>`  
@@ -66,6 +66,10 @@ supabase functions serve delete-account --no-verify-jwt
 2. Trigger account deletion via the app UI (Settings > Delete Account > Type `DELETE`).
 3. Interrupt the process or simulate partial failure (e.g., stop the function after storage deletion).
 4. Re-invoke deletion and verify it completes idempotently and removes the Auth user and database rows.
+
+The lifecycle migration marks the authenticated profile suspended before removing media, then purges
+account data and deletes the Auth user last. It retains provider transaction evidence with the Auth
+foreign-key identity removed. The disposable SQL suite must be run after applying all migrations.
 
 ---
 
@@ -143,11 +147,31 @@ supabase db push
 # replays are rejected.
 # Also configure SUPABASE_SERVICE_ROLE_KEY and GOOGLE_VISION_API_KEY as remote secrets.
 supabase functions deploy delete-account
+# Billing stays disabled in app builds by default; configure provider credentials before enabling it.
 supabase functions deploy verify-purchase
 supabase functions deploy google-play-notifications
 supabase functions deploy moderate-photo
 supabase functions deploy dispatch-push --no-verify-jwt
 ```
+
+### Android production prerequisites
+
+- Preserve Expo project ID `d40a4e1f-fbf8-4b44-93af-7c4e1fe39b8a`, owner `chahat-org`, scheme `milo`,
+  and Android package `com.milo.dating`. Configure production EAS environment values for
+  `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; never place a service-role key
+  in an `EXPO_PUBLIC_*` variable.
+- The preview profile is deliberately connected to the `milo-dev` Supabase project. Production builds
+  use the EAS `production` environment and must not inherit preview credentials.
+- Google Play billing is disabled by default (`EXPO_PUBLIC_FEATURE_BILLING` must be explicitly set to
+  `true`). Native billing and the authoritative Google Play verifier are implemented, but not
+  production-verified. Configure the Play Console products and verifier before enabling any purchase
+  flow. Displayed prices are reference prices unless loaded from Google Play.
+- EAS submission references `google-play-service-account.json`; provision that credential through the
+  approved EAS/Play setup and keep the JSON out of Git. The submit profile currently targets the
+  internal track; review the intended track before submission.
+- Add `milo://callback` to Supabase Auth's hosted redirect allowlist and verify the email templates
+  before changing hosted settings. `supabase/config.toml` affects only the local stack unless explicitly
+  pushed; this runbook does not authorize a config push.
 
 **Migration Sequence Applied:**
 
@@ -173,6 +197,7 @@ supabase functions deploy dispatch-push --no-verify-jwt
 20. `20260101001900_location_discovery.sql`
 21. `20260101002000_video_call_lifecycle.sql`
 22. `20260101002100_google_play_verification_hardening.sql`
+23. `20260101002200_lifecycle_entitlements_release.sql`
 
 ---
 

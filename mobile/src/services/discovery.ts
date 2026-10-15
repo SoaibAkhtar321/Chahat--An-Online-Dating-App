@@ -197,9 +197,7 @@ function filterDemoProfiles(filters?: import("../types").Filters): Profile[] {
 
 function formatProfileRow(r: any, signed: Record<string, string>): Profile {
   const photosArray = Array.isArray(r.photos)
-    ? r.photos
-        .map((p: any) => (p.path ? signed[p.path] || "" : ""))
-        .filter(Boolean)
+    ? r.photos.map((p: any) => (p.path ? signed[p.path] || "" : "")).filter(Boolean)
     : [];
 
   return {
@@ -229,6 +227,7 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
 export async function submitSwipe(
   toUserId: string,
   kind: "like" | "pass" | "priority",
+  currentUserId: string,
 ): Promise<SwipeResponse> {
   try {
     const { data, error } = await supabase.rpc("record_swipe", {
@@ -246,7 +245,7 @@ export async function submitSwipe(
     }
 
     if (data.is_match) {
-      pushNotificationToInbox({
+      pushNotificationToInbox(currentUserId, {
         kind: "match",
         title: "New Match!",
         text: "You and a new connection liked each other. Start a conversation!",
@@ -277,7 +276,7 @@ export async function submitSwipe(
 export async function undoLastPass(toUserId: string): Promise<boolean> {
   try {
     if (!isSupabaseConfigured()) {
-      return true; // Local preview mock
+      return false;
     }
     const { data, error } = await supabase.rpc("undo_swipe_pass", {
       _target_id: toUserId,

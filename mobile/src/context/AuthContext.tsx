@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import * as Notifications from "expo-notifications";
 import { supabase } from "../services/supabase";
 import { fetchMyProfile } from "../services/profile";
 import {
+  clearNotificationState,
   registerPushNotificationToken,
   unregisterPushNotificationToken,
 } from "../services/notifications";
@@ -37,136 +38,168 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<MeProfile | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [profileError, setProfileError] = useState<boolean>(false);
-  const profileLoadId = useRef(0);
+  const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState(false);
   const activeUserId = useRef<string | null>(null);
+  const profileRequest = useRef(0);
   const authEventVersion = useRef(0);
 
-  const loadUserProfile = async (currentUser: User) => {
-    const requestId = ++profileLoadId.current;
+  const loadUserProfile = useCallback(async (currentUser: User, request: number) => {
     try {
-      const prof = await fetchMyProfile(currentUser.id, currentUser.email || "");
-      if (requestId !== profileLoadId.current || activeUserId.current !== currentUser.id) return;
-      setProfile(prof);
+      const currentProfile = await fetchMyProfile(currentUser.id, currentUser.email || "");
+      if (profileRequest.current !== request || activeUserId.current !== currentUser.id) return;
+      setProfile(currentProfile);
       setProfileError(false);
       void registerPushNotificationToken(currentUser.id).then((result) => {
         if (result.status === "error") console.warn("Push registration failed:", result.error);
       });
-    } catch (e) {
-      if (requestId !== profileLoadId.current || activeUserId.current !== currentUser.id) return;
-      // Do NOT treat a failed load as "not onboarded": keep profile null and flag the error instead.
-      console.error("Failed to load profile", e);
+    } catch (error) {
+      if (profileRequest.current !== request || activeUserId.current !== currentUser.id) return;
+      console.error("Failed to load profile", error);
       setProfile(null);
       setProfileError(true);
     } finally {
-      if (requestId === profileLoadId.current && activeUserId.current === currentUser.id) {
+      if (profileRequest.current === request && activeUserId.current === currentUser.id) {
         setLoading(false);
       }
     }
-  };
+  }, []);
 
-  const refreshProfile = async () => {
-    const { data, error } = await supabase.auth.getUser();
+  const refreshProfile = useCallback(async () => {
+    const eventVersion = authEventVersion.current;
+    const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
-    const current = data.user;
-    if (!current) throw new Error("A signed-in account is required to refresh your profile.");
-    activeUserId.current = current.id;
-    setUser(current);
-    setLoading(true);
-    await loadUserProfile(current);
-  };
+    if (authEventVersion.current !== eventVersion) return;
 
-  const handleSignOut = async () => {
-    if (user) {
-      try {
-        await unregisterPushNotificationToken(user.id);
-      } catch (err) {
-        console.warn("Could not unregister push token before sign out:", err);
-      }
+    const currentUser = data.session?.user;
+    if (!currentUser) {
+      profileRequest.current += 1;
+      activeUserId.current = null;
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setProfileError(false);
+      setLoading(false);
+      return;
     }
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    profileLoadId.current += 1;
-    activeUserId.current = null;
-    setSession(null);
-    setUser(null);
+
+    const request = ++profileRequest.current;
+    activeUserId.current = currentUser.id;
+    setSession(data.session);
+    setUser(currentUser);
     setProfile(null);
-  };
+    setProfileError(false);
+    setLoading(true);
+    await loadUserProfile(currentUser, request);
+  }, [loadUserProfile]);
 
-  useEffect(() => {
-    const initialEventVersion = authEventVersion.current;
-    // Initial session load
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        if (authEventVersion.current !== initialEventVersion) return;
-        activeUserId.current = session?.user?.id ?? null;
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          void loadUserProfile(session.user);
-        } else {
-          setLoading(false);
-        }
-      })
-      .catch((e) => {
-        if (authEventVersion.current !== initialEventVersion) return;
-        // Never leave the app on the startup spinner if session restore fails
-        console.error("Failed to restore session", e);
-        setProfileError(true);
-        setLoading(false);
-      });
+  const signOut = useCallback(async () => {
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const userId = data.session?.user.id ?? activeUserId.current;
 
-    // Listen to auth events
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      authEventVersion.current += 1;
-      const previousUserId = activeUserId.current;
-      const nextUserId = session?.user.id ?? null;
-      setSession(session);
-      setUser(session?.user ?? null);
-      activeUserId.current = nextUserId;
-      if (previousUserId && previousUserId !== nextUserId) {
-        void unregisterPushNotificationToken(previousUserId).catch((err) =>
-          console.warn("Could not unregister prior account's push token:", err),
+    if (userId) {
+      const tokenResult = await unregisterPushNotificationToken(userId);
+      if (!tokenResult.success) {
+        throw new Error(`Could not securely sign out: ${tokenResult.error}`);
+      }
+    }
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      const { error: localError } = await supabase.auth.signOut({ scope: "local" });
+      if (localError) {
+        throw new Error(
+          `Sign-out failed: ${error.message}; local cleanup failed: ${localError.message}`,
         );
       }
-      if (!session?.user) {
-        profileLoadId.current += 1;
+      throw new Error(
+        `Signed out on this device, but server session revocation failed: ${error.message}`,
+      );
+    }
+
+    if (userId) {
+      try {
+        await clearNotificationState(userId);
+      } catch (cleanupError) {
+        console.error("Could not clear account notification cache:", cleanupError);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const initialEventVersion = authEventVersion.current;
+
+    const applySession = (nextSession: Session | null, event: string) => {
+      const previousUserId = activeUserId.current;
+      const nextUser = nextSession?.user ?? null;
+      const nextUserId = nextUser?.id ?? null;
+      const request = ++profileRequest.current;
+      activeUserId.current = nextUserId;
+      setSession(nextSession);
+      setUser(nextUser);
+
+      if (previousUserId && previousUserId !== nextUserId) {
+        void clearNotificationState(previousUserId).catch((error) => {
+          console.error("Could not clear previous account notification cache:", error);
+        });
+      }
+
+      if (!nextUser) {
         setProfile(null);
         setProfileError(false);
         setLoading(false);
         return;
       }
-      if (previousUserId !== nextUserId) {
-        profileLoadId.current += 1;
-        activeUserId.current = session.user.id;
-        setProfile(null);
-        setProfileError(false);
-      }
-      // Token refreshes don't need a reload. On sign-in keep `loading` true until the profile
-      // is fetched, otherwise the router sees profile=null and sends a returning user to onboarding.
+
       if (event === "TOKEN_REFRESHED" && previousUserId === nextUserId) return;
+
+      setProfile(null);
+      setProfileError(false);
       setLoading(true);
-      const u = session.user;
-      // Defer: calling supabase inside this callback can deadlock the auth client.
       setTimeout(() => {
-        void loadUserProfile(u);
+        if (mounted) void loadUserProfile(nextUser, request);
       }, 0);
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      authEventVersion.current += 1;
+      applySession(nextSession, event);
     });
 
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (!mounted || authEventVersion.current !== initialEventVersion) return;
+        if (error) {
+          console.error("Failed to restore session", error);
+          setLoading(false);
+          setProfileError(true);
+          return;
+        }
+        applySession(data.session, "INITIAL_SESSION");
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        console.error("Failed to restore session", error);
+        setLoading(false);
+        setProfileError(true);
+      });
+
     return () => {
-      profileLoadId.current += 1;
+      mounted = false;
+      profileRequest.current += 1;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [loadUserProfile]);
 
   useEffect(() => {
     if (!user) return;
     const subscription = Notifications.addPushTokenListener(() => {
-      registerPushNotificationToken(user.id).then((result) => {
+      void registerPushNotificationToken(user.id).then((result) => {
         if (result.status === "error") console.warn("Push token refresh failed:", result.error);
       });
     });
@@ -186,7 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoggedIn: !!user,
         isOnboarded,
         refreshProfile,
-        signOut: handleSignOut,
+        signOut,
       }}
     >
       {children}

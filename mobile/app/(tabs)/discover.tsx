@@ -35,6 +35,7 @@ export default function DiscoverScreen() {
     currentProfile,
     deck,
     likesRemaining,
+    dailyLikeLimit,
     lastPassedId,
     filters,
     loadingDeck,
@@ -109,7 +110,9 @@ export default function DiscoverScreen() {
               );
             } else if (result.status !== "unsupported") {
               Alert.alert(
-                result.status === "services_disabled" ? "Location services are off" : "Location unavailable",
+                result.status === "services_disabled"
+                  ? "Location services are off"
+                  : "Location unavailable",
                 result.status === "services_disabled"
                   ? "Turn on device location services and try again."
                   : result.status === "error"
@@ -133,7 +136,7 @@ export default function DiscoverScreen() {
     if (res.error === "daily_like_limit_reached") {
       Alert.alert(
         "Out of likes",
-        "You've reached your free daily like limit. Daily likes reset at midnight IST.",
+        `You've reached the daily like limit of ${dailyLikeLimit ?? "configured"} likes. Daily likes reset at midnight IST.`,
       );
       return;
     }
@@ -185,20 +188,19 @@ export default function DiscoverScreen() {
       );
       return;
     }
-    triggerBoost();
-    Alert.alert(
-      "Boost Activated!",
-      "Your profile will be highlighted to more people for 30 minutes.",
-    );
+    if (!triggerBoost()) {
+      Alert.alert(
+        "Boost unavailable",
+        "Boost has not been activated because the server-side boost service is not configured.",
+      );
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Top Header */}
       <View style={styles.header}>
-        <Text style={styles.logoText}>
-          mi<Text style={styles.logoAccent}>l</Text>o
-        </Text>
+        <Text style={styles.logoText}>CHAHAT</Text>
 
         <View style={styles.headerIcons}>
           <TouchableOpacity
@@ -213,7 +215,9 @@ export default function DiscoverScreen() {
             style={styles.iconCircle}
             onPress={toggleLocationSharing}
             activeOpacity={0.7}
-            accessibilityLabel={locationSharing ? "Turn off location discovery" : "Enable location discovery"}
+            accessibilityLabel={
+              locationSharing ? "Turn off location discovery" : "Enable location discovery"
+            }
           >
             <MapPin size={20} color={locationSharing ? Colors.primary : Colors.foreground} />
           </TouchableOpacity>
@@ -238,12 +242,22 @@ export default function DiscoverScreen() {
           <View style={styles.premiumStatusRow}>
             <Crown size={14} color={Colors.accent} />
             <Text style={styles.premiumStatusText}>
-              CHAHAT {subscription.tier.toUpperCase()} · {likesRemaining} likes left today
+              CHAHAT {subscription.tier.toUpperCase()} ·{" "}
+              {dailyLikeLimit === null
+                ? "Like limit unavailable"
+                : `${likesRemaining} likes left today`}
             </Text>
           </View>
         ) : (
           <Text style={styles.quotaText}>
-            {likesRemaining} likes left today · <Text style={styles.upgradeLinkText}>See plans</Text>
+            {dailyLikeLimit === null ? (
+              "Daily like limit unavailable"
+            ) : (
+              <>
+                {likesRemaining} likes left today ·{" "}
+                <Text style={styles.upgradeLinkText}>See plans</Text>
+              </>
+            )}
           </Text>
         )}
         {isBoosting && (
@@ -362,191 +376,192 @@ export default function DiscoverScreen() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    height: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-  },
-  logoText: {
-    fontFamily: Typography.fontDisplay,
-    fontSize: 32,
-    fontWeight: Typography.weights.bold,
-    fontStyle: "italic",
-    color: Colors.foreground,
-  },
-  logoAccent: {
-    color: Colors.primary,
-  },
-  headerIcons: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-  },
-  quotaText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    fontWeight: Typography.weights.medium,
-  },
-  upgradeLinkText: {
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
-  },
-  premiumStatusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  premiumStatusText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
-  },
-  boostActiveText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
-  },
-  activeFilterBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginHorizontal: 20,
-    marginBottom: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: Colors.secondary,
-    borderRadius: Radii.full,
-  },
-  activeFilterLabel: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.foreground,
-  },
-  clearFilterText: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primary,
-  },
-  cardArea: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  emptyContainer: {
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.secondary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: Typography.sizes.xxl,
-    fontWeight: Typography.weights.bold,
-    fontFamily: Typography.fontDisplay,
-    color: Colors.foreground,
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  emptyBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: Radii.full,
-    ...Shadows.glow,
-  },
-  emptyBtnText: {
-    color: Colors.primaryForeground,
-    fontWeight: Typography.weights.bold,
-    fontSize: Typography.sizes.base,
-  },
-  resetBtn: {
-    marginTop: 12,
-  },
-  resetBtnText: {
-    color: Colors.mutedForeground,
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    paddingBottom: 16,
-  },
-  smallBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.card,
-  },
-  mediumBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.card,
-  },
-  likeBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.glow,
-  },
-  btnDisabled: {
-    opacity: 0.35,
-  },
-  boostBtnActive: {
-    backgroundColor: Colors.primary,
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    header: {
+      height: 56,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+    },
+    logoText: {
+      fontFamily: Typography.fontDisplay,
+      fontSize: 32,
+      fontWeight: Typography.weights.bold,
+      fontStyle: "italic",
+      color: Colors.foreground,
+    },
+    logoAccent: {
+      color: Colors.primary,
+    },
+    headerIcons: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    iconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.card,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    statusBar: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingVertical: 6,
+    },
+    quotaText: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.mutedForeground,
+      fontWeight: Typography.weights.medium,
+    },
+    upgradeLinkText: {
+      color: Colors.primary,
+      fontWeight: Typography.weights.bold,
+    },
+    premiumStatusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    premiumStatusText: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.primary,
+      fontWeight: Typography.weights.bold,
+    },
+    boostActiveText: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.primary,
+      fontWeight: Typography.weights.bold,
+    },
+    activeFilterBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginHorizontal: 20,
+      marginBottom: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: Colors.secondary,
+      borderRadius: Radii.full,
+    },
+    activeFilterLabel: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.semibold,
+      color: Colors.foreground,
+    },
+    clearFilterText: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.bold,
+      color: Colors.primary,
+    },
+    cardArea: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    emptyContainer: {
+      alignItems: "center",
+      paddingHorizontal: 32,
+    },
+    emptyIconCircle: {
+      width: 64,
+      height: 64,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+    },
+    emptyTitle: {
+      fontSize: Typography.sizes.xxl,
+      fontWeight: Typography.weights.bold,
+      fontFamily: Typography.fontDisplay,
+      color: Colors.foreground,
+      textAlign: "center",
+    },
+    emptySubtitle: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+      textAlign: "center",
+      marginTop: 8,
+      lineHeight: 20,
+      marginBottom: 20,
+    },
+    emptyBtn: {
+      backgroundColor: Colors.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 14,
+      borderRadius: Radii.full,
+      ...Shadows.glow,
+    },
+    emptyBtnText: {
+      color: Colors.primaryForeground,
+      fontWeight: Typography.weights.bold,
+      fontSize: Typography.sizes.base,
+    },
+    resetBtn: {
+      marginTop: 12,
+    },
+    resetBtnText: {
+      color: Colors.mutedForeground,
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.semibold,
+    },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+      paddingBottom: 16,
+    },
+    smallBtn: {
+      width: 48,
+      height: 48,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.card,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      ...Shadows.card,
+    },
+    mediumBtn: {
+      width: 60,
+      height: 60,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.card,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      ...Shadows.card,
+    },
+    likeBtn: {
+      width: 68,
+      height: 68,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      ...Shadows.glow,
+    },
+    btnDisabled: {
+      opacity: 0.35,
+    },
+    boostBtnActive: {
+      backgroundColor: Colors.primary,
+    },
+  });

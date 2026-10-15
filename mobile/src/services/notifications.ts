@@ -32,29 +32,18 @@ export type PushRegistrationResult =
   | { status: "registered" | "disabled" | "permission_denied" | "unsupported" }
   | { status: "error"; error: string };
 
-const STORAGE_KEY_NOTICES = "milo_notifications_inbox";
-const PUSH_PERMISSION_PROMPT_KEY = "milo_push_permission_prompted";
-const PUSH_TOKEN_KEY = (userId: string) => `milo_expo_push_token:${userId}`;
-
 export const DEFAULT_PREFERENCES: NotificationPreferences = {
   matches: true,
   messages: true,
   likes: true,
 };
 
-const INITIAL_NOTICES: NoticeItem[] = [
-  {
-    id: "notif_welcome_1",
-    kind: "safety",
-    title: "Welcome to Chahat",
-    text: "Complete photo verification to unlock your verified badge and get more responses.",
-    timeAgo: "Just now",
-    timestamp: Date.now() - 3600000,
-    read: false,
-  },
-];
-
-const inboxKey = (userId: string) => `${STORAGE_KEY_NOTICES}:${userId}`;
+const LEGACY_STORAGE_KEY_NOTICES = "milo_notifications_inbox";
+const LEGACY_STORAGE_KEY_PREFS = "milo_notification_prefs";
+const LEGACY_STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
+const PUSH_PERMISSION_PROMPT_KEY = "milo_push_permission_prompted";
+const inboxKey = (userId: string) => `${LEGACY_STORAGE_KEY_NOTICES}:${userId}`;
+const pushTokenKey = (userId: string) => `milo_expo_push_token:${userId}`;
 
 function formatTimeAgo(timestamp: number): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -66,14 +55,16 @@ function formatTimeAgo(timestamp: number): string {
   return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-async function authenticatedUserId(): Promise<string> {
+async function requireAuthenticatedUser(userId: string): Promise<void> {
+  if (!userId) throw new Error("A signed-in user is required.");
   const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("Sign in to manage notification settings.");
-  return data.user.id;
+  if (error || data.user?.id !== userId) {
+    throw new Error("Notification settings are limited to the signed-in account.");
+  }
 }
 
-export async function getNotificationPreferences(): Promise<NotificationPreferences> {
-  const userId = await authenticatedUserId();
+export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+  await requireAuthenticatedUser(userId);
   const { data, error } = await supabase
     .from("notification_preferences")
     .select("matches, messages, likes")
@@ -84,10 +75,18 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
 }
 
 export async function saveNotificationPreferences(
+  userId: string,
   prefs: NotificationPreferences,
 ): Promise<{ success: boolean; error?: string }> {
+  if (
+    typeof prefs.matches !== "boolean" ||
+    typeof prefs.messages !== "boolean" ||
+    typeof prefs.likes !== "boolean"
+  ) {
+    return { success: false, error: "Notification preferences must be boolean values." };
+  }
   try {
-    const userId = await authenticatedUserId();
+    await requireAuthenticatedUser(userId);
     const { error } = await supabase.from("notification_preferences").upsert({
       user_id: userId,
       matches: prefs.matches,
@@ -105,35 +104,35 @@ export async function saveNotificationPreferences(
   }
 }
 
-export async function fetchNotificationInbox(): Promise<NoticeItem[]> {
-  const userId = await authenticatedUserId();
-  const key = inboxKey(userId);
-  const raw = await AsyncStorage.getItem(key);
-  if (!raw) {
-    await AsyncStorage.setItem(key, JSON.stringify(INITIAL_NOTICES));
-    return INITIAL_NOTICES;
-  }
+export async function fetchNotificationInbox(userId: string): Promise<NoticeItem[]> {
+  if (!userId) return [];
   try {
-    const parsed: NoticeItem[] = JSON.parse(raw);
-    return parsed.map((item) => ({ ...item, timeAgo: formatTimeAgo(item.timestamp) }));
+    const raw = await AsyncStorage.getItem(inboxKey(userId));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error("Notification inbox has an invalid format.");
+    return (parsed as NoticeItem[]).map((item) => ({
+      ...item,
+      timeAgo: formatTimeAgo(item.timestamp),
+    }));
   } catch (err) {
-    console.warn("Could not parse notification inbox:", err);
+    console.warn("Could not fetch notification inbox:", err);
     return [];
   }
 }
 
 export async function pushNotificationToInbox(
+  userId: string,
   notice: Omit<NoticeItem, "id" | "timeAgo" | "timestamp" | "read">,
 ): Promise<NoticeItem | null> {
+  if (!userId) return null;
   try {
-    const userId = await authenticatedUserId();
-    const prefs = await getNotificationPreferences();
+    const prefs = await getNotificationPreferences(userId);
     if (notice.kind === "match" && !prefs.matches) return null;
     if (notice.kind === "message" && !prefs.messages) return null;
     if (notice.kind === "like" && !prefs.likes) return null;
 
-    const key = inboxKey(userId);
-    const current = await fetchNotificationInbox();
+    const current = await fetchNotificationInbox(userId);
     const now = Date.now();
     const newItem: NoticeItem = {
       ...notice,
@@ -142,7 +141,10 @@ export async function pushNotificationToInbox(
       timeAgo: "Just now",
       read: false,
     };
-    await AsyncStorage.setItem(key, JSON.stringify([newItem, ...current].slice(0, 50)));
+    await AsyncStorage.setItem(
+      inboxKey(userId),
+      JSON.stringify([newItem, ...current].slice(0, 50)),
+    );
     return newItem;
   } catch (err) {
     console.warn("Could not append notification:", err);
@@ -150,26 +152,30 @@ export async function pushNotificationToInbox(
   }
 }
 
-export async function markNotificationRead(id: string): Promise<void> {
-  const userId = await authenticatedUserId();
-  const key = inboxKey(userId);
-  const current = await fetchNotificationInbox();
-  await AsyncStorage.setItem(
-    key,
-    JSON.stringify(
-      current.map((notice) => (notice.id === id ? { ...notice, read: true } : notice)),
-    ),
-  );
+export async function markNotificationRead(userId: string, id: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const current = await fetchNotificationInbox(userId);
+    const updated = current.map((notice) =>
+      notice.id === id ? { ...notice, read: true } : notice,
+    );
+    await AsyncStorage.setItem(inboxKey(userId), JSON.stringify(updated));
+  } catch (err) {
+    console.warn("Could not mark notification read:", err);
+  }
 }
 
-export async function markAllNotificationsRead(): Promise<void> {
-  const userId = await authenticatedUserId();
-  const key = inboxKey(userId);
-  const current = await fetchNotificationInbox();
-  await AsyncStorage.setItem(
-    key,
-    JSON.stringify(current.map((notice) => ({ ...notice, read: true }))),
-  );
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const current = await fetchNotificationInbox(userId);
+    await AsyncStorage.setItem(
+      inboxKey(userId),
+      JSON.stringify(current.map((notice) => ({ ...notice, read: true }))),
+    );
+  } catch (err) {
+    console.warn("Could not mark all notifications read:", err);
+  }
 }
 
 export function isExpoPushToken(token: string): boolean {
@@ -191,23 +197,16 @@ export async function registerPushNotificationToken(
 ): Promise<PushRegistrationResult> {
   try {
     if (!userId) return { status: "error", error: "A signed-in account is required." };
-    if (Platform.OS === "web" || (Platform.OS !== "ios" && Platform.OS !== "android")) {
+    if (Platform.OS !== "ios" && Platform.OS !== "android") {
       return { status: "unsupported" };
     }
     if (!Device.isDevice) return { status: "unsupported" };
     if (!isSupabaseConfigured()) {
-      return {
-        status: "error",
-        error: "Push registration requires a configured Supabase project.",
-      };
+      return { status: "error", error: "Push registration requires a configured backend." };
     }
 
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || authData.user?.id !== userId) {
-      return { status: "error", error: "Push registration is limited to the signed-in account." };
-    }
-
-    const preferences = await getNotificationPreferences();
+    await requireAuthenticatedUser(userId);
+    const preferences = await getNotificationPreferences(userId);
     if (!preferences.matches && !preferences.messages && !preferences.likes) {
       return { status: "disabled" };
     }
@@ -223,28 +222,47 @@ export async function registerPushNotificationToken(
     }
     if (!permissions.granted) return { status: "permission_denied" };
 
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
     if (!projectId) {
       return { status: "error", error: "Expo EAS project ID is missing from app configuration." };
     }
 
-    const { data: tokenData } = await Notifications.getExpoPushTokenAsync({ projectId });
-    const token = tokenData;
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     if (!isExpoPushToken(token)) {
       return { status: "error", error: "Expo returned an invalid push token." };
     }
-    const tokenKey = PUSH_TOKEN_KEY(userId);
-    const previousToken = await SecureStore.getItemAsync(tokenKey);
+
+    const key = pushTokenKey(userId);
+    const previousToken = await SecureStore.getItemAsync(key);
     const { error } = await supabase.rpc("register_push_device", {
       _token: token,
       _platform: Platform.OS,
       _app_version: Application.nativeApplicationVersion ?? null,
-      _previous_token: previousToken,
+      _previous_token: previousToken && previousToken !== token ? previousToken : null,
     });
     if (error)
       return { status: "error", error: `Could not register this device: ${error.message}` };
 
-    await SecureStore.setItemAsync(tokenKey, token);
+    try {
+      await SecureStore.setItemAsync(key, token);
+    } catch (storageError) {
+      const rollback = isExpoPushToken(previousToken ?? "")
+        ? await supabase.rpc("register_push_device", {
+            _token: previousToken,
+            _platform: Platform.OS,
+            _app_version: Application.nativeApplicationVersion ?? null,
+            _previous_token: token,
+          })
+        : await supabase.rpc("unregister_push_device", { _token: token });
+      const rollbackError = rollback.error;
+      if (rollbackError) {
+        console.error(
+          "Could not roll back push registration after secure storage failed:",
+          rollbackError,
+        );
+      }
+      throw storageError;
+    }
     return { status: "registered" };
   } catch (err) {
     return {
@@ -254,14 +272,39 @@ export async function registerPushNotificationToken(
   }
 }
 
-export async function unregisterPushNotificationToken(userId: string): Promise<void> {
-  if (Platform.OS === "web" || !userId) return;
-  const tokenKey = PUSH_TOKEN_KEY(userId);
-  const token = await SecureStore.getItemAsync(tokenKey);
-  if (!token) return;
-  const { error } = await supabase.rpc("unregister_push_device", { _token: token });
-  if (error) throw new Error(`Could not unregister this device: ${error.message}`);
-  await SecureStore.deleteItemAsync(tokenKey);
+export async function unregisterPushNotificationToken(
+  userId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!userId) return { success: false, error: "A signed-in user is required." };
+  try {
+    const token = await SecureStore.getItemAsync(pushTokenKey(userId));
+    if (!token) return { success: true };
+    await requireAuthenticatedUser(userId);
+    const { error } = await supabase.rpc("unregister_push_device", { _token: token });
+    if (error) throw new Error(`Could not unregister this device: ${error.message}`);
+    await SecureStore.deleteItemAsync(pushTokenKey(userId));
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not unregister push notifications.",
+    };
+  }
+}
+
+export async function clearNotificationState(
+  userId?: string,
+  clearPushToken = false,
+): Promise<void> {
+  const keys = [LEGACY_STORAGE_KEY_NOTICES, LEGACY_STORAGE_KEY_PREFS, LEGACY_STORAGE_KEY_FCM_TOKEN];
+  if (userId) keys.push(inboxKey(userId));
+  await AsyncStorage.multiRemove(keys);
+  if (clearPushToken && userId) {
+    await Promise.all([
+      SecureStore.deleteItemAsync(pushTokenKey(userId)),
+      SecureStore.deleteItemAsync(`chahat_expo_push_token:${userId}`),
+    ]);
+  }
 }
 
 export async function openNotificationSettings(): Promise<void> {
