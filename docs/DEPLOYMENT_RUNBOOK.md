@@ -129,6 +129,7 @@ supabase db push
 supabase functions deploy delete-account
 supabase functions deploy verify-purchase
 supabase functions deploy moderate-photo
+supabase functions deploy dispatch-push --no-verify-jwt
 ```
 
 **Migration Sequence Applied:**
@@ -148,6 +149,7 @@ supabase functions deploy moderate-photo
 14. `20260101001300_critical_security_foundations.sql`
 15. `20260101001400_harden_verification_metadata_guard.sql`
 16. `20260101001500_subscription_orders_and_replay_protection.sql`
+17. `20260101001800_push_notifications.sql`
 
 ---
 
@@ -164,3 +166,119 @@ supabase functions deploy moderate-photo
 3. Delete the test account via Settings > Delete Account (confirm with `DELETE`).
 4. Confirm user data, storage files, and auth record are purged cleanly.
 5. Confirm remaining users can log in, view discovery feed (without `is_demo` / `likes_you` errors), and swipe normally.
+
+---
+
+## Phase 3: Expo Push Notifications (Setup Only — Not Deployed)
+
+This repository uses Expo Push Notifications with the EAS project ID already configured in
+`mobile/app.json`: `d40a4e1f-fbf8-4b44-93af-7c4e1fe39b8a`. The mobile app has no push-provider
+secret or additional `EXPO_PUBLIC_*` variable. Push tokens are registered through authenticated
+database RPCs; raw tokens are inaccessible to authenticated clients. Database triggers write safe
+event identifiers to an outbox. The `dispatch-push` Edge Function sends generic lock-screen text,
+and a periodic worker polls Expo receipts. A provider ticket is recorded as **submitted**, not
+delivered; only a successful receipt is recorded as delivered.
+
+### Local and provider setup
+
+1. Install dependencies and run checks from the repository root:
+
+   ```powershell
+   npm ci
+   cd mobile
+   npm ci
+   npx expo install --check
+   cd ..
+   npm test -- --ci
+   npm run build
+   npm run lint
+   ```
+
+2. Keep the Supabase app URL/key in the existing local mobile environment. There are no new mobile
+   secrets. Do not place `PUSH_DISPATCH_SECRET`, an Expo access token, FCM service-account JSON, or
+   APNs private keys in the app or an `EXPO_PUBLIC_*` variable.
+3. In the EAS account that owns the configured project, configure Android FCM v1 credentials and an
+   Apple APNs authentication key using `eas credentials --platform android` and
+   `eas credentials --platform ios`. Use provider-issued credentials in EAS only; do not commit
+   credential files.
+4. Build and install a development/production app on a physical Android and iOS device. Remote
+   push delivery is not verified by a simulator, web, or a mocked Jest test.
+
+### Deploying the backend (do not run as part of this phase)
+
+After reviewing the target project, migration history, and dashboard state using the existing GO /
+NO-GO procedure:
+
+```powershell
+supabase link --project-ref tuptdzbdowqtmbyhazet
+supabase migration list
+supabase db push --dry-run
+# Only after explicit deployment approval and a confirmed safe migration plan:
+supabase db push
+supabase secrets set PUSH_DISPATCH_SECRET="<generate-a-random-32-byte-or-longer-secret>"
+supabase functions deploy dispatch-push --no-verify-jwt
+```
+
+The dispatch function requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the Supabase
+Edge Function environment plus `PUSH_DISPATCH_SECRET`. The function intentionally disables JWT
+verification because it is called by a database scheduler; it rejects every request without the
+matching high-entropy `x-dispatch-secret` header. Store the same secret in Supabase Vault for the
+database scheduler, never in a mobile build or SQL migration.
+
+Enable `pg_cron`, `pg_net`, and Vault in the Supabase project, then schedule the worker once per
+minute in the Supabase SQL Editor. Replace placeholders, generate the secret out of band, and enter
+the identical value in the Edge Function secret and Vault. Never paste real secrets into source
+control or task logs:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net with schema extensions;
+select vault.create_secret('https://<project-ref>.supabase.co', 'chahat_project_url');
+select vault.create_secret('<same-random-dispatch-secret>', 'chahat_push_dispatch_secret');
+
+select cron.schedule(
+  'dispatch-chahat-push-notifications',
+  '* * * * *',
+  $job$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets
+            where name = 'chahat_project_url') || '/functions/v1/dispatch-push',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-dispatch-secret', (select decrypted_secret from vault.decrypted_secrets
+                           where name = 'chahat_push_dispatch_secret')
+    ),
+    body := '{}'::jsonb
+  );
+  $job$
+);
+```
+
+Confirm the cron job is active and inspect recent `cron.job_run_details` entries. Also monitor
+`notification_deliveries` by status and `last_error`; `DeviceNotRegistered` tokens are deactivated
+automatically. Provider 429/5xx/network failures are retried with bounded exponential backoff.
+Events are transactionally deduplicated by recipient, event, and category, and each event/device
+delivery is unique. A connection loss after Expo accepted a request but before the server received
+the response is inherently ambiguous and may cause a duplicate on retry.
+
+### Device verification checklist
+
+1. Install a fresh physical-device build, sign in, grant notification permission, and verify that
+   a real `ExponentPushToken[...]` is registered for the authenticated account. No mock token is
+   accepted by the registration RPC.
+2. In Settings, disable and re-enable each category; confirm the preference row changes and the
+   server-created outbox does not dispatch disabled categories.
+3. Deny permission on a fresh install. Confirm no token is registered and the app offers a system
+   settings link without repeatedly requesting permission. Enable it in OS settings and reopen the
+   app to register.
+4. With two test accounts and two physical devices, create a like, mutual match, and message. Confirm
+   only eligible recipients receive generic text, no message body or profile details appear on the
+   lock screen, and a tap opens only a currently authorized match/chat. Test both foreground and
+   terminated-app cold start.
+5. Unmatch/block/delete the test account and confirm inaccessible destinations show the unavailable
+   message. Sign out and verify the device token is removed; account deletion cascades token removal.
+
+This phase adds server-side event recording, token authorization, and provider receipt tracking but
+does not deploy the migration, Edge Function, scheduler, or EAS provider credentials. Real delivery
+and Android/iOS deep-link behavior remain unverified until the above setup is completed on
+authorized non-production test accounts and physical devices.

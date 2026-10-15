@@ -116,7 +116,7 @@ setup_db() {
 # 10. Functional / RLS / Storage / Deletion Suite (Fail-Fast)
 echo "== functional / RLS / storage / deletion =="
 setup_db "$FUNC_DB" || exit 1
-for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 35_uniform_quota.sql 90_assert.sql; do
+for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 35_uniform_quota.sql 38_push_notifications.sql 90_assert.sql; do
   out_file="/tmp/${RUN_ID}_test_${f}.out"
   psql_test "$FUNC_DB" -f "$f" > "$out_file" 2>&1
   rc=$?

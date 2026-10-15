@@ -12,6 +12,9 @@ verify_jwt = true
 [functions.moderate-photo]
 verify_jwt = true
 
+[functions.dispatch-push]
+verify_jwt = false
+
 # ---------------------------------------------------------------------------------------------
 # Auth settings, codified (Phase 1 / issue O9).
 # SCOPE: these values drive the LOCAL stack (`supabase start`) and document what the hosted project

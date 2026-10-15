@@ -1,7 +1,10 @@
-// In-App & Remote Push Notification Service for Milo Native Android
-// Manages device notification preferences, in-app notification inbox, and FCM token registration.
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Application from "expo-application";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 export interface NoticeItem {
@@ -25,9 +28,13 @@ export interface NotificationPreferences {
   likes: boolean;
 }
 
+export type PushRegistrationResult =
+  | { status: "registered" | "disabled" | "permission_denied" | "unsupported" }
+  | { status: "error"; error: string };
+
 const STORAGE_KEY_NOTICES = "milo_notifications_inbox";
-const STORAGE_KEY_PREFS = "milo_notification_prefs";
-const STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
+const PUSH_PERMISSION_PROMPT_KEY = "milo_push_permission_prompted";
+const PUSH_TOKEN_KEY = (userId: string) => `milo_expo_push_token:${userId}`;
 
 export const DEFAULT_PREFERENCES: NotificationPreferences = {
   matches: true,
@@ -47,38 +54,8 @@ const INITIAL_NOTICES: NoticeItem[] = [
   },
 ];
 
-/**
- * Loads notification preferences from local storage.
- */
-export async function getNotificationPreferences(): Promise<NotificationPreferences> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY_PREFS);
-    if (!raw) return DEFAULT_PREFERENCES;
-    return { ...DEFAULT_PREFERENCES, ...JSON.parse(raw) };
-  } catch (err) {
-    console.warn("Could not load notification preferences:", err);
-    return DEFAULT_PREFERENCES;
-  }
-}
+const inboxKey = (userId: string) => `${STORAGE_KEY_NOTICES}:${userId}`;
 
-/**
- * Saves notification preferences.
- */
-export async function saveNotificationPreferences(
-  prefs: NotificationPreferences,
-): Promise<boolean> {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(prefs));
-    return true;
-  } catch (err) {
-    console.warn("Could not save notification preferences:", err);
-    return false;
-  }
-}
-
-/**
- * Returns formatted time ago string from a timestamp.
- */
 function formatTimeAgo(timestamp: number): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
   if (diffSec < 60) return "Just now";
@@ -86,55 +63,86 @@ function formatTimeAgo(timestamp: number): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHours = Math.floor(diffMin / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-/**
- * Retrieves the full notification inbox for the current device/user.
- */
-export async function fetchNotificationInbox(): Promise<NoticeItem[]> {
+async function authenticatedUserId(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) throw new Error("Sign in to manage notification settings.");
+  return data.user.id;
+}
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  const userId = await authenticatedUserId();
+  const { data, error } = await supabase
+    .from("notification_preferences")
+    .select("matches, messages, likes")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not load notification preferences: ${error.message}`);
+  return { ...DEFAULT_PREFERENCES, ...(data ?? {}) };
+}
+
+export async function saveNotificationPreferences(
+  prefs: NotificationPreferences,
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY_NOTICES);
-    if (!raw) {
-      await AsyncStorage.setItem(STORAGE_KEY_NOTICES, JSON.stringify(INITIAL_NOTICES));
-      return INITIAL_NOTICES;
-    }
-    const parsed: NoticeItem[] = JSON.parse(raw);
-    // Refresh timeAgo dynamically
-    return parsed.map((item) => ({
-      ...item,
-      timeAgo: formatTimeAgo(item.timestamp),
-    }));
+    const userId = await authenticatedUserId();
+    const { error } = await supabase.from("notification_preferences").upsert({
+      user_id: userId,
+      matches: prefs.matches,
+      messages: prefs.messages,
+      likes: prefs.likes,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   } catch (err) {
-    console.warn("Could not fetch notification inbox:", err);
-    return INITIAL_NOTICES;
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Could not save notification preferences.",
+    };
   }
 }
 
-/**
- * Appends a new notification to the in-app inbox if user preferences permit it.
- */
+export async function fetchNotificationInbox(): Promise<NoticeItem[]> {
+  const userId = await authenticatedUserId();
+  const key = inboxKey(userId);
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) {
+    await AsyncStorage.setItem(key, JSON.stringify(INITIAL_NOTICES));
+    return INITIAL_NOTICES;
+  }
+  try {
+    const parsed: NoticeItem[] = JSON.parse(raw);
+    return parsed.map((item) => ({ ...item, timeAgo: formatTimeAgo(item.timestamp) }));
+  } catch (err) {
+    console.warn("Could not parse notification inbox:", err);
+    return [];
+  }
+}
+
 export async function pushNotificationToInbox(
   notice: Omit<NoticeItem, "id" | "timeAgo" | "timestamp" | "read">,
 ): Promise<NoticeItem | null> {
   try {
+    const userId = await authenticatedUserId();
     const prefs = await getNotificationPreferences();
     if (notice.kind === "match" && !prefs.matches) return null;
     if (notice.kind === "message" && !prefs.messages) return null;
     if (notice.kind === "like" && !prefs.likes) return null;
 
+    const key = inboxKey(userId);
     const current = await fetchNotificationInbox();
+    const now = Date.now();
     const newItem: NoticeItem = {
       ...notice,
-      id: `notif_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      timestamp: Date.now(),
+      id: `notif_${now}_${Math.random().toString(36).substring(7)}`,
+      timestamp: now,
       timeAgo: "Just now",
       read: false,
     };
-
-    const updated = [newItem, ...current].slice(0, 50); // Keep latest 50 notifications
-    await AsyncStorage.setItem(STORAGE_KEY_NOTICES, JSON.stringify(updated));
+    await AsyncStorage.setItem(key, JSON.stringify([newItem, ...current].slice(0, 50)));
     return newItem;
   } catch (err) {
     console.warn("Could not append notification:", err);
@@ -142,58 +150,129 @@ export async function pushNotificationToInbox(
   }
 }
 
-/**
- * Marks a single notification as read.
- */
 export async function markNotificationRead(id: string): Promise<void> {
-  try {
-    const current = await fetchNotificationInbox();
-    const updated = current.map((n) => (n.id === id ? { ...n, read: true } : n));
-    await AsyncStorage.setItem(STORAGE_KEY_NOTICES, JSON.stringify(updated));
-  } catch (err) {
-    console.warn("Could not mark notification read:", err);
-  }
+  const userId = await authenticatedUserId();
+  const key = inboxKey(userId);
+  const current = await fetchNotificationInbox();
+  await AsyncStorage.setItem(
+    key,
+    JSON.stringify(
+      current.map((notice) => (notice.id === id ? { ...notice, read: true } : notice)),
+    ),
+  );
 }
 
-/**
- * Marks all notifications in inbox as read.
- */
 export async function markAllNotificationsRead(): Promise<void> {
-  try {
-    const current = await fetchNotificationInbox();
-    const updated = current.map((n) => ({ ...n, read: true }));
-    await AsyncStorage.setItem(STORAGE_KEY_NOTICES, JSON.stringify(updated));
-  } catch (err) {
-    console.warn("Could not mark all notifications read:", err);
-  }
+  const userId = await authenticatedUserId();
+  const key = inboxKey(userId);
+  const current = await fetchNotificationInbox();
+  await AsyncStorage.setItem(
+    key,
+    JSON.stringify(current.map((notice) => ({ ...notice, read: true }))),
+  );
 }
 
-/**
- * Registers device Push / FCM token with the backend.
- * Uses native device tokens or generates a deterministic client token for testing.
- */
+export function isExpoPushToken(token: string): boolean {
+  return /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,256}\]$/.test(token);
+}
+
+async function ensureAndroidChannel(): Promise<void> {
+  if (Platform.OS !== "android") return;
+  await Notifications.setNotificationChannelAsync("default", {
+    name: "Messages and connections",
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: "#D94F70",
+  });
+}
+
 export async function registerPushNotificationToken(
   userId: string,
-  token?: string,
-): Promise<{ success: boolean; token?: string; error?: string }> {
+): Promise<PushRegistrationResult> {
   try {
-    const pushToken = token || (await AsyncStorage.getItem(STORAGE_KEY_FCM_TOKEN)) || `fcm_mock_${userId.slice(0, 8)}_${Date.now()}`;
-    await AsyncStorage.setItem(STORAGE_KEY_FCM_TOKEN, pushToken);
-
-    if (isSupabaseConfigured()) {
-      // Upsert FCM push token in backend for transactional push routing
-      const { error } = await supabase.from("profiles").update({
-        // Store push token metadata safely
-        updated_at: new Date().toISOString(),
-      }).eq("id", userId);
-
-      if (error) {
-        console.warn("Could not persist push token on server:", error.message);
-      }
+    if (!userId) return { status: "error", error: "A signed-in account is required." };
+    if (Platform.OS === "web" || (Platform.OS !== "ios" && Platform.OS !== "android")) {
+      return { status: "unsupported" };
+    }
+    if (!Device.isDevice) return { status: "unsupported" };
+    if (!isSupabaseConfigured()) {
+      return {
+        status: "error",
+        error: "Push registration requires a configured Supabase project.",
+      };
     }
 
-    return { success: true, token: pushToken };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to register push token" };
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || authData.user?.id !== userId) {
+      return { status: "error", error: "Push registration is limited to the signed-in account." };
+    }
+
+    const preferences = await getNotificationPreferences();
+    if (!preferences.matches && !preferences.messages && !preferences.likes) {
+      return { status: "disabled" };
+    }
+
+    await ensureAndroidChannel();
+    let permissions = await Notifications.getPermissionsAsync();
+    if (!permissions.granted) {
+      const prompted = await SecureStore.getItemAsync(PUSH_PERMISSION_PROMPT_KEY);
+      if (!prompted && permissions.canAskAgain) {
+        await SecureStore.setItemAsync(PUSH_PERMISSION_PROMPT_KEY, "1");
+        permissions = await Notifications.requestPermissionsAsync();
+      }
+    }
+    if (!permissions.granted) return { status: "permission_denied" };
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+      return { status: "error", error: "Expo EAS project ID is missing from app configuration." };
+    }
+
+    const { data: tokenData } = await Notifications.getExpoPushTokenAsync({ projectId });
+    const token = tokenData;
+    if (!isExpoPushToken(token)) {
+      return { status: "error", error: "Expo returned an invalid push token." };
+    }
+    const tokenKey = PUSH_TOKEN_KEY(userId);
+    const previousToken = await SecureStore.getItemAsync(tokenKey);
+    const { error } = await supabase.rpc("register_push_device", {
+      _token: token,
+      _platform: Platform.OS,
+      _app_version: Application.nativeApplicationVersion ?? null,
+      _previous_token: previousToken,
+    });
+    if (error)
+      return { status: "error", error: `Could not register this device: ${error.message}` };
+
+    await SecureStore.setItemAsync(tokenKey, token);
+    return { status: "registered" };
+  } catch (err) {
+    return {
+      status: "error",
+      error: err instanceof Error ? err.message : "Could not register push notifications.",
+    };
   }
 }
+
+export async function unregisterPushNotificationToken(userId: string): Promise<void> {
+  if (Platform.OS === "web" || !userId) return;
+  const tokenKey = PUSH_TOKEN_KEY(userId);
+  const token = await SecureStore.getItemAsync(tokenKey);
+  if (!token) return;
+  const { error } = await supabase.rpc("unregister_push_device", { _token: token });
+  if (error) throw new Error(`Could not unregister this device: ${error.message}`);
+  await SecureStore.deleteItemAsync(tokenKey);
+}
+
+export async function openNotificationSettings(): Promise<void> {
+  const { Linking } = await import("react-native");
+  await Linking.openSettings();
+}
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});

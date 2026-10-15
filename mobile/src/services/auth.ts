@@ -108,6 +108,15 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 export async function signOutUser(): Promise<void> {
   try {
     if (isSupabaseConfigured()) {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        try {
+          const { unregisterPushNotificationToken } = await import("./notifications");
+          await unregisterPushNotificationToken(data.user.id);
+        } catch (err) {
+          console.warn("Could not unregister push token before sign out:", err);
+        }
+      }
       await supabase.auth.signOut();
     }
   } catch (err) {

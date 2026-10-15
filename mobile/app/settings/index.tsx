@@ -16,7 +16,10 @@ import { deleteUserAccount } from "../../src/services/auth";
 import { runAccountDeletion } from "../../src/utils/deletionFlow";
 import {
   getNotificationPreferences,
+  openNotificationSettings,
+  registerPushNotificationToken,
   saveNotificationPreferences,
+  type NotificationPreferences,
 } from "../../src/services/notifications";
 
 export default function SettingsScreen() {
@@ -38,26 +41,60 @@ export default function SettingsScreen() {
   const [notifLikes, setNotifLikes] = useState(true);
 
   React.useEffect(() => {
-    getNotificationPreferences().then((prefs) => {
-      setNotifMatches(prefs.matches);
-      setNotifMessages(prefs.messages);
-      setNotifLikes(prefs.likes);
-    });
+    getNotificationPreferences()
+      .then((prefs) => {
+        setNotifMatches(prefs.matches);
+        setNotifMessages(prefs.messages);
+        setNotifLikes(prefs.likes);
+      })
+      .catch((error) => Alert.alert("Notifications unavailable", error.message));
   }, []);
 
-  const handleToggleNotifMatches = (val: boolean) => {
-    setNotifMatches(val);
-    saveNotificationPreferences({ matches: val, messages: notifMessages, likes: notifLikes });
+  const updateNotificationPreferences = async (next: NotificationPreferences) => {
+    const result = await saveNotificationPreferences(next);
+    if (!result.success) {
+      Alert.alert("Could not save setting", result.error || "Please try again.");
+      return false;
+    }
+    return true;
   };
 
-  const handleToggleNotifMessages = (val: boolean) => {
-    setNotifMessages(val);
-    saveNotificationPreferences({ matches: notifMatches, messages: val, likes: notifLikes });
+  const registerAfterEnable = async (enabled: boolean) => {
+    if (!enabled || !user) return;
+    const result = await registerPushNotificationToken(user.id);
+    if (result.status === "permission_denied") {
+      Alert.alert(
+        "Notifications are off",
+        "Enable notifications for Chahat in your device settings to receive new matches and messages.",
+        [
+          { text: "Not now", style: "cancel" },
+          { text: "Open settings", onPress: () => openNotificationSettings() },
+        ],
+      );
+    } else if (result.status === "error") {
+      Alert.alert("Could not enable notifications", result.error);
+    }
   };
 
-  const handleToggleNotifLikes = (val: boolean) => {
-    setNotifLikes(val);
-    saveNotificationPreferences({ matches: notifMatches, messages: notifMessages, likes: val });
+  const handleToggleNotifMatches = async (val: boolean) => {
+    if (await updateNotificationPreferences({ matches: val, messages: notifMessages, likes: notifLikes })) {
+      setNotifMatches(val);
+      await registerAfterEnable(val);
+    }
+  };
+
+  const handleToggleNotifMessages = async (val: boolean) => {
+    if (await updateNotificationPreferences({ matches: notifMatches, messages: val, likes: notifLikes })) {
+      setNotifMessages(val);
+      await registerAfterEnable(val);
+    }
+  };
+
+  const handleToggleNotifLikes = async (val: boolean) => {
+    if (await updateNotificationPreferences({ matches: notifMatches, messages: notifMessages, likes: val })) {
+      setNotifLikes(val);
+      await registerAfterEnable(val);
+    }
   };
 
   // Dialogs
@@ -195,6 +232,14 @@ export default function SettingsScreen() {
             <Toggle label="New matches" value={notifMatches} onValueChange={handleToggleNotifMatches} />
             <Toggle label="New messages" value={notifMessages} onValueChange={handleToggleNotifMessages} />
             <Toggle label="Likes received" value={notifLikes} onValueChange={handleToggleNotifLikes} />
+            <TouchableOpacity
+              style={styles.navRow}
+              onPress={() => openNotificationSettings()}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.rowLabel}>Manage device notification permission</Text>
+              <ChevronRight size={18} color={Colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
         </View>
 
