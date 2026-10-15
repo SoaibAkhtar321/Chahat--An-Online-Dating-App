@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../services/supabase";
 import { fetchMyProfile } from "../services/profile";
@@ -36,29 +36,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [profileError, setProfileError] = useState<boolean>(false);
 
+  const profileLoadId = useRef(0);
+  const activeUserId = useRef<string | null>(null);
+
   const loadUserProfile = async (currentUser: User) => {
+    const requestId = ++profileLoadId.current;
     try {
       const prof = await fetchMyProfile(currentUser.id, currentUser.email || "");
+      if (requestId !== profileLoadId.current || activeUserId.current !== currentUser.id) return;
       setProfile(prof);
       setProfileError(false);
       registerPushNotificationToken(currentUser.id).catch(() => {});
     } catch (e) {
+      if (requestId !== profileLoadId.current || activeUserId.current !== currentUser.id) return;
       // Do NOT treat a failed load as "not onboarded": keep profile null and flag the error instead.
       console.error("Failed to load profile", e);
+      setProfile(null);
       setProfileError(true);
     }
   };
 
   const refreshProfile = async () => {
-    // `user` state can be stale right after sign-in, so fall back to the live session.
-    const current = user ?? (await supabase.auth.getSession()).data.session?.user ?? null;
-    if (current) {
-      await loadUserProfile(current);
-    }
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    const current = data.user;
+    if (!current) throw new Error("A signed-in account is required to refresh your profile.");
+    activeUserId.current = current.id;
+    setUser(current);
+    await loadUserProfile(current);
   };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    profileLoadId.current += 1;
+    activeUserId.current = null;
     setSession(null);
     setUser(null);
     setProfile(null);
@@ -69,6 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     supabase.auth
       .getSession()
       .then(({ data: { session } }) => {
+        activeUserId.current = session?.user?.id ?? null;
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -90,10 +102,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       setUser(session?.user ?? null);
       if (!session?.user) {
+        profileLoadId.current += 1;
+        activeUserId.current = null;
         setProfile(null);
         setProfileError(false);
         setLoading(false);
         return;
+      }
+      if (activeUserId.current !== session.user.id) {
+        profileLoadId.current += 1;
+        activeUserId.current = session.user.id;
+        setProfile(null);
+        setProfileError(false);
       }
       // Token refreshes don't need a reload. On sign-in keep `loading` true until the profile
       // is fetched, otherwise the router sees profile=null and sends a returning user to onboarding.

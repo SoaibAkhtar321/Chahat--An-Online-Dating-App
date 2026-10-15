@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Image } from "expo-image";
 import {
   ArrowLeft,
   MapPin,
@@ -17,6 +16,7 @@ import {
   HeartHandshake,
 } from "lucide-react-native";
 import { VoiceIntroPlayer } from "../../src/components/profile/VoiceIntroPlayer";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
@@ -65,7 +65,7 @@ export default function ProfileDetailScreen() {
         const signed = await getSignedUrls("photos", photoPaths);
         const photos = Array.isArray(prof.photos)
           ? prof.photos
-              .map((p: any) => (p.path ? signed[p.path] || "" : p.src || ""))
+              .map((p: any) => (p.path ? signed[p.path] || "" : ""))
               .filter(Boolean)
           : [];
 
@@ -146,7 +146,13 @@ export default function ProfileDetailScreen() {
           {targetProfile.photos && targetProfile.photos.length > 0 ? (
             <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
               {targetProfile.photos.map((uri, idx) => (
-                <Image key={idx} source={{ uri }} style={styles.heroPhoto} contentFit="cover" />
+                <ProfilePhoto
+                  key={`${targetProfile.id}-${idx}-${uri}`}
+                  uri={uri}
+                  name={targetProfile.name}
+                  style={styles.heroPhoto}
+                  placeholderSize={120}
+                />
               ))}
             </ScrollView>
           ) : (

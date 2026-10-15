@@ -13,9 +13,9 @@ INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-0000000000b2','b2@x'),
   ('00000000-0000-0000-0000-0000000000b3','b3@x');
 
-UPDATE public.profiles SET name='B1',dob='1995-01-01',gender='man',seeking='woman',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-0000000000b1';
-UPDATE public.profiles SET name='B2',dob='1996-01-01',gender='woman',seeking='man',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-0000000000b2';
-UPDATE public.profiles SET name='B3',dob='1996-01-01',gender='woman',seeking='man',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-0000000000b3';
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000b1', 'B1', '1995-01-01', 'man', 'woman');
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000b2', 'B2', '1996-01-01', 'woman', 'man');
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000b3', 'B3', '1996-01-01', 'woman', 'man');
 
 -- 2. Setup initial matches, messages, and swipes
 -- Match 1: B1 and B2

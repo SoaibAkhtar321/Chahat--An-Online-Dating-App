@@ -1,18 +1,22 @@
 \set ON_ERROR_STOP on
 -- Task 1D: approved-only photo visibility. Owner g, viewer h.
 INSERT INTO auth.users(id,email) VALUES ('00000000-0000-0000-0000-0000000000f3','g@x'),('00000000-0000-0000-0000-0000000000f4','h@x');
-UPDATE public.profiles SET name='G',dob='1995-01-01',onboarded=true WHERE id='00000000-0000-0000-0000-0000000000f3';
-UPDATE public.profiles SET name='H',dob='1995-01-01',onboarded=true WHERE id='00000000-0000-0000-0000-0000000000f4';
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f3', 'G', '1995-01-01', 'man', 'woman', '00000000-0000-0000-0000-0000000000f3/a.jpg');
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f4', 'H', '1995-01-01', 'woman', 'man');
 
--- g sets photos as a client: forged 'approved' statuses, a thumbnail, and a selfie path
-SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000f3';
-UPDATE public.profiles SET photos='[{"id":"a","path":"00000000-0000-0000-0000-0000000000f3/a.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/a_t.jpg","status":"approved"},{"id":"b","path":"00000000-0000-0000-0000-0000000000f3/b.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/b.jpg","status":"approved"},{"id":"s","path":"00000000-0000-0000-0000-0000000000f3/verification/self.jpg","status":"approved"}]'::jsonb WHERE id=auth.uid()::text;
-RESET ROLE;
 INSERT INTO storage.objects(id,bucket_id,name) VALUES
- ('aaaaaaaa-0000-0000-0000-000000000001','photos','00000000-0000-0000-0000-0000000000f3/a.jpg'),
  ('aaaaaaaa-0000-0000-0000-000000000002','photos','00000000-0000-0000-0000-0000000000f3/a_t.jpg'),
  ('aaaaaaaa-0000-0000-0000-000000000003','photos','00000000-0000-0000-0000-0000000000f3/b.jpg'),
  ('aaaaaaaa-0000-0000-0000-000000000004','photos','00000000-0000-0000-0000-0000000000f3/verification/self.jpg');
+UPDATE storage.objects SET owner='00000000-0000-0000-0000-0000000000f3'
+WHERE bucket_id='photos' AND name LIKE '00000000-0000-0000-0000-0000000000f3/%';
+
+-- g sets owner-scoped uploaded photos as a client and attempts to forge approval.
+SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000f3';
+UPDATE public.profiles SET photos='[{"id":"a","path":"00000000-0000-0000-0000-0000000000f3/a.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/a_t.jpg","status":"approved"},{"id":"b","path":"00000000-0000-0000-0000-0000000000f3/b.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/b.jpg","status":"approved"}]'::jsonb WHERE id=auth.uid()::text;
+CALL public.expect_fail('selfie path cannot be used as a profile photo',
+  'UPDATE public.profiles SET photos=''[{"id":"s","path":"00000000-0000-0000-0000-0000000000f3/verification/self.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/verification/self.jpg"}]''::jsonb WHERE id=auth.uid()::text');
+RESET ROLE;
 
 -- selfies can never have review rows or be approved
 INSERT INTO public.t_results SELECT 'selfie path gets no review row', count(*)=0, count(*)::text FROM public.photo_reviews WHERE path LIKE '%/verification/%';
@@ -47,8 +51,17 @@ INSERT INTO public.t_results SELECT 'unapproved thumbPath hidden in storage and 
 RESET ROLE;
 
 -- replacement: same path, new object id => approval no longer applies
+SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000f3';
+UPDATE public.profiles
+SET photos='[{"id":"b","path":"00000000-0000-0000-0000-0000000000f3/b.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/b.jpg"}]'::jsonb
+WHERE id=auth.uid()::text;
+RESET ROLE;
 DELETE FROM storage.objects WHERE name='00000000-0000-0000-0000-0000000000f3/a.jpg';
-INSERT INTO storage.objects(id,bucket_id,name) VALUES ('aaaaaaaa-0000-0000-0000-000000000005','photos','00000000-0000-0000-0000-0000000000f3/a.jpg');
+INSERT INTO storage.objects(id,bucket_id,name,owner) VALUES
+ ('aaaaaaaa-0000-0000-0000-000000000005','photos','00000000-0000-0000-0000-0000000000f3/a.jpg','00000000-0000-0000-0000-0000000000f3');
+SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000f3';
+UPDATE public.profiles SET photos='[{"id":"a","path":"00000000-0000-0000-0000-0000000000f3/a.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/a_t.jpg","status":"approved"},{"id":"b","path":"00000000-0000-0000-0000-0000000000f3/b.jpg","thumbPath":"00000000-0000-0000-0000-0000000000f3/b.jpg","status":"approved"}]'::jsonb WHERE id=auth.uid()::text;
+RESET ROLE;
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000f4';
 INSERT INTO public.t_results SELECT 'replaced file loses approval (storage + RPC)', (SELECT count(*) FROM storage.objects WHERE bucket_id='photos' AND name LIKE '00000000-0000-0000-0000-0000000000f3/%')=0 AND jsonb_array_length(photos)=0, photos::text FROM public.get_public_profile('00000000-0000-0000-0000-0000000000f3');
 SET request.jwt.claim.sub='00000000-0000-0000-0000-0000000000f3';

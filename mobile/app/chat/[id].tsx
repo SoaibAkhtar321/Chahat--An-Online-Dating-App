@@ -32,9 +32,9 @@ import {
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ChatBubble } from "../../src/components/chat/ChatBubble";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
-import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 import { SMART_ICEBREAKERS, type Icebreaker } from "../../src/constants/icebreakers";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
@@ -214,11 +214,12 @@ export default function ChatDetailScreen() {
           }
           activeOpacity={0.8}
         >
-          {otherUser.photos && otherUser.photos.length > 0 ? (
-            <Image source={{ uri: otherUser.photos[0] }} style={styles.avatar} contentFit="cover" />
-          ) : (
-            <AvatarPlaceholder name={otherUser.name} size={40} style={{ marginRight: 10 }} />
-          )}
+          <ProfilePhoto
+            uri={otherUser.photos[0]}
+            name={otherUser.name}
+            style={styles.avatar}
+            placeholderSize={40}
+          />
           <View>
             <Text style={styles.partnerName} numberOfLines={1}>
               {otherUser.name}
@@ -370,7 +371,12 @@ export default function ChatDetailScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={styles.emptyMessages}>
-              <Image source={{ uri: otherUser.photos[0] }} style={styles.emptyAvatar} />
+              <ProfilePhoto
+                uri={otherUser.photos[0]}
+                name={otherUser.name}
+                style={styles.emptyAvatar}
+                placeholderSize={56}
+              />
               <Text style={styles.emptyMatchTitle}>You matched with {otherUser.name}</Text>
               <Text style={styles.emptyMatchDesc}>
                 Say hello when you're ready! Start with shared interests like{" "}

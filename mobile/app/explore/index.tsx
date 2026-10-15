@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Image } from "expo-image";
 import {
   Compass,
   Coffee,
@@ -20,9 +19,9 @@ import {
 } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Header } from "../../src/components/ui/Header";
 import { useMilo } from "../../src/context/MiloContext";
-import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 
 const COMMUNITIES = [
   {
@@ -126,17 +125,12 @@ export default function ExploreScreen() {
               }
               activeOpacity={0.85}
             >
-              {dailyPick.photos && dailyPick.photos.length > 0 ? (
-                <Image
-                  source={{ uri: dailyPick.photos[0] }}
-                  style={styles.dailyPhoto}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={[styles.dailyPhoto, { backgroundColor: Colors.secondary, alignItems: "center", justifyContent: "center" }]}>
-                  <AvatarPlaceholder name={dailyPick.name} size={90} />
-                </View>
-              )}
+              <ProfilePhoto
+                uri={dailyPick.photos?.[0]}
+                name={dailyPick.name}
+                style={styles.dailyPhoto}
+                placeholderSize={90}
+              />
               <View style={styles.dailyCardOverlay}>
                 <View style={styles.dailyBadge}>
                   <Flame size={12} color="#fff" />

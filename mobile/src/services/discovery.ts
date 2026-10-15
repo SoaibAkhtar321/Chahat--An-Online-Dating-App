@@ -154,7 +154,7 @@ export async function fetchDiscoveryDeck(
 function formatProfileRow(r: any, signed: Record<string, string>): Profile {
   const photosArray = Array.isArray(r.photos)
     ? r.photos
-        .map((p: any) => (p.path ? signed[p.path] || "" : p.src || ""))
+        .map((p: any) => (p.path ? signed[p.path] || "" : ""))
         .filter(Boolean)
     : [];
 

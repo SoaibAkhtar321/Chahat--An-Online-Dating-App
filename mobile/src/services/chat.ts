@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Message, MatchItem, Profile } from "../types";
-import { getSignedUrls, getSignedUrl, sanitizeAndPrepareImageUpload } from "./storage";
+import { getSignedUrls, getSignedUrl, imageFileExtension, sanitizeAndPrepareImageUpload } from "./storage";
 import { DEMO_PROFILES } from "./discovery";
 import { pushNotificationToInbox } from "./notifications";
 import { generateUUID, isValidUUID } from "../utils/validation";
@@ -46,7 +46,7 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
             Array.isArray(prof.photos) ? prof.photos.map((p: any) => p.path) : [],
           );
           const photos: string[] = Array.isArray(prof.photos)
-            ? prof.photos.map((p: any) => (p.path ? signed[p.path] || "" : p.src || "")).filter(Boolean)
+            ? prof.photos.map((p: any) => (p.path ? signed[p.path] || "" : "")).filter(Boolean)
             : [];
 
           otherProfile = {
@@ -195,10 +195,8 @@ export async function sendChatMessage(
     let imagePath: string | null = null;
 
     if (imageUri) {
-      const ext = "jpg";
-      imagePath = `${matchId}/${messageId}.${ext}`;
-
-      const { blob, mimeType } = await sanitizeAndPrepareImageUpload(imageUri, "image/jpeg");
+      const { blob, mimeType } = await sanitizeAndPrepareImageUpload(imageUri);
+      imagePath = `${matchId}/${messageId}.${imageFileExtension(mimeType)}`;
 
       const { error: uploadErr } = await supabase.storage.from("chat").upload(imagePath, blob, {
         contentType: mimeType,

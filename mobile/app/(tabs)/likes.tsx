@@ -2,10 +2,10 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Image } from "expo-image";
 import { Lock, Heart } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
 import { Button } from "../../src/components/ui/Button";
 import { hasEntitlement } from "../../src/services/subscription";
@@ -57,10 +57,10 @@ export default function LikesScreen() {
                   }
                   activeOpacity={0.8}
                 >
-                  <Image
-                    source={{ uri: profile.photos[0] }}
+                  <ProfilePhoto
+                    uri={profile.photos[0]}
+                    name={profile.name}
                     style={styles.image}
-                    contentFit="cover"
                   />
                   <View style={styles.cardFooter}>
                     <Text style={styles.cardName}>

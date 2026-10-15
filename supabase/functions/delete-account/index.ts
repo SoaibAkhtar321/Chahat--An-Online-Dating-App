@@ -4,7 +4,7 @@
 // Completely deletes the CALLING user. The user id is taken only from the verified JWT, never from the request body.
 // Order (every step is idempotent so the client can safely retry after a partial failure):
 //   1. verify caller JWT
-//   2. delete the user's storage objects (photos/<uid>/*, and chat/<matchId>/* for all user's matches)
+//   2. clear profile photo references, then delete the user's storage objects (photos/<uid>/*, and chat/<matchId>/*)
 //   3. purge DB rows via purge_user_data(uid) (service_role only RPC)
 //   4. delete the Supabase Auth user (treats "already deleted" as success)
 // The service-role key is read from the function's server-side environment (auto-injected by Supabase).
@@ -15,9 +15,11 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 const json = (status: number, body: Record<string, unknown>) =>
-  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" },
+  });
 
-async function removeFolder(admin: ReturnType<typeof createClient>, bucket: string, folder: string) {
+async function removeFolder(admin: ReturnType<typeof createClient>, bucket: string, folder: string,
+) {
   // list() is paginated; loop until the folder is completely emptied.
   let remainingCount = 0;
   for (let guard = 0; guard < 50; guard++) {
@@ -52,17 +54,24 @@ Deno.serve(async (req) => {
   if (body.confirm !== true) return json(400, { success: false, error: "Confirmation required" });
 
   // 1. identify the caller from their own JWT
-  const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
+  const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } },
+  });
   const { data: userData, error: userErr } = await userClient.auth.getUser();
   if (userErr || !userData.user) return json(401, { success: false, error: "Invalid or expired session" });
   const uid = userData.user.id;
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false },
+  });
   const step = (name: string) => name;
   let current = step("start");
   try {
     // 2a. profile photos
     current = step("storage:photos");
+    const { error: clearPhotosErr } = await admin.rpc("clear_profile_photos_for_deletion", {
+      _uid: uid,
+    });
+    if (clearPhotosErr)
+      throw new Error(`clear profile photo references: ${clearPhotosErr.message}`);
     await removeFolder(admin, "photos", uid);
 
     // 2b. chat media: delete chat folders for all matches the user belongs to

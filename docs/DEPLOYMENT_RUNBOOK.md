@@ -148,6 +148,7 @@ supabase functions deploy moderate-photo
 14. `20260101001300_critical_security_foundations.sql`
 15. `20260101001400_harden_verification_metadata_guard.sql`
 16. `20260101001500_subscription_orders_and_replay_protection.sql`
+17. `20260101001700_profile_completion_and_media_guard.sql`
 
 ---
 

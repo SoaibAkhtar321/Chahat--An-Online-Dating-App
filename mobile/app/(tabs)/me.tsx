@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Image } from "expo-image";
 import {
   Pencil,
   Crown,
@@ -23,7 +22,7 @@ import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
 import { calculateAge } from "../../src/services/profile";
 import { Dialog } from "../../src/components/ui/Dialog";
-import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
+import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 
 export default function MeScreen() {
   const { colors: Colors } = useTheme();
@@ -109,7 +108,12 @@ export default function MeScreen() {
         {/* Profile Card Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarWrapper}>
-            <Image source={{ uri: mainPhotoUri }} style={styles.avatarImage} contentFit="cover" />
+            <ProfilePhoto
+              uri={mainPhotoUri}
+              name={profile?.name || "Your profile"}
+              style={styles.avatarImage}
+              placeholderSize={56}
+            />
             <View style={styles.pctBadge}>
               <Text style={styles.pctText}>{pct}%</Text>
             </View>

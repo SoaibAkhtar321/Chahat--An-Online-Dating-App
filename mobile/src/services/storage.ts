@@ -135,9 +135,19 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-function detectMimeType(bytes: Uint8Array, fallback: string): string {
+export function detectImageMimeType(bytes: Uint8Array): string | undefined {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
     return "image/png";
   }
   if (
@@ -147,7 +157,20 @@ function detectMimeType(bytes: Uint8Array, fallback: string): string {
   ) {
     return "image/webp";
   }
-  return fallback;
+  return undefined;
+}
+
+export function imageFileExtension(mimeType: string): string {
+  switch (mimeType) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    default:
+      throw new Error(`Unsupported image type (${mimeType}).`);
+  }
 }
 
 /**
@@ -158,7 +181,6 @@ function detectMimeType(bytes: Uint8Array, fallback: string): string {
  */
 export async function sanitizeAndPrepareImageUpload(
   uri: string,
-  expectedType: "image/jpeg" | "image/png" | "image/webp" = "image/jpeg",
 ): Promise<{ blob: Blob | ArrayBuffer; mimeType: string }> {
   const rateLimitCheck = checkUploadRateLimit();
   if (!rateLimitCheck.allowed) {
@@ -171,9 +193,10 @@ export async function sanitizeAndPrepareImageUpload(
 
   if (Platform.OS === "web") {
     const response = await fetch(uri);
+    if (!response.ok) throw new Error("Selected image could not be read.");
     const rawBlob = await response.blob();
     rawBytes = new Uint8Array(await rawBlob.arrayBuffer());
-    mimeType = (rawBlob.type as any) || expectedType;
+    mimeType = rawBlob.type;
   } else {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const FileSystem = require("expo-file-system");
@@ -181,7 +204,7 @@ export async function sanitizeAndPrepareImageUpload(
       encoding: FileSystem.EncodingType.Base64,
     });
     rawBytes = base64ToBytes(base64);
-    mimeType = detectMimeType(rawBytes, expectedType);
+    mimeType = "";
   }
 
   if (rawBytes.length === 0) {
@@ -193,9 +216,13 @@ export async function sanitizeAndPrepareImageUpload(
     throw new Error(`Image size exceeds the maximum allowed limit of ${maxMb} MB.`);
   }
 
-  if (!STORAGE_LIMITS.allowedMimeTypes.includes(mimeType as any)) {
-    throw new Error(`Unsupported image type (${mimeType}). Please use JPEG, PNG, or WEBP.`);
+  const detectedMimeType = detectImageMimeType(rawBytes);
+  if (!detectedMimeType || !STORAGE_LIMITS.allowedMimeTypes.includes(detectedMimeType as any)) {
+    throw new Error(
+      `Unsupported image type (${mimeType || "unknown"}). Please use JPEG, PNG, or WEBP.`,
+    );
   }
+  mimeType = detectedMimeType;
 
   // Strip EXIF / GPS metadata
   const sanitizedBytes = stripExifAndGps(rawBytes);
