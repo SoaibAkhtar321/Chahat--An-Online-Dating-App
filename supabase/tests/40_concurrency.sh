@@ -43,4 +43,55 @@ for i in $(seq 1 10); do
 done | burst
 check "10 simultaneous mutual-like pairs: matches" "$(q "select count(*) from matches where user_a like '20%'")" 10
 check "no duplicate matches" "$(q "select count(*) from (select user_a,user_b from matches group by 1,2 having count(*)>1) d")" 0
+
+purchase() {
+  psql -X -q -At -v ON_ERROR_STOP=1 -d "$DB" -c \
+    "SET ROLE service_role; SELECT pg_advisory_lock_shared($LOCK_KEY);
+     SELECT public.record_verified_google_purchase(
+       '$1', 'chahat_premium_1m', '$2', 'concurrent-order',
+       (SELECT starts_at FROM public.purchase_concurrency_window),
+       (SELECT expires_at FROM public.purchase_concurrency_window), true, 'ACTIVE'
+     )" >/dev/null 2>&1
+}
+export -f purchase
+export DB LOCK_KEY
+purchase_burst() {
+  psql -X -q -At -d "$DB" -c "SELECT pg_advisory_lock($LOCK_KEY); SELECT pg_sleep(4)" >/dev/null 2>&1 &
+  local holder=$!; sleep 1; local pids=(); local failed=0
+  for _ in $(seq 1 12); do purchase "$F" "$(printf '%064d' 7)" & pids+=($!); done
+  for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+  wait "$holder" || failed=1
+  return "$failed"
+}
+if purchase_burst; then
+  check "12 parallel same-account purchase retries: order rows" "$(q "select count(*) from subscription_orders where token_hash='$(printf '%064d' 7)'")" 1
+  check "12 parallel same-account purchase retries: premium entitlement" "$(q "select count(*) from user_subscriptions where user_id='$F' and tier='premium' and status='active'")" 1
+else
+  echo "FAIL  concurrent same-account purchase retry returned an error"
+  fail=1
+fi
+
+cross_account_purchase() {
+  psql -X -q -At -v ON_ERROR_STOP=1 -d "$DB" -c \
+    "SET ROLE service_role; SELECT pg_advisory_lock_shared($LOCK_KEY);
+     SELECT public.record_verified_google_purchase(
+       '$1', 'chahat_premium_1m', '$(printf '%064d' 8)', 'cross-account-order',
+       (SELECT starts_at FROM public.purchase_concurrency_window),
+       (SELECT expires_at FROM public.purchase_concurrency_window), true, 'ACTIVE'
+     )" >/dev/null 2>&1
+}
+export -f cross_account_purchase
+psql -X -q -At -d "$DB" -c "SELECT pg_advisory_lock($LOCK_KEY); SELECT pg_sleep(4)" >/dev/null 2>&1 &
+purchase_holder=$!; sleep 1
+cross_account_purchase "$F" & cross_a=$!
+cross_account_purchase "$G" & cross_b=$!
+wait "$cross_a"; cross_a_rc=$?
+wait "$cross_b"; cross_b_rc=$?
+wait "$purchase_holder"
+if { [ "$cross_a_rc" -eq 0 ] && [ "$cross_b_rc" -ne 0 ]; } || { [ "$cross_a_rc" -ne 0 ] && [ "$cross_b_rc" -eq 0 ]; }; then
+  check "cross-account concurrent token replay: single order owner" "$(q "select count(*) from subscription_orders where token_hash='$(printf '%064d' 8)'")" 1
+else
+  echo "FAIL  cross-account concurrent replay must yield exactly one successful owner"
+  fail=1
+fi
 exit $fail

@@ -162,7 +162,7 @@ describe("Google Play purchase verification policy", () => {
     ).toBe(false);
   });
 
-  test("marks a valid unacknowledged purchase for server acknowledgement", () => {
+  test("marks a valid completed purchase for acknowledgement after persistence", () => {
     const result = resolveGoogleSubscription(
       purchase({ acknowledgementState: "ACKNOWLEDGEMENT_STATE_PENDING" }),
       ACCOUNT_ID,
@@ -185,20 +185,23 @@ describe("Google Play purchase verification policy", () => {
     ).toEqual({ valid: false, error: "Google Play purchase is pending and is not entitled." });
   });
 
-  test("persists verified purchase before acknowledging it", () => {
-    const source = fs.readFileSync(
+  test("uses the final database RPC and acknowledges only after the persisted success response", () => {
+    const verifier = fs.readFileSync(
       path.join(root, "supabase/functions/verify-purchase/index.ts"),
       "utf8",
     );
-    const persistPosition = source.indexOf('admin.rpc("record_verified_purchase"');
-    const persistenceCheckPosition = source.indexOf("if (rpcErr)", persistPosition);
-    const acknowledgementPosition = source.indexOf(
-      "if (decision.needsAcknowledgement)",
-      persistPosition,
+    const client = fs.readFileSync(
+      path.join(root, "mobile/src/services/subscription.ts"),
+      "utf8",
     );
-    expect(persistPosition).toBeGreaterThanOrEqual(0);
-    expect(persistenceCheckPosition).toBeGreaterThan(persistPosition);
-    expect(acknowledgementPosition).toBeGreaterThan(persistenceCheckPosition);
+    expect(verifier).toContain('admin.rpc("record_verified_google_purchase"');
+    expect(verifier).not.toContain(":acknowledge");
+    const verificationPosition = client.indexOf("verifyAndCreditPurchase({");
+    const verificationSuccessPosition = client.indexOf("if (!result.success", verificationPosition);
+    const acknowledgementPosition = client.indexOf("iap.finishTransaction", verificationSuccessPosition);
+    expect(verificationPosition).toBeGreaterThanOrEqual(0);
+    expect(verificationSuccessPosition).toBeGreaterThan(verificationPosition);
+    expect(acknowledgementPosition).toBeGreaterThan(verificationSuccessPosition);
   });
 
   test("database RPC supports safe replay while rejecting account transfer and stale downgrades", () => {

@@ -132,11 +132,11 @@ supabase db push
 
 # 5.6 Deploy Edge Functions
 # Configure these values as Supabase Edge Function secrets before deployment; never commit or print them:
-# GOOGLE_PLAY_PACKAGE_NAME=com.milo.dating
-# GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL=<service account with Android Publisher API access>
-# GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY=<service account private key>
+# GOOGLE_PLAY_SERVICE_ACCOUNT_JSON=<restricted service-account JSON>
+# Or use the legacy GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL and
+# GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY pair; never configure both formats differently.
 # The Play Console API must be enabled and the service account granted access to this app.
-# The future Billing client must set obfuscatedAccountId to lowercase SHA-256 hex of the Supabase user UUID.
+# The Android Billing client sets obfuscatedAccountIdAndroid to lowercase SHA-256 hex of the Supabase user UUID.
 # verify-purchase rejects purchases without that matching account binding.
 # Pending payment states are not entitled or acknowledged. A verified completed purchase is persisted
 # before acknowledgement; same-account retries are idempotent, while cross-account/stale/downgrade
@@ -144,6 +144,7 @@ supabase db push
 # Also configure SUPABASE_SERVICE_ROLE_KEY and GOOGLE_VISION_API_KEY as remote secrets.
 supabase functions deploy delete-account
 supabase functions deploy verify-purchase
+supabase functions deploy google-play-notifications
 supabase functions deploy moderate-photo
 supabase functions deploy dispatch-push --no-verify-jwt
 ```
@@ -169,6 +170,72 @@ supabase functions deploy dispatch-push --no-verify-jwt
 17. `20260101001600_google_play_verified_purchase_expiry.sql`
 18. `20260101001700_profile_completion_and_media_guard.sql`
 19. `20260101001800_push_notifications.sql`
+20. `20260101001900_location_discovery.sql`
+21. `20260101002000_video_call_lifecycle.sql`
+22. `20260101002100_google_play_verification_hardening.sql`
+
+---
+
+## Location, Calls, and Google Play Billing (local implementation)
+
+### Location and discovery
+
+- `expo-location` is foreground-only. The app asks only after a user presses the location control
+  and explains the purpose. A denied permission is not repeatedly prompted; use device Settings to
+  grant it later.
+- `discovery_locations` stores precise coordinates in a private table with no client table grants.
+  Only the authenticated user's set/clear/status RPCs are exposed. The discovery RPC returns rounded
+  distance, never coordinates, and only uses location records updated in the last 72 hours.
+- Use the disposable PostgreSQL suite for the `39_location_discovery.sql` regressions. Do not run
+  the migration against a linked/production Supabase project as part of local validation.
+
+### Video calls
+
+- The lifecycle RPCs create matched, unblocked, eligible-member invitations and enforce call-state
+  transitions. A free-call cap starts when the invite is accepted: 60 seconds if either participant
+  is on the free tier; otherwise no free-tier cap applies. This follows the app's existing
+  “first minute of every call is free” wording.
+- Agora/ZEGOCLOUD has not been selected or configured. No provider SDK, media room, or join token is
+  created. The UI explicitly reports that a request is not a live call. Calls can be manually
+  refreshed in the Calls screen. Push notifications are independently configured and do not
+  substitute for a selected real-time media provider.
+- Run `40_video_calls.sql` only through the fail-closed disposable PostgreSQL runner.
+
+### Google Play subscriptions
+
+- Server verification supports only the six approved `chahat_*` Google Play products. Tier and
+  expiry are derived from the Google Android Publisher API response; client-supplied prices, tiers,
+  and durations are ignored. Pending transactions are not entitled or acknowledged. The native
+  client acknowledges a completed purchase only after the verified purchase has been persisted.
+- Before enabling billing, create/publish the matching subscription products and base plans in Play
+  Console, link the Android Publisher API to the app, and configure a restricted service account
+  with subscription-read access. Prefer storing its JSON only as Supabase secret
+  `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`; the verifier also accepts the legacy
+  `GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY` pair.
+  Never use an `EXPO_PUBLIC_*` variable for these credentials.
+- `EXPO_PUBLIC_FEATURE_BILLING` defaults to false. Set it to `true` only in a store-connected
+  Android build after the server secret, package name (`com.milo.dating`), product catalog, and
+  test-track accounts are ready. The app uses Google Play localized pricing, not the reference
+  rupee values in the product copy.
+- `react-native-iap` requires a new native development/store build; Expo Go cannot exercise Google
+  Play Billing. Test pending/cancelled/purchased/replayed/restored states with Play license testers.
+- The verifier is deployed with the repository's existing `verify-purchase` Edge Function name.
+  Deploy the migration and function together only after reviewing the remote migration history;
+  neither was deployed or tested against live Supabase in this implementation.
+- `google-play-notifications` is configured with `verify_jwt = false` because Supabase JWTs cannot
+  authenticate Google Pub/Sub pushes. The handler validates the Google OIDC JWT signature against
+  Google's JWKS and checks issuer, exact audience, verified service-account email, issue time, and
+  expiry before parsing the notification. Configure the Supabase secrets
+  `PUBSUB_PUSH_AUDIENCE` (the exact HTTPS function URL) and
+  `PUBSUB_PUSH_SERVICE_ACCOUNT_EMAIL` (the dedicated Pub/Sub push-auth service account email),
+  in addition to `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`. In Google Cloud, enable authenticated push on
+  the Pub/Sub subscription, set its audience to the exact function URL, grant the Pub/Sub service
+  agent `roles/iam.serviceAccountTokenCreator` on the push-auth service account when required by
+  the project, and connect the Play Console RTDN topic to the subscription. Supabase invocation is
+  authorized by the verified OIDC claims rather than Google Cloud IAM on the Supabase endpoint.
+  The handler re-fetches the subscription from Android Publisher API and reconciles only purchases
+  already associated with a Chahat account; RTDN payload fields never directly grant entitlements.
+  Validate the Pub/Sub delivery against a non-production project before configuring production.
 
 ---
 

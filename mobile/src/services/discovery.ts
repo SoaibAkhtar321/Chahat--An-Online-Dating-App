@@ -101,32 +101,77 @@ export async function fetchDiscoveryDeck(
   seekingGender: string,
   filters?: import("../types").Filters,
 ): Promise<Profile[]> {
-  let deck: Profile[] = [];
+  void currentUserId;
+  void userCity;
+  void seekingGender;
+  const result = await fetchDiscoveryPage(filters);
+  return result.profiles;
+}
+
+export interface DiscoveryCursor {
+  distanceMeters: number;
+  profileId: string;
+}
+
+export interface DiscoveryPage {
+  profiles: Profile[];
+  nextCursor: DiscoveryCursor | null;
+}
+
+export async function fetchDiscoveryPage(
+  filters?: import("../types").Filters,
+  cursor?: DiscoveryCursor | null,
+): Promise<DiscoveryPage> {
   if (!isSupabaseConfigured()) {
-    deck = [...DEMO_PROFILES];
-  } else {
-    try {
-      // Server RPC only: it applies blocks, city/seeking filters, already-swiped exclusion and never returns dob.
-      const { data: rpcData, error: rpcError } = await supabase.rpc("get_discovery_feed", {
-        _limit: 30,
-      });
-      if (rpcError || !Array.isArray(rpcData)) {
-        console.warn("Discovery feed failed:", rpcError?.message);
-        deck = [];
-      } else {
-        const signed = await getSignedUrls(
-          "photos",
-          rpcData.flatMap((r: any) => (Array.isArray(r.photos) ? r.photos.map((p: any) => p.path) : [])),
-        );
-        deck = rpcData.map((row: any) => formatProfileRow(row, signed));
-      }
-    } catch (err) {
-      console.warn("Discovery failed:", err);
-      deck = [];
-    }
+    return { profiles: filterDemoProfiles(filters), nextCursor: null };
   }
 
-  // Apply client-side criteria from active filters (age range, distance, interests, languages)
+  try {
+    const safeFilters = filters ?? {
+      ageMin: 18,
+      ageMax: 99,
+      distance: 50,
+      intents: [],
+      interests: [],
+      languages: [],
+    };
+    const { data, error } = await supabase.rpc("get_discovery_feed_page", {
+      _limit: 30,
+      _age_min: safeFilters.ageMin,
+      _age_max: safeFilters.ageMax,
+      _radius_km: safeFilters.distance,
+      _intents: safeFilters.intents,
+      _interests: safeFilters.interests,
+      _languages: safeFilters.languages,
+      _after_distance_m: cursor?.distanceMeters ?? null,
+      _after_id: cursor?.profileId ?? null,
+    });
+    if (error) throw new Error(error.message);
+    if (!Array.isArray(data)) throw new Error("Discovery returned an invalid response.");
+
+    const signed = await getSignedUrls(
+      "photos",
+      data.flatMap((row: any) =>
+        Array.isArray(row.photos) ? row.photos.map((photo: any) => photo.path).filter(Boolean) : [],
+      ),
+    );
+    const profiles = data.map((row: any) => formatProfileRow(row, signed));
+    const last = data[data.length - 1];
+    return {
+      profiles,
+      nextCursor:
+        data.length === 30 && last
+          ? { distanceMeters: last.cursor_distance_m, profileId: last.id }
+          : null,
+    };
+  } catch (error) {
+    console.warn("Discovery page failed:", error);
+    return { profiles: [], nextCursor: null };
+  }
+}
+
+function filterDemoProfiles(filters?: import("../types").Filters): Profile[] {
+  let deck = [...DEMO_PROFILES];
   if (filters && deck.length > 0) {
     deck = deck.filter((profile) => {
       if (filters.ageMin && profile.age < filters.ageMin) return false;
@@ -147,7 +192,6 @@ export async function fetchDiscoveryDeck(
       return true;
     });
   }
-
   return deck;
 }
 
@@ -163,7 +207,7 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
     name: r.name || "Chahat Member",
     age: r.age || 25,
     city: r.city || "",
-    distanceKm: r.distanceKm || 0,
+    distanceKm: r.distance_km ?? r.distanceKm ?? 0,
     bio: r.bio || "",
     photos: photosArray,
     interests: r.interests || [],

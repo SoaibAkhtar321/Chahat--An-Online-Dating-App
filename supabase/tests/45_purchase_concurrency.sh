@@ -30,8 +30,9 @@ q() {
 purchase_call() {
   local user_id="$1"
   local token_hash="$2"
-  psql -X -q -At -v ON_ERROR_STOP=1 -d "$DB" \
-    -c "SELECT pg_advisory_lock_shared($LOCK_KEY); SET ROLE service_role; SET request.jwt.claim.role='service_role'; SELECT public.record_verified_purchase('$user_id','google_play','GPA.concurrent','chahat_premium_1m','premium','$token_hash',1,'$EXPIRY',true)" \
+  PGOPTIONS="-c lock_timeout=10000 -c statement_timeout=20000" \
+    psql -X -q -At -v ON_ERROR_STOP=1 -d "$DB" \
+    -c "SELECT pg_advisory_lock_shared($LOCK_KEY); SET ROLE service_role; SET request.jwt.claim.role='service_role'; SELECT public.record_verified_google_purchase('$user_id','chahat_premium_1m','$token_hash','GPA.concurrent',(SELECT starts_at FROM public.purchase_concurrency_window),(SELECT expires_at FROM public.purchase_concurrency_window),true,'ACTIVE')" \
     > "$3" 2>&1
 }
 

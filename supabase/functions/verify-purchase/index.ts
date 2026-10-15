@@ -1,255 +1,249 @@
-// Supabase Edge Function: verify-purchase
-// Verifies store purchase tokens and records subscriptions server-side with replay protection.
-// STATUS: Deploy with: supabase functions deploy verify-purchase
-
+// Verifies Google Play subscriptions with the Android Publisher API before
+// persisting any entitlement. Never trust product/tier/expiry data from the app.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { resolveGoogleSubscription, validatePurchaseRequest } from "./policy.ts";
+import {
+  getGoogleAccessToken,
+  getGoogleSubscription,
+  sha256Hex,
+  type GoogleServiceAccount,
+  type GoogleSubscription,
+} from "../_shared/googlePlay.ts";
+import {
+  getGoogleProduct,
+  googleRevocationState,
+  isEntitledGoogleState,
+  resolveGoogleSubscription,
+  validatePurchaseRequest,
+} from "./policy.ts";
 
+const PACKAGE_NAME = "com.milo.dating";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const GOOGLE_PUBLISHER_SCOPE = "https://www.googleapis.com/auth/androidpublisher";
-
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
   });
 
-async function sha256Hex(message: string): Promise<string> {
-  const msgUint8 = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function base64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-}
-
-function encodeJson(value: Record<string, unknown>): string {
-  return base64Url(new TextEncoder().encode(JSON.stringify(value)));
-}
-
-function decodePem(privateKey: string): Uint8Array {
-  const base64 = privateKey
-    .replace(/\\n/g, "\n")
-    .replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
-  return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-}
-
-async function googleAccessToken(email: string, privateKeyPem: string): Promise<string> {
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const unsigned = `${encodeJson({ alg: "RS256", typ: "JWT" })}.${encodeJson({
-    iss: email,
-    scope: GOOGLE_PUBLISHER_SCOPE,
-    aud: GOOGLE_TOKEN_URL,
-    iat: issuedAt,
-    exp: issuedAt + 3600,
-  })}`;
-  const key = await crypto.subtle.importKey(
-    "pkcs8",
-    decodePem(privateKeyPem),
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    new TextEncoder().encode(unsigned),
-  );
-  const assertion = `${unsigned}.${base64Url(new Uint8Array(signature))}`;
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }),
-  });
-  if (!response.ok) throw new Error("Google service-account authentication failed.");
-  const tokenResponse = await response.json();
-  if (typeof tokenResponse.access_token !== "string" || !tokenResponse.access_token) {
-    throw new Error("Google service-account authentication returned no access token.");
+function readServiceAccount(): GoogleServiceAccount | null {
+  const accountJson = Deno.env.get("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON");
+  if (accountJson) {
+    try {
+      return JSON.parse(accountJson) as GoogleServiceAccount;
+    } catch {
+      return null;
+    }
   }
-  return tokenResponse.access_token;
+
+  const clientEmail = Deno.env.get("GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL");
+  const privateKey = Deno.env.get("GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY");
+  return clientEmail && privateKey
+    ? { client_email: clientEmail, private_key: privateKey }
+    : null;
 }
 
-async function fetchGoogleSubscription(
-  accessToken: string,
-  packageName: string,
-  purchaseToken: string,
-): Promise<{ response: Response; purchase?: import("./policy.ts").GoogleSubscriptionPurchase }> {
-  const url =
-    "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/" +
-    `${encodeURIComponent(packageName)}/purchases/subscriptionsv2/tokens/${encodeURIComponent(purchaseToken)}`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok) return { response };
-  return { response, purchase: await response.json() };
-}
-
-async function acknowledgeGoogleSubscription(
-  accessToken: string,
-  packageName: string,
-  productId: string,
-  purchaseToken: string,
-): Promise<boolean> {
-  const url =
-    "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/" +
-    `${encodeURIComponent(packageName)}/purchases/subscriptions/${encodeURIComponent(productId)}` +
-    `/tokens/${encodeURIComponent(purchaseToken)}:acknowledge`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({}),
-  });
-  return response.ok;
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
-  if (req.method !== "POST") return json(405, { success: false, error: "Method not allowed" });
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (request.method !== "POST") return json(405, { success: false, error: "Method not allowed." });
 
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const packageName = Deno.env.get("GOOGLE_PLAY_PACKAGE_NAME");
-  const serviceAccountEmail = Deno.env.get("GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL");
-  const serviceAccountPrivateKey = Deno.env.get("GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY");
-  if (
-    !url ||
-    !anon ||
-    !serviceKey ||
-    !packageName ||
-    !serviceAccountEmail ||
-    !serviceAccountPrivateKey
-  ) {
-    return json(500, { success: false, error: "Server misconfigured" });
+  const credentials = readServiceAccount();
+  if (!url || !anon || !serviceKey || !credentials?.client_email || !credentials.private_key) {
+    return json(500, { success: false, error: "Purchase verification is not configured." });
   }
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) {
-    return json(401, { success: false, error: "Authentication required" });
+  const authorization = request.headers.get("Authorization") ?? "";
+  if (!authorization.startsWith("Bearer ")) {
+    return json(401, { success: false, error: "Authentication required." });
   }
-
-  // 1. Identify the caller strictly from their verified JWT
   const userClient = createClient(url, anon, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: authorization } },
   });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData.user) {
-    return json(401, { success: false, error: "Invalid or expired session" });
-  }
-  const uid = userData.user.id;
+  const { data: authData, error: authError } = await userClient.auth.getUser();
+  if (authError || !authData.user) return json(401, { success: false, error: "Invalid session." });
+  const userId = authData.user.id;
 
-  // 2. Accept only a Google Play token. Product, tier, price and duration come from Google
-  // Play's response and this function's server-owned catalog, never from caller claims.
   let body: unknown;
   try {
-    body = await req.json();
+    const requestBody = await request.text();
+    if (requestBody.length > 8192) {
+      return json(413, { success: false, error: "Purchase request is too large." });
+    }
+    body = JSON.parse(requestBody);
   } catch {
-    return json(400, { success: false, error: "Invalid JSON body" });
+    return json(400, { success: false, error: "Invalid request body." });
   }
-
-  const request = validatePurchaseRequest(body);
-  if (!request.valid) {
-    return json(400, { success: false, error: request.error });
+  const validatedRequest = validatePurchaseRequest(body);
+  if (!validatedRequest.valid) {
+    return json(400, { success: false, error: validatedRequest.error });
   }
-  const purchaseToken = request.purchaseToken;
+  const purchaseRequest = body as Record<string, unknown>;
+  if (typeof purchaseRequest.productId !== "string" || !getGoogleProduct(purchaseRequest.productId)) {
+    return json(400, { success: false, error: "Unsupported Google Play product." });
+  }
+  const requestedProductId = purchaseRequest.productId;
+  const purchaseToken = validatedRequest.purchaseToken;
+  const tokenHash = await sha256Hex(purchaseToken);
+  const expectedAccountBinding = await sha256Hex(userId);
 
-  let googleAccess: string;
-  let providerResult: Awaited<ReturnType<typeof fetchGoogleSubscription>>;
+  let subscription: GoogleSubscription;
   try {
-    googleAccess = await googleAccessToken(serviceAccountEmail, serviceAccountPrivateKey);
-    providerResult = await fetchGoogleSubscription(googleAccess, packageName, purchaseToken);
-  } catch (err) {
-    console.error("Google Play verification request failed:", err);
-    return json(502, {
+    const accessToken = await getGoogleAccessToken(credentials);
+    const result = await getGoogleSubscription(accessToken, PACKAGE_NAME, purchaseToken);
+    if (!result.response.ok) {
+      if (
+        result.response.status === 401 ||
+        result.response.status === 403 ||
+        result.response.status === 408 ||
+        result.response.status === 429 ||
+        result.response.status >= 500
+      ) {
+        return json(503, {
+          success: false,
+          retryable: true,
+          error: "Google Play verification is temporarily unavailable.",
+        });
+      }
+      return json(400, { success: false, error: "Google Play did not recognize this purchase." });
+    }
+    if (!result.subscription) {
+      return json(502, {
+        success: false,
+        retryable: true,
+        error: "Google Play returned an empty purchase.",
+      });
+    }
+    subscription = result.subscription;
+  } catch {
+    return json(503, {
       success: false,
+      retryable: true,
       error: "Google Play verification is temporarily unavailable.",
     });
   }
 
-  if (!providerResult.response.ok) {
-    const status =
-      providerResult.response.status === 400 || providerResult.response.status === 404 ? 402 : 502;
-    return json(status, {
+  const accountBinding = subscription.externalAccountIdentifiers?.obfuscatedExternalAccountId;
+  if (!accountBinding || accountBinding !== expectedAccountBinding) {
+    return json(403, {
       success: false,
-      error:
-        status === 402
-          ? "Google Play did not recognize this purchase token."
-          : "Google Play verification is temporarily unavailable.",
+      error: "This purchase is not bound to the signed-in account.",
     });
   }
 
-  const decision = resolveGoogleSubscription(providerResult.purchase ?? {}, await sha256Hex(uid));
-  if (!decision.valid) {
-    return json(402, { success: false, error: decision.error });
+  const state = subscription.subscriptionState ?? "SUBSCRIPTION_STATE_UNSPECIFIED";
+  if (
+    state === "SUBSCRIPTION_STATE_PENDING" ||
+    subscription.pendingPurchase?.purchaseState === "PENDING"
+  ) {
+    return json(202, {
+      success: false,
+      status: "pending",
+      error: "Google Play purchase is pending. No subscription was granted or acknowledged.",
+    });
   }
 
-  // 3. Hash only after authoritative provider verification; the unique database constraint
-  // remains the atomic replay barrier. Exact retries are idempotent for the same account.
-  const tokenHash = await sha256Hex(purchaseToken);
+  const lineItem = subscription.lineItems?.find((line) => line.productId === requestedProductId);
+  const expiryMs = lineItem?.expiryTime ? Date.parse(lineItem.expiryTime) : Number.NaN;
+  if (!lineItem || !Number.isFinite(expiryMs)) {
+    return json(400, {
+      success: false,
+      error: "The verified subscription product or expiry is invalid.",
+    });
+  }
 
-  // 4. Persist before acknowledging. A retry after an acknowledgement failure is safe because
-  // the database operation is idempotent for this verified purchase and account.
   const admin = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-
-  const { data: rpcRes, error: rpcErr } = await admin.rpc("record_verified_purchase", {
-    _user_id: uid,
-    _store: "google_play",
-    _order_id: decision.orderId,
-    _product_id: decision.productId,
-    _tier: decision.tier,
-    _token_hash: tokenHash,
-    _duration_months: decision.durationMonths,
-    _verified_expires_at: decision.expiresAt,
-    _auto_renew: decision.autoRenew,
-  });
-
-  if (rpcErr) {
-    const isReplayConflict = rpcErr.message?.includes("already been redeemed");
-    return json(isReplayConflict ? 409 : 400, {
+  if (!isEntitledGoogleState(state, expiryMs)) {
+    const revocationState =
+      googleRevocationState(state) ?? (expiryMs <= Date.now() ? "EXPIRED" : null);
+    if (revocationState) {
+      const { error } = await admin.rpc("revoke_verified_google_purchase", {
+        _user_id: userId,
+        _token_hash: tokenHash,
+        _provider_state: revocationState,
+      });
+      if (error) {
+        return json(500, {
+          success: false,
+          error: "Could not reconcile the verified purchase state.",
+        });
+      }
+    }
+    return json(400, {
       success: false,
-      error: rpcErr.message || "Failed to record verified purchase",
+      status: "inactive",
+      error: "Google Play confirms there is no active subscription.",
     });
   }
 
-  if (decision.needsAcknowledgement) {
-    let acknowledged = false;
-    try {
-      acknowledged = await acknowledgeGoogleSubscription(
-        googleAccess,
-        packageName,
-        decision.productId,
-        purchaseToken,
-      );
-    } catch (err) {
-      console.error("Google Play purchase acknowledgement failed:", err);
-    }
-    if (!acknowledged) {
-      return json(502, {
-        success: false,
-        error: "Purchase was recorded, but Google Play acknowledgement failed. Retry verification.",
-      });
-    }
+  const decision = resolveGoogleSubscription(
+    subscription,
+    expectedAccountBinding,
+    Date.now(),
+    requestedProductId,
+  );
+  if (!decision.valid || decision.productId !== requestedProductId) {
+    return json(402, {
+      success: false,
+      error: decision.valid
+        ? "The verified product does not match the requested Google Play product."
+        : decision.error,
+    });
+  }
+  const startsAt = subscription.startTime ? Date.parse(subscription.startTime) : Number.NaN;
+  if (!Number.isFinite(startsAt) || startsAt > Date.now() + 5 * 60 * 1000) {
+    return json(400, {
+      success: false,
+      error: "Google Play returned an invalid subscription start time.",
+    });
   }
 
+  const providerState =
+    state === "SUBSCRIPTION_STATE_IN_GRACE_PERIOD"
+      ? "IN_GRACE_PERIOD"
+      : state === "SUBSCRIPTION_STATE_CANCELED"
+        ? "CANCELED"
+        : "ACTIVE";
+  const { data, error } = await admin.rpc("record_verified_google_purchase", {
+    _user_id: userId,
+    _product_id: decision.productId,
+    _token_hash: tokenHash,
+    _order_id: decision.orderId,
+    _starts_at: new Date(startsAt).toISOString(),
+    _expires_at: decision.expiresAt,
+    _auto_renew: decision.autoRenew,
+    _provider_state: providerState,
+  });
+  if (error) {
+    const conflict = /already associated|stale purchase|product does not match/i.test(error.message);
+    return json(conflict ? 409 : 400, {
+      success: false,
+      error: conflict
+        ? "Purchase token is already used or its update is stale."
+        : "Could not persist the verified purchase.",
+    });
+  }
+  if (!data?.success) {
+    return json(500, {
+      success: false,
+      retryable: true,
+      error: "Verified purchase was not persisted.",
+    });
+  }
+
+  // The mobile client acknowledges with finishTransaction only after this persisted success.
   return json(200, {
     success: true,
-    tier: rpcRes?.tier ?? decision.tier,
-    data: rpcRes,
+    status: "verified",
+    tier: data.tier,
+    expiresAt: data.expires_at,
+    idempotent: data.idempotent === true,
+    entitlementUpdated: data.entitlement_updated === true,
   });
 });

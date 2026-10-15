@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
+import React, { useState, useMemo, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Linking } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -20,6 +20,11 @@ import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
 import { FilterModal } from "../../src/components/discovery/FilterModal";
 import { useMilo } from "../../src/context/MiloContext";
 import { hasEntitlement } from "../../src/services/subscription";
+import {
+  disableLocationSharing,
+  enableLocationSharing,
+  isLocationSharingEnabled,
+} from "../../src/services/location";
 import type { Filters } from "../../src/types";
 
 export default function DiscoverScreen() {
@@ -45,6 +50,78 @@ export default function DiscoverScreen() {
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [swiping, setSwiping] = useState(false);
+  const [locationSharing, setLocationSharing] = useState(false);
+
+  useEffect(() => {
+    isLocationSharingEnabled()
+      .then(setLocationSharing)
+      .catch((error) => console.warn("Could not load location-sharing status:", error));
+  }, []);
+
+  const toggleLocationSharing = () => {
+    if (locationSharing) {
+      Alert.alert(
+        "Turn off location discovery?",
+        "Your precise location will be deleted. You can still discover profiles in your city.",
+        [
+          { text: "Keep on", style: "cancel" },
+          {
+            text: "Turn off",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await disableLocationSharing();
+                setLocationSharing(false);
+                await refreshDeck();
+              } catch (error) {
+                Alert.alert(
+                  "Could not update location",
+                  error instanceof Error ? error.message : "Please try again.",
+                );
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Use your location?",
+      "With your permission, Chahat stores precise coordinates privately to find nearby profiles. They are never shown to other members. You can turn this off any time.",
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: "Continue",
+          onPress: async () => {
+            const result = await enableLocationSharing();
+            if (result.status === "enabled") {
+              setLocationSharing(true);
+              await refreshDeck();
+            } else if (result.status === "permission_denied") {
+              Alert.alert(
+                "Location permission unavailable",
+                "Enable foreground location permission in your device settings to use nearby discovery.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Open Settings", onPress: () => void Linking.openSettings() },
+                ],
+              );
+            } else if (result.status !== "unsupported") {
+              Alert.alert(
+                result.status === "services_disabled" ? "Location services are off" : "Location unavailable",
+                result.status === "services_disabled"
+                  ? "Turn on device location services and try again."
+                  : result.status === "error"
+                    ? result.message
+                    : "Location discovery is unavailable on this device.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleSwipe = async (dir: "like" | "pass" | "priority") => {
     if (swiping || !currentProfile) return;
@@ -130,6 +207,15 @@ export default function DiscoverScreen() {
             activeOpacity={0.7}
           >
             <Bell size={20} color={Colors.foreground} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.iconCircle}
+            onPress={toggleLocationSharing}
+            activeOpacity={0.7}
+            accessibilityLabel={locationSharing ? "Turn off location discovery" : "Enable location discovery"}
+          >
+            <MapPin size={20} color={locationSharing ? Colors.primary : Colors.foreground} />
           </TouchableOpacity>
 
           <TouchableOpacity

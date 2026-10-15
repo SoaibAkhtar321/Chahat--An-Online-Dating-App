@@ -90,7 +90,9 @@ describe("Phase B: Critical Security Foundations", () => {
       expect(
         allMigrations.indexOf("20260101001400_harden_verification_metadata_guard.sql"),
       ).toBeGreaterThan(allMigrations.indexOf("20260101001300_critical_security_foundations.sql"));
-      expect(allMigrations[allMigrations.length - 1]).toBe("20260101001800_push_notifications.sql");
+      expect(allMigrations[allMigrations.length - 1]).toBe(
+        "20260101002100_google_play_verification_hardening.sql",
+      );
     });
 
     test("is_match_member enforces NOT public.is_blocked_pair", () => {
