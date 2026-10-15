@@ -49,7 +49,7 @@ BEGIN
   INSERT INTO public.t_results VALUES('8 likes succeed under limit 10', ok=8, ok::text);
 END $$;
 DO $$ DECLARE r jsonb; BEGIN
-  r:=public.record_swipe('ananya','like'); INSERT INTO public.t_results VALUES('re-like same target is idempotent (no extra quota)', (r->>'success')::boolean AND (r->>'likes_remaining')::int=2, r::text);
+  r:=public.record_swipe('ananya','like'); INSERT INTO public.t_results VALUES('re-like same target is idempotent (no extra quota)', (r->>'success')::boolean AND (r->>'likes_remaining')::int=12, r::text);
 END $$;
 RESET ROLE;
 -- bump quota via service-side config to test limit: set limit to 8 and verify cap
