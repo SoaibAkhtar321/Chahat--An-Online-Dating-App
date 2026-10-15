@@ -170,7 +170,7 @@ export async function completeAuthLink(url: string): Promise<AuthLinkResult> {
   try {
     const parsed = new URL(url);
     if (
-      parsed.protocol !== "milo:" ||
+      parsed.protocol !== "chahat:" ||
       (parsed.hostname !== "callback" && parsed.pathname !== "/callback")
     ) {
       return { success: false, flow, error: "This is not a recognized Chahat account link." };

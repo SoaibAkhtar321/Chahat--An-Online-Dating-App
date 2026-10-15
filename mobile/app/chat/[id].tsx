@@ -13,6 +13,8 @@ import {
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { buildNewCallRoute } from "../../src/services/calls";
+import { isCallingAvailable } from "../../src/services/callMedia";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -53,6 +55,7 @@ export default function ChatDetailScreen() {
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { id: matchId } = useLocalSearchParams<{ id: string }>();
+  const callingAvailable = isCallingAvailable();
   const { user } = useAuth();
   const { matches, refreshMatches } = useMilo();
 
@@ -237,29 +240,25 @@ export default function ChatDetailScreen() {
             <Trophy size={19} color={Colors.accent} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionIcon}
-            onPress={() =>
-              router.push({
-                pathname: "/call/[id]",
-                params: { id: otherUser.id },
-              })
-            }
-          >
-            <Phone size={18} color={Colors.primary} />
-          </TouchableOpacity>
+          {callingAvailable && matchId ? (
+            <>
+              <TouchableOpacity
+                style={styles.actionIcon}
+                accessibilityLabel="Start audio call"
+                onPress={() => router.push(buildNewCallRoute(matchId, "audio"))}
+              >
+                <Phone size={18} color={Colors.primary} />
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionIcon}
-            onPress={() =>
-              router.push({
-                pathname: "/call/[id]",
-                params: { id: otherUser.id },
-              })
-            }
-          >
-            <Video size={20} color={Colors.primary} />
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionIcon}
+                accessibilityLabel="Start video call"
+                onPress={() => router.push(buildNewCallRoute(matchId, "video"))}
+              >
+                <Video size={20} color={Colors.primary} />
+              </TouchableOpacity>
+            </>
+          ) : null}
 
           <TouchableOpacity style={styles.actionIcon} onPress={() => setMenuVisible(!menuVisible)}>
             <MoreVertical size={20} color={Colors.foreground} />

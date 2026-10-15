@@ -5,7 +5,7 @@ Milo is an intentional dating application engineered for genuine connection, ver
 ## Android Application Architecture
 
 - **Platform Target**: Android 14+ (API Level 34, minimum SDK 24)
-- **Application Package**: `com.milo.dating`
+- **Application Package**: `com.chahat.dating`
 - **Framework**: React Native 0.76 + Expo SDK 52 + Expo Router
 - **Native Android Configuration**: `/android` (Android Gradle Plugin, AndroidManifest.xml, strings, styles)
 - **Build & Distribution**: EAS Build (`eas.json`) targeting Google Play Store Android App Bundle (`.aab`) and preview APK (`.apk`)
@@ -58,7 +58,7 @@ npm run android
 ```text
 ├── android/                         # Native Android Gradle project
 │   ├── app/
-│   │   ├── build.gradle             # Android build config (appId: com.milo.dating, API 34)
+│   │   ├── build.gradle             # Android build config (appId: com.chahat.dating, API 34)
 │   │   └── src/main/
 │   │       ├── AndroidManifest.xml  # Android manifest with permissions & deep links
 │   │       └── res/                 # Android strings, styles, splash theme

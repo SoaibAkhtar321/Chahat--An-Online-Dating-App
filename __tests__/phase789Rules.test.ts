@@ -53,7 +53,7 @@ describe("Phase 7-9 lifecycle and release safeguards", () => {
   it("preserves the Android app identity and scopes production build credentials", () => {
     const app = JSON.parse(read("mobile/app.json"));
     const eas = JSON.parse(read("mobile/eas.json"));
-    expect(app.expo.android.package).toBe("com.milo.dating");
+    expect(app.expo.android.package).toBe("com.chahat.dating");
     expect(app.expo.extra.eas.projectId).toBe("d40a4e1f-fbf8-4b44-93af-7c4e1fe39b8a");
     expect(eas.build.production.environment).toBe("production");
     expect(eas.build.production.autoIncrement).toBe(true);
@@ -62,7 +62,7 @@ describe("Phase 7-9 lifecycle and release safeguards", () => {
 
   it("configures the in-app auth callback and excludes fake push tokens", () => {
     expect(read("supabase/config.toml")).toMatch(
-      /additional_redirect_urls = \[.*milo:\/\/callback/,
+      /additional_redirect_urls = \[.*chahat:\/\/callback/,
     );
     expect(read("mobile/src/services/notifications.ts")).not.toMatch(
       /fcm_mock|Math\.random\(\).*token/,

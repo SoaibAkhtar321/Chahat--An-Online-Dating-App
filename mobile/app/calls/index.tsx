@@ -9,7 +9,14 @@ import { Header } from "../../src/components/ui/Header";
 import { useMilo } from "../../src/context/MiloContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Alert } from "../../src/utils/alert";
-import { getMyVideoCalls, transitionVideoCall, type VideoCall } from "../../src/services/calls";
+import {
+  buildExistingCallRoute,
+  buildNewCallRoute,
+  getMyVideoCalls,
+  transitionVideoCall,
+  type VideoCall,
+} from "../../src/services/calls";
+import { isCallingAvailable } from "../../src/services/callMedia";
 
 export default function CallsScreen() {
   const { colors: Colors } = useTheme();
@@ -18,6 +25,7 @@ export default function CallsScreen() {
   const { matches } = useMilo();
   const { user } = useAuth();
   const [calls, setCalls] = useState<VideoCall[]>([]);
+  const callingAvailable = isCallingAvailable();
 
   const refreshCalls = async () => {
     try {
@@ -36,10 +44,7 @@ export default function CallsScreen() {
       const status = await transitionVideoCall(call.id, action);
       await refreshCalls();
       if (action === "accept" && status === "accepted") {
-        router.push({
-          pathname: "/call/[id]",
-          params: { id: call.match_id, callId: call.id, type: call.call_type },
-        });
+        router.push(buildExistingCallRoute(call));
       }
     } catch (error) {
       Alert.alert("Call update failed", error instanceof Error ? error.message : "Please try again.");
@@ -154,7 +159,14 @@ export default function CallsScreen() {
         {/* Call Logs & Matched Contacts */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Quick Call With Matches</Text>
-          {matches.length > 0 ? (
+          {!callingAvailable ? (
+            <View style={styles.emptyWrap}>
+              <Info size={32} color={Colors.mutedForeground} />
+              <Text style={styles.emptyText}>
+                Audio and video calling is not available yet. We will tell you when it is ready.
+              </Text>
+            </View>
+          ) : matches.length > 0 ? (
             <View style={styles.matchList}>
               {matches.map((m) => (
                 <View key={m.id} style={styles.matchRow}>
@@ -165,14 +177,14 @@ export default function CallsScreen() {
                   <View style={styles.callActions}>
                     <TouchableOpacity
                       style={styles.callBtn}
-                      onPress={() => router.push({ pathname: "/call/[id]", params: { id: m.id, type: "audio" } })}
+                      onPress={() => router.push(buildNewCallRoute(m.id, "audio"))}
                       activeOpacity={0.7}
                     >
                       <PhoneCall size={16} color={Colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.callBtn, styles.callBtnPrimary]}
-                      onPress={() => router.push({ pathname: "/call/[id]", params: { id: m.id, type: "video" } })}
+                      onPress={() => router.push(buildNewCallRoute(m.id, "video"))}
                       activeOpacity={0.7}
                     >
                       <Video size={16} color={Colors.primaryForeground} />

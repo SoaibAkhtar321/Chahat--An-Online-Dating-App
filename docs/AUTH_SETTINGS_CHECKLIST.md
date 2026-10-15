@@ -13,7 +13,7 @@ project. Do not run `supabase config push` until the Dashboard values below have
 | Password requirement    | letters and digits                      | `validatePassword` requires a letter and a number                                                                 |
 | Anonymous sign-ins      | OFF                                     | Every feature assumes a real account (profile, onboarding, age check)                                             |
 | Sign-ups enabled        | ON                                      | New people must be able to register                                                                               |
-| Redirect URL / Site URL | include `milo://` and `milo://callback` | Expo scheme and the in-app confirmation/password-recovery callback; add `chahat://` only if the scheme is changed |
+| Redirect URL / Site URL | include `chahat://` and `chahat://callback` | Expo scheme and the in-app confirmation/password-recovery callback |
 | JWT expiry              | 3600 s                                  | Supabase default; the Edge Function relies on a valid, unexpired token                                            |
 | Refresh-token rotation  | ON                                      | Supabase default                                                                                                  |
 
@@ -26,7 +26,7 @@ Open Authentication in the Dashboard of `milo-dev` and tick off each row of sect
 3. Custom SMTP: configured, or the built-in sender with its low hourly cap?
 4. Leaked-password protection: shown only on some plans; record whether it is available and on.
 5. Email templates: do any contain a link that does not use an address you control?
-6. Redirect allowlist: include the exact `milo://callback` URL for signup confirmation and password recovery.
+6. Redirect allowlist: include the exact `chahat://callback` URL for signup confirmation and password recovery.
 
 ## 3. Web admin target (issue O8)
 

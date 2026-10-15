@@ -39,7 +39,7 @@ describe("Google Play server verification policy", () => {
   it("parses only correctly-shaped Chahat RTDN subscription messages", () => {
     const data = btoa(
       JSON.stringify({
-        packageName: "com.milo.dating",
+        packageName: "com.chahat.dating",
         subscriptionNotification: {
           purchaseToken: "long-google-purchase-token",
           subscriptionId: "chahat_premium_1m",
@@ -48,7 +48,7 @@ describe("Google Play server verification policy", () => {
       }),
     );
     expect(parseGooglePlayNotification(data)).toMatchObject({
-      packageName: "com.milo.dating",
+      packageName: "com.chahat.dating",
       subscriptionId: "chahat_premium_1m",
       notificationType: 2,
     });

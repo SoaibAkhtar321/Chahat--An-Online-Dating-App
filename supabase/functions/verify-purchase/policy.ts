@@ -154,7 +154,7 @@ export function parseGooglePlayNotification(encodedData: string): GooglePlayNoti
     const decoded = JSON.parse(atob(encodedData));
     const note = decoded?.subscriptionNotification;
     if (
-      decoded?.packageName !== "com.milo.dating" ||
+      decoded?.packageName !== "com.chahat.dating" ||
       typeof note?.purchaseToken !== "string" ||
       note.purchaseToken.length < 16 ||
       note.purchaseToken.length > 4096 ||

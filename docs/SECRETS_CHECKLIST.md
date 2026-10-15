@@ -32,9 +32,11 @@ Set with `supabase secrets set NAME=value` against the target project. `SUPABASE
 | `PUBSUB_PUSH_SERVICE_ACCOUNT_EMAIL` | google-play-notifications | Service account that signs the Pub/Sub push |
 | `PUSH_DISPATCH_SECRET` | dispatch-push | Shared secret the scheduler sends to authorize dispatch |
 | `GOOGLE_VISION_API_KEY` | moderate-photo | Image moderation |
+| `CALL_PROVIDER` | issue-call-token | Name of the registered call adapter to use. Unset means calling is reported as not configured. No adapter ships yet |
 
-Added by later phases (placeholders, not yet read by code): call provider keys, coin top-up
-product configuration.
+Added with a real call adapter (not yet read by any code): that provider's credentials, for
+example an app id and a signing certificate, set as Edge Function secrets only. Coin top-up
+product configuration arrives in a later phase.
 
 ## C. Files and consoles (not environment variables)
 
@@ -50,6 +52,6 @@ product configuration.
 
 ## Known hardcoded value
 
-`supabase/functions/verify-purchase/index.ts` hardcodes `PACKAGE_NAME = "com.milo.dating"`.
+`supabase/functions/verify-purchase/index.ts` hardcodes `PACKAGE_NAME = "com.chahat.dating"`.
 If the package ID changes (see `docs/RELEASE_DECISIONS.md`), this must change with it, along
 with `mobile/app.json`. Phase 6 moves this into configuration.

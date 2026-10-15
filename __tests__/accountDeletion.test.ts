@@ -11,7 +11,7 @@ jest.doMock("../mobile/node_modules/expo-linking", () => ({
     const query = options?.queryParams
       ? `?${new URLSearchParams(options.queryParams).toString()}`
       : "";
-    return `milo://${path}${query}`;
+    return `chahat://${path}${query}`;
   },
 }));
 

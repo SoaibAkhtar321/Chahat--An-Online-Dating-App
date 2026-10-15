@@ -16,7 +16,7 @@ import {
   verifyGooglePubSubJwt,
 } from "../verify-purchase/policy.ts";
 
-const PACKAGE_NAME = "com.milo.dating";
+const PACKAGE_NAME = "com.chahat.dating";
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
     status,

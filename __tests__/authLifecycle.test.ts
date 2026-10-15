@@ -32,7 +32,7 @@ jest.doMock("../mobile/node_modules/expo-linking", () => ({
     const query = options?.queryParams
       ? `?${new URLSearchParams(options.queryParams).toString()}`
       : "";
-    return `milo://${path}${query}`;
+    return `chahat://${path}${query}`;
   },
 }));
 
@@ -67,7 +67,7 @@ describe("auth email link lifecycle", () => {
     expect(mockSignUp).toHaveBeenCalledWith({
       email: "person@example.test",
       password: "passWord1",
-      options: { emailRedirectTo: "milo://callback" },
+      options: { emailRedirectTo: "chahat://callback" },
     });
   });
 
@@ -75,7 +75,7 @@ describe("auth email link lifecycle", () => {
     const result = await resetPassword("person@example.test");
     expect(result.success).toBe(true);
     expect(mockResetPasswordForEmail).toHaveBeenCalledWith("person@example.test", {
-      redirectTo: "milo://callback?flow=recovery",
+      redirectTo: "chahat://callback?flow=recovery",
     });
   });
 
@@ -115,7 +115,7 @@ describe("auth email link lifecycle", () => {
   });
 
   it("exchanges PKCE confirmation codes before reporting a completed callback", async () => {
-    await expect(completeAuthLink("milo://callback?code=one-time-code")).resolves.toEqual({
+    await expect(completeAuthLink("chahat://callback?code=one-time-code")).resolves.toEqual({
       success: true,
       flow: "confirmation",
     });
@@ -124,7 +124,7 @@ describe("auth email link lifecycle", () => {
 
   it("identifies recovery callbacks and establishes fragment-token sessions", async () => {
     await expect(
-      completeAuthLink("milo://callback?flow=recovery#access_token=access&refresh_token=refresh"),
+      completeAuthLink("chahat://callback?flow=recovery#access_token=access&refresh_token=refresh"),
     ).resolves.toEqual({ success: true, flow: "recovery" });
     expect(mockSetSession).toHaveBeenCalledWith({
       access_token: "access",
@@ -134,9 +134,9 @@ describe("auth email link lifecycle", () => {
 
   it("fails closed for provider errors and incomplete links", async () => {
     await expect(
-      completeAuthLink("milo://callback?flow=recovery&error_description=expired"),
+      completeAuthLink("chahat://callback?flow=recovery&error_description=expired"),
     ).resolves.toMatchObject({ success: false, flow: "recovery", error: "expired" });
-    await expect(completeAuthLink("milo://callback")).resolves.toMatchObject({
+    await expect(completeAuthLink("chahat://callback")).resolves.toMatchObject({
       success: false,
       error: expect.stringMatching(/expired/i),
     });

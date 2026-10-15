@@ -10,7 +10,7 @@ The app faithfully preserves the original design identity: warm off-white canvas
 
 ```
 /mobile
-├── app.json                    # Expo project configuration (package: com.milo.dating)
+├── app.json                    # Expo project configuration (package: com.chahat.dating)
 ├── package.json                # React Native + Expo dependencies
 ├── tsconfig.json               # TypeScript configuration with @/ alias
 ├── .env.example                # Environment variables template

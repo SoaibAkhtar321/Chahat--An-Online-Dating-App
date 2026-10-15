@@ -152,12 +152,13 @@ supabase functions deploy verify-purchase
 supabase functions deploy google-play-notifications
 supabase functions deploy moderate-photo
 supabase functions deploy dispatch-push --no-verify-jwt
+supabase functions deploy issue-call-token   # only after the call-token migration is applied; see docs/CALLS.md
 ```
 
 ### Android production prerequisites
 
 - Preserve Expo project ID `d40a4e1f-fbf8-4b44-93af-7c4e1fe39b8a`, owner `chahat-org`, scheme `milo`,
-  and Android package `com.milo.dating`. Configure production EAS environment values for
+  and Android package `com.chahat.dating`. Configure production EAS environment values for
   `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; never place a service-role key
   in an `EXPO_PUBLIC_*` variable.
 - The preview profile is deliberately connected to the `milo-dev` Supabase project. Production builds
@@ -169,7 +170,7 @@ supabase functions deploy dispatch-push --no-verify-jwt
 - EAS submission references `google-play-service-account.json`; provision that credential through the
   approved EAS/Play setup and keep the JSON out of Git. The submit profile currently targets the
   internal track; review the intended track before submission.
-- Add `milo://callback` to Supabase Auth's hosted redirect allowlist and verify the email templates
+- Add `chahat://callback` to Supabase Auth's hosted redirect allowlist and verify the email templates
   before changing hosted settings. `supabase/config.toml` affects only the local stack unless explicitly
   pushed; this runbook does not authorize a config push.
 
@@ -198,6 +199,7 @@ supabase functions deploy dispatch-push --no-verify-jwt
 21. `20260101002000_video_call_lifecycle.sql`
 22. `20260101002100_google_play_verification_hardening.sql`
 23. `20260101002200_lifecycle_entitlements_release.sql`
+24. `20260101002300_call_token_rate_limit.sql` (repository only; not yet applied to any remote)
 
 ---
 
@@ -239,7 +241,7 @@ supabase functions deploy dispatch-push --no-verify-jwt
   `GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY` pair.
   Never use an `EXPO_PUBLIC_*` variable for these credentials.
 - `EXPO_PUBLIC_FEATURE_BILLING` defaults to false. Set it to `true` only in a store-connected
-  Android build after the server secret, package name (`com.milo.dating`), product catalog, and
+  Android build after the server secret, package name (`com.chahat.dating`), product catalog, and
   test-track accounts are ready. The app uses Google Play localized pricing, not the reference
   rupee values in the product copy.
 - `react-native-iap` requires a new native development/store build; Expo Go cannot exercise Google

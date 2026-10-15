@@ -22,17 +22,17 @@ export interface VideoCall {
   free_seconds_remaining: number | null;
 }
 
-export interface CallProviderAdapter {
-  readonly configured: boolean;
-  join(call: VideoCall): Promise<never>;
+/** Route params for opening the call screen. The id is ALWAYS the match id, never a user id. */
+export function buildNewCallRoute(matchId: string, callType: CallType) {
+  return { pathname: "/call/[id]" as const, params: { id: matchId, type: callType } };
 }
 
-export const callProvider: CallProviderAdapter = {
-  configured: false,
-  async join() {
-    throw new Error("Audio/video provider is not configured. No live media call can be started.");
-  },
-};
+export function buildExistingCallRoute(call: Pick<VideoCall, "id" | "match_id" | "call_type">) {
+  return {
+    pathname: "/call/[id]" as const,
+    params: { id: call.match_id, callId: call.id, type: call.call_type },
+  };
+}
 
 export async function createVideoCall(
   matchId: string,

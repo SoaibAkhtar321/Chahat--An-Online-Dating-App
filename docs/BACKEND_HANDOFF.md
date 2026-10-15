@@ -38,7 +38,7 @@ Real accounts (email auth), profiles, photos, Likes, Matches, chats, blocks and 
 - Deletion migration: active entitlements are removed, subscription order evidence is retained with `user_id = NULL`, and report/audit identities are pseudonymized. Report notes and retention periods still require a privacy-policy/legal decision.
 - Billing: Google Play checkout and the mobile purchase verifier remain disabled. The shipped `verify-purchase` Edge Function fails closed with HTTP 503 until the authoritative provider verifier is integrated and configured; static plan prices are not localized Play quotes.
 - Paid feature checks remain authoritative in SQL/RLS/RPCs. UI-only Boost simulation is disabled; a provider-backed server feature is required before it can be offered as active.
-- Production release: EAS production builds require environment-scoped public Supabase URL/key values, a version increment, and a Play submission credential kept outside Git. Hosted Auth redirect allowlists must include `milo://callback`.
+- Production release: EAS production builds require environment-scoped public Supabase URL/key values, a version increment, and a Play submission credential kept outside Git. Hosted Auth redirect allowlists must include `chahat://callback`.
 - Backups: daily database backups with point-in-time recovery; storage versioning; tested restore.
 - Legal: Terms, Privacy Policy and Community Guidelines in the app are drafts for legal review (India DPDP Act, IT Rules grievance officer).
 
