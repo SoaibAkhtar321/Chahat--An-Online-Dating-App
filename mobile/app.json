@@ -44,7 +44,14 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Chahat uses your location only when you choose nearby discovery."
+        }
+      ],
       [
         "expo-image-picker",
         {

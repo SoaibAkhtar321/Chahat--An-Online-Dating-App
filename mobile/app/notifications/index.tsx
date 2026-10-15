@@ -6,6 +6,7 @@ import { Bell, Heart, MessageCircle, ShieldCheck, CheckCheck } from "lucide-reac
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
+import { useAuth } from "../../src/context/AuthContext";
 import {
   fetchNotificationInbox,
   markAllNotificationsRead,
@@ -17,13 +18,14 @@ export default function NotificationsScreen() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
+  const { user } = useAuth();
   const [notices, setNotices] = useState<NoticeItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadNotices = useCallback(async () => {
-    const list = await fetchNotificationInbox();
+    const list = user?.id ? await fetchNotificationInbox(user.id) : [];
     setNotices(list);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     loadNotices();
@@ -36,13 +38,15 @@ export default function NotificationsScreen() {
   };
 
   const handleMarkAllRead = async () => {
-    await markAllNotificationsRead();
+    if (!user?.id) return;
+    await markAllNotificationsRead(user.id);
     setNotices((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
   const handlePressNotice = async (item: NoticeItem) => {
+    if (!user?.id) return;
     if (!item.read) {
-      await markNotificationRead(item.id);
+      await markNotificationRead(user.id, item.id);
       setNotices((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
     }
 
@@ -79,7 +83,11 @@ export default function NotificationsScreen() {
         title="Notifications"
         rightElement={
           unreadCount > 0 ? (
-            <TouchableOpacity onPress={handleMarkAllRead} style={styles.markReadBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleMarkAllRead}
+              style={styles.markReadBtn}
+              activeOpacity={0.7}
+            >
               <CheckCheck size={16} color={Colors.primary} />
               <Text style={styles.markReadText}>Read all</Text>
             </TouchableOpacity>
@@ -92,7 +100,11 @@ export default function NotificationsScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary}
+          />
         }
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -115,7 +127,9 @@ export default function NotificationsScreen() {
               <Bell size={36} color={Colors.mutedForeground} />
             </View>
             <Text style={styles.emptyTitle}>No notifications</Text>
-            <Text style={styles.emptyText}>You're all caught up with your matches and messages.</Text>
+            <Text style={styles.emptyText}>
+              You're all caught up with your matches and messages.
+            </Text>
           </View>
         }
       />
@@ -123,96 +137,97 @@ export default function NotificationsScreen() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  markReadBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  markReadText: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primary,
-  },
-  list: {
-    padding: 16,
-    gap: 12,
-  },
-  itemCard: {
-    flexDirection: "row",
-    backgroundColor: Colors.card,
-    padding: 16,
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    gap: 12,
-  },
-  itemUnread: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.surfaceSecondary,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.primary,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.secondary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  itemContent: {
-    flex: 1,
-  },
-  itemTitle: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginBottom: 2,
-  },
-  itemText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.foreground,
-    lineHeight: 18,
-  },
-  itemTime: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    marginTop: 4,
-  },
-  emptyView: {
-    alignItems: "center",
-    marginTop: 80,
-    paddingHorizontal: 32,
-    gap: 10,
-  },
-  emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.secondary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: Typography.sizes.lg,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  emptyText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    markReadBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    markReadText: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.bold,
+      color: Colors.primary,
+    },
+    list: {
+      padding: 16,
+      gap: 12,
+    },
+    itemCard: {
+      flexDirection: "row",
+      backgroundColor: Colors.card,
+      padding: 16,
+      borderRadius: Radii.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      alignItems: "center",
+      gap: 12,
+    },
+    itemUnread: {
+      borderColor: Colors.primary,
+      backgroundColor: Colors.surfaceSecondary,
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: Colors.primary,
+    },
+    iconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    itemContent: {
+      flex: 1,
+    },
+    itemTitle: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.bold,
+      color: Colors.foreground,
+      marginBottom: 2,
+    },
+    itemText: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.foreground,
+      lineHeight: 18,
+    },
+    itemTime: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.mutedForeground,
+      marginTop: 4,
+    },
+    emptyView: {
+      alignItems: "center",
+      marginTop: 80,
+      paddingHorizontal: 32,
+      gap: 10,
+    },
+    emptyIconCircle: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: Colors.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 8,
+    },
+    emptyTitle: {
+      fontSize: Typography.sizes.lg,
+      fontWeight: Typography.weights.bold,
+      color: Colors.foreground,
+    },
+    emptyText: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+      textAlign: "center",
+      lineHeight: 20,
+    },
+  });

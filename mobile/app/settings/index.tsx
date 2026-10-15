@@ -16,7 +16,10 @@ import { deleteUserAccount } from "../../src/services/auth";
 import { runAccountDeletion } from "../../src/utils/deletionFlow";
 import {
   getNotificationPreferences,
+  openNotificationSettings,
+  registerPushNotificationToken,
   saveNotificationPreferences,
+  type NotificationPreferences,
 } from "../../src/services/notifications";
 
 export default function SettingsScreen() {
@@ -38,26 +41,83 @@ export default function SettingsScreen() {
   const [notifLikes, setNotifLikes] = useState(true);
 
   React.useEffect(() => {
-    getNotificationPreferences().then((prefs) => {
-      setNotifMatches(prefs.matches);
-      setNotifMessages(prefs.messages);
-      setNotifLikes(prefs.likes);
-    });
-  }, []);
+    if (!user?.id) return;
+    getNotificationPreferences(user.id)
+      .then((prefs) => {
+        setNotifMatches(prefs.matches);
+        setNotifMessages(prefs.messages);
+        setNotifLikes(prefs.likes);
+      })
+      .catch((error) => Alert.alert("Notifications unavailable", error.message));
+  }, [user?.id]);
 
-  const handleToggleNotifMatches = (val: boolean) => {
-    setNotifMatches(val);
-    saveNotificationPreferences({ matches: val, messages: notifMessages, likes: notifLikes });
+  const updateNotificationPreferences = async (next: NotificationPreferences) => {
+    if (!user?.id) {
+      Alert.alert("Sign in required", "Sign in to update notification preferences.");
+      return false;
+    }
+    const result = await saveNotificationPreferences(user.id, next);
+    if (!result.success) {
+      Alert.alert("Could not save setting", result.error || "Please try again.");
+      return false;
+    }
+    return true;
   };
 
-  const handleToggleNotifMessages = (val: boolean) => {
-    setNotifMessages(val);
-    saveNotificationPreferences({ matches: notifMatches, messages: val, likes: notifLikes });
+  const registerAfterEnable = async (enabled: boolean) => {
+    if (!enabled || !user) return;
+    const result = await registerPushNotificationToken(user.id);
+    if (result.status === "permission_denied") {
+      Alert.alert(
+        "Notifications are off",
+        "Enable notifications for Chahat in your device settings to receive new matches and messages.",
+        [
+          { text: "Not now", style: "cancel" },
+          { text: "Open settings", onPress: () => openNotificationSettings() },
+        ],
+      );
+    } else if (result.status === "error") {
+      Alert.alert("Could not enable notifications", result.error);
+    }
   };
 
-  const handleToggleNotifLikes = (val: boolean) => {
-    setNotifLikes(val);
-    saveNotificationPreferences({ matches: notifMatches, messages: notifMessages, likes: val });
+  const handleToggleNotifMatches = async (val: boolean) => {
+    if (
+      await updateNotificationPreferences({
+        matches: val,
+        messages: notifMessages,
+        likes: notifLikes,
+      })
+    ) {
+      setNotifMatches(val);
+      if (val) await registerAfterEnable(true);
+    }
+  };
+
+  const handleToggleNotifMessages = async (val: boolean) => {
+    if (
+      await updateNotificationPreferences({
+        matches: notifMatches,
+        messages: val,
+        likes: notifLikes,
+      })
+    ) {
+      setNotifMessages(val);
+      if (val) await registerAfterEnable(true);
+    }
+  };
+
+  const handleToggleNotifLikes = async (val: boolean) => {
+    if (
+      await updateNotificationPreferences({
+        matches: notifMatches,
+        messages: notifMessages,
+        likes: val,
+      })
+    ) {
+      setNotifLikes(val);
+      if (val) await registerAfterEnable(true);
+    }
   };
 
   // Dialogs
@@ -82,8 +142,7 @@ export default function SettingsScreen() {
         setDeleteConfirmationText("");
         Alert.alert(
           "Account deleted",
-          "Your account and data have been removed." +
-            (res.warning ? `\n\n${res.warning}` : ""),
+          "Your account and data have been removed." + (res.warning ? `\n\n${res.warning}` : ""),
         );
         router.replace("/(auth)/welcome");
       },
@@ -145,7 +204,10 @@ export default function SettingsScreen() {
                     <Text
                       style={[
                         styles.themeOptionText,
-                        isActive && { color: colors.primaryForeground, fontWeight: Typography.weights.bold },
+                        isActive && {
+                          color: colors.primaryForeground,
+                          fontWeight: Typography.weights.bold,
+                        },
                       ]}
                     >
                       {label}
@@ -192,9 +254,29 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>NOTIFICATIONS</Text>
           <View style={styles.card}>
-            <Toggle label="New matches" value={notifMatches} onValueChange={handleToggleNotifMatches} />
-            <Toggle label="New messages" value={notifMessages} onValueChange={handleToggleNotifMessages} />
-            <Toggle label="Likes received" value={notifLikes} onValueChange={handleToggleNotifLikes} />
+            <Toggle
+              label="New matches"
+              value={notifMatches}
+              onValueChange={handleToggleNotifMatches}
+            />
+            <Toggle
+              label="New messages"
+              value={notifMessages}
+              onValueChange={handleToggleNotifMessages}
+            />
+            <Toggle
+              label="Likes received"
+              value={notifLikes}
+              onValueChange={handleToggleNotifLikes}
+            />
+            <TouchableOpacity
+              style={styles.navRow}
+              onPress={() => openNotificationSettings()}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.rowLabel}>Manage device notification permission</Text>
+              <ChevronRight size={18} color={Colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -265,8 +347,17 @@ export default function SettingsScreen() {
         danger
         onConfirm={async () => {
           setLogoutVisible(false);
-          await signOut();
-          router.replace("/(auth)/welcome");
+          try {
+            await signOut();
+            router.replace("/(auth)/welcome");
+          } catch (error) {
+            Alert.alert(
+              "Could not sign out securely",
+              error instanceof Error
+                ? error.message
+                : "The device notification token could not be removed. Retry when connected.",
+            );
+          }
         }}
         onCancel={() => setLogoutVisible(false)}
       />
@@ -308,92 +399,93 @@ export default function SettingsScreen() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-    letterSpacing: 1,
-    marginBottom: 8,
-    paddingLeft: 4,
-  },
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: Radii.xl,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.card,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  navRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 15,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  rowLabel: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.medium,
-    color: Colors.foreground,
-  },
-  rowValue: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-  },
-  actionSection: {
-    marginTop: 8,
-    gap: 16,
-  },
-  deleteBtn: {
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  deleteText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
-    color: Colors.destructive,
-  },
-  themeRow: {
-    flexDirection: "row",
-    padding: 12,
-    gap: 8,
-  },
-  themeOptionBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.secondary,
-  },
-  themeOptionText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.foreground,
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    content: {
+      padding: 20,
+      paddingBottom: 40,
+    },
+    section: {
+      marginBottom: 24,
+    },
+    sectionHeader: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.bold,
+      color: Colors.mutedForeground,
+      letterSpacing: 1,
+      marginBottom: 8,
+      paddingLeft: 4,
+    },
+    card: {
+      backgroundColor: Colors.card,
+      borderRadius: Radii.xl,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: Colors.border,
+      ...Shadows.card,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    navRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 15,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    rowLabel: {
+      fontSize: Typography.sizes.base,
+      fontWeight: Typography.weights.medium,
+      color: Colors.foreground,
+    },
+    rowValue: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+    },
+    actionSection: {
+      marginTop: 8,
+      gap: 16,
+    },
+    deleteBtn: {
+      alignItems: "center",
+      paddingVertical: 12,
+    },
+    deleteText: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.bold,
+      color: Colors.destructive,
+    },
+    themeRow: {
+      flexDirection: "row",
+      padding: 12,
+      gap: 8,
+    },
+    themeOptionBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: Radii.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      backgroundColor: Colors.secondary,
+    },
+    themeOptionText: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.medium,
+      color: Colors.foreground,
+    },
+  });

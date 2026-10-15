@@ -6,6 +6,7 @@ export type Intent = string;
 export interface PhotoItem {
   id: string;
   uri: string;
+  sourceUri?: string;
   path?: string;
   thumbPath?: string;
   isMain?: boolean;

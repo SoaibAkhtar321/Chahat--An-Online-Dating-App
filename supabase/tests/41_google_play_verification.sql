@@ -1,0 +1,138 @@
+\set ON_ERROR_STOP on
+-- Provider-verified purchase persistence, retry safety, revocation, and RPC access.
+
+INSERT INTO auth.users(id, email) VALUES
+  ('70000000-0000-0000-0000-000000000001', 'billing-a@x'),
+  ('70000000-0000-0000-0000-000000000002', 'billing-b@x');
+CREATE TEMP TABLE purchase_test_times AS
+SELECT now() - interval '1 minute' AS starts_at,
+       now() + interval '30 days' AS expires_at;
+GRANT SELECT ON purchase_test_times TO service_role;
+
+SET ROLE authenticated;
+SET request.jwt.claim.sub = '70000000-0000-0000-0000-000000000001';
+CALL public.expect_fail(
+  'authenticated users cannot directly record verified purchases',
+  $q$SELECT public.record_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000001', 'chahat_premium_1m', repeat('c',64),
+    'order-a', now() - interval '1 minute', now() + interval '30 days', true, 'ACTIVE'
+  )$q$
+);
+CALL public.expect_fail(
+  'authenticated users cannot resolve purchase token owners',
+  $q$SELECT public.get_google_purchase_owner(repeat('c',64))$q$
+);
+CALL public.expect_fail(
+  'authenticated users cannot revoke verified purchases',
+  $q$SELECT public.revoke_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000001', repeat('c',64), 'REVOKED'
+  )$q$
+);
+RESET ROLE;
+
+SET ROLE service_role;
+CREATE TEMP TABLE first_purchase AS
+SELECT public.record_verified_google_purchase(
+  '70000000-0000-0000-0000-000000000001',
+  'chahat_premium_1m',
+  repeat('c',64),
+  'order-a',
+  (SELECT starts_at FROM purchase_test_times),
+  (SELECT expires_at FROM purchase_test_times),
+  true,
+  'ACTIVE'
+) AS result;
+INSERT INTO public.t_results
+SELECT 'verified Play purchase creates premium entitlement',
+  result->>'success' = 'true'
+    AND result->>'tier' = 'premium'
+    AND result->>'idempotent' = 'false',
+  result::text
+FROM first_purchase;
+
+CREATE TEMP TABLE replay_purchase AS
+SELECT public.record_verified_google_purchase(
+  '70000000-0000-0000-0000-000000000001',
+  'chahat_premium_1m',
+  repeat('c',64),
+  'order-a',
+  (SELECT starts_at FROM purchase_test_times),
+  (SELECT expires_at FROM purchase_test_times),
+  true,
+  'ACTIVE'
+) AS result;
+INSERT INTO public.t_results
+SELECT 'same-account retry is idempotent',
+  result->>'success' = 'true'
+    AND result->>'idempotent' = 'true'
+    AND (SELECT count(*) = 1 FROM public.subscription_orders WHERE token_hash = repeat('c',64)),
+  result::text
+FROM replay_purchase;
+
+CALL public.expect_fail(
+  'cross-account token replay is rejected',
+  $q$SELECT public.record_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000002', 'chahat_premium_1m', repeat('c',64),
+    'order-a', now() - interval '1 minute', now() + interval '31 days', true, 'ACTIVE'
+  )$q$
+);
+CALL public.expect_fail(
+  'token reuse for a different product is rejected',
+  $q$SELECT public.record_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000001', 'chahat_vip_1m', repeat('c',64),
+    'order-a', now() - interval '1 minute', now() + interval '31 days', true, 'ACTIVE'
+  )$q$
+);
+CALL public.expect_fail(
+  'stale expiry update for the same purchase is rejected',
+  $q$SELECT public.record_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000001', 'chahat_premium_1m', repeat('c',64),
+    'order-a', now() - interval '1 minute', now() + interval '29 days', true, 'ACTIVE'
+  )$q$
+);
+CALL public.expect_fail(
+  'unsupported product cannot create an entitlement',
+  $q$SELECT public.record_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000001', 'manual_grant', repeat('d',64),
+    'order-b', now() - interval '1 minute', now() + interval '30 days', true, 'ACTIVE'
+  )$q$
+);
+INSERT INTO public.t_results
+SELECT 'legacy manual-grant RPC is removed',
+  to_regprocedure('public.record_verified_purchase(text,text,text,text,text,text,numeric,integer)') IS NULL
+    AND to_regprocedure('public.record_verified_purchase(text,text,text,text,text,text,integer,timestamptz,boolean)') IS NULL,
+  'legacy purchase RPC overloads absent';
+
+INSERT INTO public.t_results
+SELECT 'RTDN owner lookup returns the account for an existing token',
+  public.get_google_purchase_owner(repeat('c',64)) = '70000000-0000-0000-0000-000000000001'::uuid,
+  public.get_google_purchase_owner(repeat('c',64))::text;
+
+INSERT INTO public.t_results
+SELECT 'verified revocation removes entitlement and retains token ownership',
+  public.revoke_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000001', repeat('c',64), 'REVOKED'
+  )
+  AND (SELECT status = 'expired' AND tier = 'free'
+       FROM public.user_subscriptions
+       WHERE user_id = '70000000-0000-0000-0000-000000000001')
+  AND public.get_google_purchase_owner(repeat('c',64)) = '70000000-0000-0000-0000-000000000001'::uuid,
+  'revoked; retained for audit';
+
+RESET ROLE;
+DELETE FROM auth.users WHERE id = '70000000-0000-0000-0000-000000000001';
+INSERT INTO public.t_results
+SELECT 'account deletion retains purchase replay record without owner PII',
+  count(*) = 1 AND bool_and(user_id IS NULL),
+  coalesce(string_agg(coalesce(user_id::text, 'null'), ','), 'missing')
+FROM public.subscription_orders
+WHERE token_hash = repeat('c',64);
+SET ROLE service_role;
+CALL public.expect_fail(
+  'deleted-account purchase token cannot be transferred',
+  $q$SELECT public.record_verified_google_purchase(
+    '70000000-0000-0000-0000-000000000002', 'chahat_premium_1m', repeat('c',64),
+    'order-a', now() - interval '1 minute', now() + interval '31 days', true, 'ACTIVE'
+  )$q$
+);
+RESET ROLE;

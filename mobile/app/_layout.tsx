@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../src/context/AuthContext";
+import { NotificationResponseHandler } from "../src/components/notifications/NotificationResponseHandler";
 import { MiloProvider } from "../src/context/MiloContext";
 import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 
@@ -71,6 +72,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <MiloProvider>
+            <NotificationResponseHandler />
             <RootNavigation />
           </MiloProvider>
         </AuthProvider>

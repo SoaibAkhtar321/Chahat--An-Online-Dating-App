@@ -3,8 +3,8 @@
 INSERT INTO auth.users(id,email) VALUES ('00000000-0000-0000-0000-0000000000f6','p@x'),('00000000-0000-0000-0000-0000000000f7','f@x'),('00000000-0000-0000-0000-0000000000f8','v@x');
 INSERT INTO auth.users(id) SELECT ('30000000-0000-0000-0000-'||lpad(g::text,12,'0'))::uuid FROM generate_series(1,14) g;
 SET request.jwt.claim.role='service_role';
-UPDATE public.profiles SET name='u',dob='1995-01-01',city='Pune',onboarded=true,gender='man',seeking='woman' WHERE id IN ('00000000-0000-0000-0000-0000000000f6','00000000-0000-0000-0000-0000000000f7','00000000-0000-0000-0000-0000000000f8');
-UPDATE public.profiles SET name='t',dob='1996-01-01',city='Pune',onboarded=true,gender='woman',seeking='man' WHERE id LIKE '30000000-%';
+UPDATE public.profiles SET name='u',dob='1995-01-01',city='Pune',gender='man',seeking='woman' WHERE id IN ('00000000-0000-0000-0000-0000000000f6','00000000-0000-0000-0000-0000000000f7','00000000-0000-0000-0000-0000000000f8');
+UPDATE public.profiles SET name='t',dob='1996-01-01',city='Pune',gender='woman',seeking='man' WHERE id LIKE '30000000-%';
 RESET request.jwt.claim.role;
 INSERT INTO public.user_subscriptions(user_id,tier,status,expires_at) VALUES
   ('00000000-0000-0000-0000-0000000000f6','premium','active',now()+interval '30 days'),('00000000-0000-0000-0000-0000000000f8','vip','active',NULL);

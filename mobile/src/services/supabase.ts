@@ -12,8 +12,9 @@ const ExpoSecureStoreAdapter = {
         return await AsyncStorage.getItem(key);
       }
       return await SecureStore.getItemAsync(key);
-    } catch {
-      return null;
+    } catch (error) {
+      console.error("Could not read persisted Supabase session:", error);
+      throw error;
     }
   },
   setItem: async (key: string, value: string): Promise<void> => {
@@ -23,8 +24,9 @@ const ExpoSecureStoreAdapter = {
       } else {
         await SecureStore.setItemAsync(key, value);
       }
-    } catch {
-      // Storage unavailable or permission denied
+    } catch (error) {
+      console.error("Could not persist Supabase session:", error);
+      throw error;
     }
   },
   removeItem: async (key: string): Promise<void> => {
@@ -34,8 +36,9 @@ const ExpoSecureStoreAdapter = {
       } else {
         await SecureStore.deleteItemAsync(key);
       }
-    } catch {
-      // Ignore removal errors
+    } catch (error) {
+      console.error("Could not clear persisted Supabase session:", error);
+      throw error;
     }
   },
 };

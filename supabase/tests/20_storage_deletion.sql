@@ -7,10 +7,10 @@ RESET ROLE;
 INSERT INTO storage.buckets SELECT 'x','x' WHERE false;
 INSERT INTO public.t_results SELECT 'photos bucket private', NOT public, public::text FROM storage.buckets WHERE id='photos';
 INSERT INTO public.t_results SELECT 'chat bucket private', NOT public, public::text FROM storage.buckets WHERE id='chat';
-INSERT INTO storage.objects(bucket_id,name) VALUES
- ('photos','00000000-0000-0000-0000-00000000000a/p1.jpg'),
- ('photos','00000000-0000-0000-0000-00000000000b/p1.jpg'),
- ('photos','00000000-0000-0000-0000-00000000000c/p1.jpg');
+INSERT INTO storage.objects(bucket_id,name,owner) VALUES
+ ('photos','00000000-0000-0000-0000-00000000000a/p1.jpg','00000000-0000-0000-0000-00000000000a'),
+ ('photos','00000000-0000-0000-0000-00000000000b/p1.jpg','00000000-0000-0000-0000-00000000000b'),
+ ('photos','00000000-0000-0000-0000-00000000000c/p1.jpg','00000000-0000-0000-0000-00000000000c');
 INSERT INTO storage.objects(bucket_id,name) SELECT 'chat', id::text||'/m1.jpg' FROM public.matches LIMIT 1;
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
 INSERT INTO public.t_results SELECT 'A sees only own photos (stopgap 1A)', count(*)=1 AND bool_and(name LIKE '%00a/%'), count(*)::text FROM storage.objects WHERE bucket_id='photos';
@@ -25,7 +25,7 @@ RESET ROLE;
 -- 1A stopgap: photos visible only to owner (storage, RPCs, direct table read)
 SET request.jwt.claim.role='service_role';
 UPDATE public.profiles SET photos='[{"id":"p1","path":"00000000-0000-0000-0000-00000000000a/p1.jpg","thumbPath":"00000000-0000-0000-0000-00000000000a/p1.jpg","status":"approved"}]'::jsonb WHERE id='00000000-0000-0000-0000-00000000000a';
-UPDATE public.profiles SET photos='[{"id":"p1","path":"00000000-0000-0000-0000-00000000000b/p1.jpg","status":"approved"}]'::jsonb WHERE id='00000000-0000-0000-0000-00000000000b';
+UPDATE public.profiles SET photos='[{"id":"p1","path":"00000000-0000-0000-0000-00000000000b/p1.jpg","thumbPath":"00000000-0000-0000-0000-00000000000b/p1.jpg","status":"approved"}]'::jsonb WHERE id='00000000-0000-0000-0000-00000000000b';
 RESET request.jwt.claim.role;
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000c';
 INSERT INTO public.t_results SELECT 'non-owner cannot read other photo object', count(*)=0, count(*)::text FROM storage.objects WHERE bucket_id='photos' AND name LIKE '%00a/%';

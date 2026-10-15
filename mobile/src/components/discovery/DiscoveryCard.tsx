@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Pressable } from "react-native";
-import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { MapPin, Info, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { AvatarPlaceholder } from "../ui/AvatarPlaceholder";
+import { ProfilePhoto } from "../profile/ProfilePhoto";
 import type { Profile } from "../../types";
 
 const { width } = Dimensions.get("window");
@@ -21,9 +21,13 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [failedPhotoKey, setFailedPhotoKey] = useState<string | null>(null);
   const photos = profile.photos && profile.photos.length > 0 ? profile.photos : [];
   const hasPhotos = photos.length > 0;
   const currentPhoto = hasPhotos ? photos[photoIndex] : undefined;
+
+  const photoKey = currentPhoto ? `${profile.id}:${currentPhoto}` : "";
+  const photoLoadFailed = !!photoKey && failedPhotoKey === photoKey;
 
   const nextPhoto = () => {
     if (photoIndex < photos.length - 1) {
@@ -43,17 +47,19 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
 
   return (
     <View style={styles.card}>
-      {hasPhotos && currentPhoto ? (
-        <Image
-          source={{ uri: currentPhoto }}
+      {hasPhotos && currentPhoto && !photoLoadFailed ? (
+        <ProfilePhoto
+          uri={currentPhoto}
+          name={profile.name}
           style={styles.image}
-          contentFit="cover"
-          transition={200}
+          onLoadError={() => setFailedPhotoKey(photoKey)}
         />
       ) : (
         <View style={styles.placeholderContainer}>
           <AvatarPlaceholder name={profile.name} size={110} />
-          <Text style={styles.noPhotoText}>No approved photo yet</Text>
+          <Text style={styles.noPhotoText}>
+            {photoLoadFailed ? "Photo unavailable" : "No approved photo yet"}
+          </Text>
         </View>
       )}
 

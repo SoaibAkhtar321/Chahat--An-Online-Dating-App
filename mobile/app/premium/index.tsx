@@ -20,32 +20,120 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Button } from "../../src/components/ui/Button";
 import { Alert } from "../../src/utils/alert";
+import { useMilo } from "../../src/context/MiloContext";
 import {
   PLANS,
   PREMIUM_BILLING_DURATIONS,
+  PLAY_PRODUCT_IDS,
+  BILLING_ENABLED,
   getUserSubscription,
+  listenForPurchaseUpdates,
+  loadPlayBillingCatalog,
   purchaseSubscription,
   restorePurchases,
   type PlanTier,
+  type PlayBillingProduct,
   type UserSubscription,
 } from "../../src/services/subscription";
 
 export default function PremiumScreen() {
   const { colors, isDark } = useTheme();
+  const { dailyLikeLimit } = useMilo();
   const [selectedTier, setSelectedTier] = useState<PlanTier>("premium");
   const [selectedDuration, setSelectedDuration] = useState<"1m" | "3m" | "6m" | "12m">("1m");
   const [currentSub, setCurrentSub] = useState<UserSubscription | null>(null);
   const [processing, setProcessing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [billingProducts, setBillingProducts] = useState<PlayBillingProduct[]>([]);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [subscriptionError, setSubscriptionError] = useState("");
 
   useEffect(() => {
-    getUserSubscription().then((sub) => {
-      setCurrentSub(sub);
-      if (sub.tier !== "free") {
-        setSelectedTier(sub.tier);
-      }
-    });
+    let active = true;
+    let removePurchaseListeners: (() => void) | undefined;
+    setSubscriptionLoading(true);
+    void getUserSubscription()
+      .then((sub) => {
+        if (!active) return;
+        setCurrentSub(sub);
+        setSubscriptionError("");
+        if (sub.tier !== "free") setSelectedTier(sub.tier);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setCurrentSub(null);
+        setSubscriptionError(
+          error instanceof Error ? error.message : "Subscription status could not be verified.",
+        );
+      })
+      .finally(() => {
+        if (active) setSubscriptionLoading(false);
+      });
+
+    if (BILLING_ENABLED) {
+      void loadPlayBillingCatalog()
+        .then((products) => {
+          if (active) setBillingProducts(products);
+        })
+        .catch((error) => {
+          console.warn("Google Play product catalog unavailable:", error);
+          if (active) setSubscriptionError("Google Play product catalog is unavailable.");
+        });
+      void listenForPurchaseUpdates((event) => {
+        if (!active) return;
+        setProcessing(false);
+        if (event.status === "completed") {
+          void getUserSubscription()
+            .then((subscription) => {
+              if (active) {
+                setCurrentSub(subscription);
+                setSubscriptionError("");
+              }
+            })
+            .catch((error) => {
+              if (active) {
+                setSubscriptionError(
+                  error instanceof Error
+                    ? error.message
+                    : "Subscription status could not be verified.",
+                );
+              }
+            });
+          Alert.alert(
+            "Subscription verified",
+            event.warning
+              ? `${PLANS[event.tier].name} is active. ${event.warning}`
+              : `${PLANS[event.tier].name} is active.`,
+          );
+        } else if (event.status === "pending") {
+          Alert.alert("Payment pending", event.message);
+        } else if (event.status === "failed") {
+          Alert.alert("Purchase not verified", event.error);
+        }
+      })
+        .then((remove) => {
+          if (active) removePurchaseListeners = remove;
+          else remove();
+        })
+        .catch((error) => console.warn("Google Play purchase listener unavailable:", error));
+    }
+    return () => {
+      active = false;
+      removePurchaseListeners?.();
+    };
   }, []);
+
+  const productPrice = (productId: string) =>
+    billingProducts.find((product) => product.productId === productId)?.localizedPrice ??
+    (BILLING_ENABLED ? "Price unavailable" : "Google Play price");
+  const tierProductId =
+    selectedTier === "premium"
+      ? PLAY_PRODUCT_IDS.premium["1m"]
+      : selectedTier === "plus"
+        ? PLAY_PRODUCT_IDS.plus["1m"]
+        : selectedTier === "vip"
+          ? PLAY_PRODUCT_IDS.vip["1m"]
+          : null;
 
   const activeDurationObj =
     PREMIUM_BILLING_DURATIONS.find((d) => d.id === selectedDuration) ||
@@ -55,7 +143,7 @@ export default function PremiumScreen() {
     if (selectedTier === "free") {
       Alert.alert(
         "Free Plan Active / मुफ़्त प्लान सक्रिय",
-        "You have 20 free likes daily resetting at midnight IST, with basic chat and free identity verification.",
+        `Your server-configured limit is ${dailyLikeLimit ?? "currently unavailable"} likes per IST day, with basic chat and free identity verification.`,
       );
       return;
     }
@@ -69,6 +157,10 @@ export default function PremiumScreen() {
       const updated = await getUserSubscription();
       setCurrentSub(updated);
     } else {
+      if (result.status === "pending") {
+        Alert.alert("Google Play purchase", result.error || "Waiting for Google Play.");
+        return;
+      }
       Alert.alert(
         "Google Play Billing",
         result.error ||
@@ -84,8 +176,14 @@ export default function PremiumScreen() {
 
     if (res.success && res.tier) {
       Alert.alert("Purchases Restored", `Your ${PLANS[res.tier].name} subscription was restored.`);
-      const updated = await getUserSubscription();
-      setCurrentSub(updated);
+      try {
+        setCurrentSub(await getUserSubscription());
+        setSubscriptionError("");
+      } catch (error) {
+        setSubscriptionError(
+          error instanceof Error ? error.message : "Subscription status could not be verified.",
+        );
+      }
     } else {
       Alert.alert("Restore Purchases", res.error || "No active purchases found to restore.");
     }
@@ -96,8 +194,23 @@ export default function PremiumScreen() {
       <Header title="CHAHAT Premium" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {!BILLING_ENABLED && (
+          <View
+            style={[
+              styles.singleMonthNoteBox,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.singleMonthNoteText, { color: colors.mutedForeground }]}>
+              Google Play checkout is disabled in this build. Displayed reference pricing is not a
+              live price or charge.
+            </Text>
+          </View>
+        )}
         {/* Hero Branding */}
-        <View style={[styles.heroBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View
+          style={[styles.heroBox, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
           <View style={[styles.crownCircle, { backgroundColor: colors.secondary }]}>
             <Crown size={32} color={colors.accent} />
           </View>
@@ -117,15 +230,33 @@ export default function PremiumScreen() {
               </Text>
             </View>
           )}
+          {subscriptionLoading ? (
+            <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>
+              Checking verified subscription status…
+            </Text>
+          ) : subscriptionError ? (
+            <Text style={[styles.heroSubtitle, { color: colors.destructive }]}>
+              Subscription status could not be verified. Paid features remain locked until the
+              server responds.
+            </Text>
+          ) : null}
         </View>
 
         {/* Free Plan Safety Guarantee Banner */}
-        <View style={[styles.safetyGuaranteeBox, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.safetyGuaranteeBox,
+            { backgroundColor: colors.secondary, borderColor: colors.border },
+          ]}
+        >
           <ShieldCheck size={20} color={colors.success} />
           <View style={styles.safetyGuaranteeContent}>
-            <Text style={[styles.safetyGuaranteeTitle, { color: colors.foreground }]}>Safety is Always Free</Text>
+            <Text style={[styles.safetyGuaranteeTitle, { color: colors.foreground }]}>
+              Safety is Always Free
+            </Text>
             <Text style={[styles.safetyGuaranteeText, { color: colors.mutedForeground }]}>
-              Selfie verification, privacy controls, blocking, and reporting are 100% free for all users on Chahat.
+              Selfie verification, privacy controls, blocking, and reporting are 100% free for all
+              users on Chahat.
             </Text>
           </View>
         </View>
@@ -135,32 +266,119 @@ export default function PremiumScreen() {
           WHAT YOU GET WITH EACH PLAN / प्रत्येक प्लान में क्या मिलता है
         </Text>
 
-        <View style={[styles.comparisonCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.comparisonCard,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
           <View style={[styles.matrixHeaderRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.matrixColFeature, { color: colors.mutedForeground }]}>Feature / सुविधा</Text>
+            <Text style={[styles.matrixColFeature, { color: colors.mutedForeground }]}>
+              Feature / सुविधा
+            </Text>
             <Text style={[styles.matrixColPlan, { color: colors.foreground }]}>Free</Text>
-            <Text style={[styles.matrixColPlan, { color: colors.primary, fontWeight: Typography.weights.bold }]}>Prem</Text>
-            <Text style={[styles.matrixColPlan, { color: colors.accent, fontWeight: Typography.weights.bold }]}>Plus</Text>
-            <Text style={[styles.matrixColPlan, { color: colors.primary, fontWeight: Typography.weights.bold }]}>VIP</Text>
+            <Text
+              style={[
+                styles.matrixColPlan,
+                { color: colors.primary, fontWeight: Typography.weights.bold },
+              ]}
+            >
+              Prem
+            </Text>
+            <Text
+              style={[
+                styles.matrixColPlan,
+                { color: colors.accent, fontWeight: Typography.weights.bold },
+              ]}
+            >
+              Plus
+            </Text>
+            <Text
+              style={[
+                styles.matrixColPlan,
+                { color: colors.primary, fontWeight: Typography.weights.bold },
+              ]}
+            >
+              VIP
+            </Text>
           </View>
 
           {[
-            { name: "Daily Likes (प्रतिदिन लाइक्स)", free: "20 / day", prem: "20 / day", plus: "20 / day", vip: "20 / day" },
-            { name: "See Who Liked You (किसने Like किया)", free: "—", prem: "✓", plus: "✓", vip: "✓" },
+            {
+              name: "Daily Likes (प्रतिदिन लाइक्स)",
+              free: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+              prem: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+              plus: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+              vip: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+            },
+            {
+              name: "See Who Liked You (किसने Like किया)",
+              free: "—",
+              prem: "✓",
+              plus: "✓",
+              vip: "✓",
+            },
             { name: "Rewind Pass (अनडू स्वाइप)", free: "—", prem: "✓", plus: "✓", vip: "✓" },
-            { name: "Smart Icebreakers (बातचीत की शुरुआत)", free: "—", prem: "✓", plus: "✓", vip: "✓" },
+            {
+              name: "Smart Icebreakers (बातचीत की शुरुआत)",
+              free: "—",
+              prem: "✓",
+              plus: "✓",
+              vip: "✓",
+            },
             { name: "Read Receipts (मैसेज सीन)", free: "—", prem: "—", plus: "✓", vip: "✓" },
-            { name: "Priority Recommendations (प्राथमिकता)", free: "—", prem: "—", plus: "✓", vip: "✓" },
+            {
+              name: "Priority Recommendations (प्राथमिकता)",
+              free: "—",
+              prem: "—",
+              plus: "✓",
+              vip: "✓",
+            },
             { name: "Incognito Mode (पूर्ण गोपनीयता)", free: "—", prem: "—", plus: "—", vip: "✓" },
-            { name: "Profile Verification Badge", free: "मुफ़्त (Free)", prem: "मुफ़्त", plus: "मुफ़्त", vip: "मुफ़्त" },
-            { name: "Safety, Block & Report", free: "मुफ़्त (Free)", prem: "मुफ़्त", plus: "मुफ़्त", vip: "मुफ़्त" },
+            {
+              name: "Profile Verification Badge",
+              free: "मुफ़्त (Free)",
+              prem: "मुफ़्त",
+              plus: "मुफ़्त",
+              vip: "मुफ़्त",
+            },
+            {
+              name: "Safety, Block & Report",
+              free: "मुफ़्त (Free)",
+              prem: "मुफ़्त",
+              plus: "मुफ़्त",
+              vip: "मुफ़्त",
+            },
           ].map((row, idx) => (
             <View key={idx} style={[styles.matrixRow, { borderBottomColor: colors.border }]}>
               <Text style={[styles.matrixRowLabel, { color: colors.foreground }]}>{row.name}</Text>
-              <Text style={[styles.matrixRowCell, { color: colors.mutedForeground }]}>{row.free}</Text>
-              <Text style={[styles.matrixRowCell, { color: colors.primary, fontWeight: Typography.weights.semibold }]}>{row.prem}</Text>
-              <Text style={[styles.matrixRowCell, { color: colors.accent, fontWeight: Typography.weights.semibold }]}>{row.plus}</Text>
-              <Text style={[styles.matrixRowCell, { color: colors.foreground, fontWeight: Typography.weights.bold }]}>{row.vip}</Text>
+              <Text style={[styles.matrixRowCell, { color: colors.mutedForeground }]}>
+                {row.free}
+              </Text>
+              <Text
+                style={[
+                  styles.matrixRowCell,
+                  { color: colors.primary, fontWeight: Typography.weights.semibold },
+                ]}
+              >
+                {row.prem}
+              </Text>
+              <Text
+                style={[
+                  styles.matrixRowCell,
+                  { color: colors.accent, fontWeight: Typography.weights.semibold },
+                ]}
+              >
+                {row.plus}
+              </Text>
+              <Text
+                style={[
+                  styles.matrixRowCell,
+                  { color: colors.foreground, fontWeight: Typography.weights.bold },
+                ]}
+              >
+                {row.vip}
+              </Text>
             </View>
           ))}
         </View>
@@ -174,12 +392,16 @@ export default function PremiumScreen() {
             <View style={styles.durationGrid}>
               {PREMIUM_BILLING_DURATIONS.map((dur) => {
                 const isSelected = selectedDuration === dur.id;
+                const productId = PLAY_PRODUCT_IDS.premium[dur.id];
                 return (
                   <TouchableOpacity
                     key={dur.id}
                     style={[
                       styles.durationCard,
-                      { backgroundColor: colors.card, borderColor: isSelected ? colors.primary : colors.border },
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
                     ]}
                     onPress={() => setSelectedDuration(dur.id)}
                     activeOpacity={0.8}
@@ -204,7 +426,7 @@ export default function PremiumScreen() {
                         { color: isSelected ? colors.primary : colors.foreground },
                       ]}
                     >
-                      ₹{dur.totalPrice}
+                      {productPrice(productId)}
                     </Text>
                     {dur.savings && (
                       <Text style={[styles.durationSavings, { color: colors.success }]}>
@@ -217,8 +439,15 @@ export default function PremiumScreen() {
             </View>
           </>
         ) : selectedTier === "plus" || selectedTier === "vip" ? (
-          <View style={[styles.singleMonthNoteBox, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 24 }]}>
-            <Text style={[styles.singleMonthNoteTitle, { color: colors.foreground }]}>Monthly Plan Pricing</Text>
+          <View
+            style={[
+              styles.singleMonthNoteBox,
+              { backgroundColor: colors.card, borderColor: colors.border, marginTop: 24 },
+            ]}
+          >
+            <Text style={[styles.singleMonthNoteTitle, { color: colors.foreground }]}>
+              Monthly Plan Pricing
+            </Text>
             <Text style={[styles.singleMonthNoteText, { color: colors.mutedForeground }]}>
               {selectedTier === "plus" ? "CHAHAT Plus: ₹199/month" : "CHAHAT VIP: ₹399/month"}
             </Text>
@@ -226,7 +455,12 @@ export default function PremiumScreen() {
         ) : null}
 
         {/* Plan Tiers Selection */}
-        <Text style={[styles.sectionHeading, { color: colors.mutedForeground, marginTop: selectedTier === "free" ? 24 : 12 }]}>
+        <Text
+          style={[
+            styles.sectionHeading,
+            { color: colors.mutedForeground, marginTop: selectedTier === "free" ? 24 : 12 },
+          ]}
+        >
           2. CHOOSE YOUR PLAN / प्लान चुनें
         </Text>
         <View style={styles.plansContainer}>
@@ -257,23 +491,33 @@ export default function PremiumScreen() {
                 <View style={styles.planHeader}>
                   <View style={styles.planTitleCol}>
                     <View style={styles.planNameRow}>
-                      <Text style={[styles.planName, { color: colors.foreground }]}>{plan.name}</Text>
+                      <Text style={[styles.planName, { color: colors.foreground }]}>
+                        {plan.name}
+                      </Text>
                       {isCurrent && (
                         <View style={[styles.currentPill, { backgroundColor: colors.secondary }]}>
-                          <Text style={[styles.currentPillText, { color: colors.primary }]}>Current</Text>
+                          <Text style={[styles.currentPillText, { color: colors.primary }]}>
+                            Current
+                          </Text>
                         </View>
                       )}
                     </View>
-                    <Text style={[styles.planHindi, { color: colors.primary }]}>{plan.hindiName}</Text>
-                    <Text style={[styles.planTagline, { color: colors.mutedForeground }]}>{plan.tagline}</Text>
+                    <Text style={[styles.planHindi, { color: colors.primary }]}>
+                      {plan.hindiName}
+                    </Text>
+                    <Text style={[styles.planTagline, { color: colors.mutedForeground }]}>
+                      {plan.tagline}
+                    </Text>
                   </View>
 
                   <View style={styles.planPriceCol}>
                     <Text style={[styles.planPrice, { color: colors.foreground }]}>
-                      {plan.monthlyPrice === 0 ? "Free" : `₹${plan.monthlyPrice}`}
+                      {plan.monthlyPrice === 0 ? "Free" : productPrice(tierProductId ?? "")}
                     </Text>
                     {plan.monthlyPrice > 0 && (
-                      <Text style={[styles.planPeriod, { color: colors.mutedForeground }]}>/month</Text>
+                      <Text style={[styles.planPeriod, { color: colors.mutedForeground }]}>
+                        /month
+                      </Text>
                     )}
                   </View>
                 </View>
@@ -306,7 +550,9 @@ export default function PremiumScreen() {
                     ]}
                   >
                     {isSelected && (
-                      <View style={[styles.radioDot, { backgroundColor: colors.primaryForeground }]} />
+                      <View
+                        style={[styles.radioDot, { backgroundColor: colors.primaryForeground }]}
+                      />
                     )}
                   </View>
                   <Text
@@ -326,21 +572,30 @@ export default function PremiumScreen() {
         </View>
 
         {/* Action Button Card */}
-        <View style={[styles.ctaCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View
+          style={[styles.ctaCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
+          <Text
+            style={[
+              styles.singleMonthNoteText,
+              { color: colors.mutedForeground, marginBottom: 10 },
+            ]}
+          >
+            {BILLING_ENABLED
+              ? "Google Play displays the current price and handles payment. Entitlements are enabled only after server verification."
+              : "Prices shown are reference prices. Google Play checkout is not configured in this build; no charge can be made here."}
+          </Text>
           <View style={styles.ctaSummaryRow}>
             <Text style={[styles.ctaPlanSummary, { color: colors.foreground }]}>
               {PLANS[selectedTier].name}
               {selectedTier === "premium" ? ` · ${activeDurationObj.label}` : ""}
             </Text>
             <Text style={[styles.ctaTotalAmount, { color: colors.primary }]}>
-              ₹
               {selectedTier === "free"
-                ? 0
+                ? "₹0"
                 : selectedTier === "premium"
-                  ? activeDurationObj.totalPrice
-                  : selectedTier === "plus"
-                    ? 199
-                    : 399}
+                  ? productPrice(PLAY_PRODUCT_IDS.premium[selectedDuration])
+                  : productPrice(tierProductId ?? "")}
             </Text>
           </View>
 
@@ -349,10 +604,14 @@ export default function PremiumScreen() {
               processing
                 ? "Connecting..."
                 : selectedTier === "free"
-                  ? "Free Plan Active (20 Likes/Day)"
+                  ? `Free Plan Active (${dailyLikeLimit ?? "—"} Likes/Day)`
                   : `Upgrade to ${PLANS[selectedTier].name}`
             }
             loading={processing}
+            disabled={
+              selectedTier !== "free" &&
+              (!BILLING_ENABLED || subscriptionLoading || !!subscriptionError)
+            }
             onPress={handleSelectOrPurchase}
           />
 

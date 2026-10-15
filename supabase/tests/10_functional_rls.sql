@@ -2,9 +2,28 @@
 -- users
 INSERT INTO auth.users(id,email) VALUES
  ('00000000-0000-0000-0000-00000000000a','a@x'),('00000000-0000-0000-0000-00000000000b','b@x'),('00000000-0000-0000-0000-00000000000c','c@x');
-UPDATE public.profiles SET name='A',dob='1995-01-01',gender='man',seeking='woman',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-00000000000a';
-UPDATE public.profiles SET name='B',dob='1996-01-01',gender='woman',seeking='man',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-00000000000b';
-UPDATE public.profiles SET name='C',dob='1996-01-01',gender='woman',seeking='man',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-00000000000c';
+CREATE OR REPLACE PROCEDURE public.test_complete_profile(
+  _uid uuid, _name text, _dob date, _gender text, _seeking text,
+  _photo_name text DEFAULT 'test-profile.jpg'
+) LANGUAGE plpgsql AS $$
+DECLARE
+  _path text := _uid::text || '/' || _photo_name;
+BEGIN
+  INSERT INTO storage.objects(bucket_id, name, owner)
+  VALUES ('photos', _path, _uid);
+  UPDATE public.profiles
+  SET name = _name, dob = _dob, gender = _gender, seeking = _seeking,
+      city = 'Pune', bio = 'A complete test profile for database regressions.',
+      intents = ARRAY['Friendship'], interests = ARRAY['Books', 'Coffee', 'Music'],
+      photos = jsonb_build_array(jsonb_build_object(
+        'id', 'test-profile', 'path', _path, 'thumbPath', _path
+      )),
+      onboarded = true
+  WHERE id = _uid::text;
+END $$;
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000a', 'Alex', '1995-01-01', 'man', 'woman');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000b', 'Bea', '1996-01-01', 'woman', 'man');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000c', 'Cara', '1996-01-01', 'woman', 'man');
 CREATE TABLE public.t_results(name text, ok boolean, detail text);
 GRANT ALL ON public.t_results TO PUBLIC;
 CREATE OR REPLACE PROCEDURE public.expect_fail(_name text, _sql text) LANGUAGE plpgsql AS $$
@@ -55,8 +74,9 @@ RESET ROLE;
 -- bump quota via service-side config to test limit: set limit to 8 and verify cap
 UPDATE public.app_settings SET value='8' WHERE key='daily_like_limit';
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
-RESET ROLE; INSERT INTO auth.users(id,email) VALUES ('00000000-0000-0000-0000-00000000000d','d@x'),('00000000-0000-0000-0000-00000000000e','e@x'); UPDATE public.profiles SET name='E',dob='1996-01-01',gender='man',seeking='woman',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-00000000000e';
-UPDATE public.profiles SET name='D',dob='1996-01-01',gender='woman',seeking='man',city='Pune',onboarded=true WHERE id='00000000-0000-0000-0000-00000000000d';
+RESET ROLE; INSERT INTO auth.users(id,email) VALUES ('00000000-0000-0000-0000-00000000000d','d@x'),('00000000-0000-0000-0000-00000000000e','e@x');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000e', 'Eli', '1996-01-01', 'man', 'woman');
+CALL public.test_complete_profile('00000000-0000-0000-0000-00000000000d', 'Dee', '1996-01-01', 'woman', 'man');
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
 DO $$ DECLARE r jsonb; BEGIN
   r:=public.record_swipe('00000000-0000-0000-0000-00000000000d','like');
@@ -116,7 +136,7 @@ CALL public.expect_fail('B cannot swipe blocked C','SELECT public.record_swipe('
 INSERT INTO public.t_results SELECT 'non-admin has_role false', NOT public.has_role(auth.uid(),'admin'), 'false';
 -- photo path ownership test
 CALL public.expect_fail('B cannot set photo pointing to A folder', 'UPDATE public.profiles SET photos=''[{"id":"p1","path":"00000000-0000-0000-0000-00000000000a/p1.jpg"}]''::jsonb WHERE id=auth.uid()::text');
-CALL public.expect_ok('B can set photo pointing to own folder', 'UPDATE public.profiles SET photos=''[{"id":"p1","path":"00000000-0000-0000-0000-00000000000b/p1.jpg"}]''::jsonb WHERE id=auth.uid()::text');
+CALL public.expect_fail('B cannot complete profile with a photo not uploaded to storage', 'UPDATE public.profiles SET photos=''[{"id":"p1","path":"00000000-0000-0000-0000-00000000000b/p1.jpg","thumbPath":"00000000-0000-0000-0000-00000000000b/p1.jpg"}]''::jsonb WHERE id=auth.uid()::text');
 RESET ROLE;
 -- check every SECURITY DEFINER function in schema public has search_path containing pg_temp
 INSERT INTO public.t_results SELECT
@@ -192,5 +212,3 @@ INSERT INTO public.t_results SELECT 'messages_guard search_path hardened',
   FROM pg_proc WHERE oid = 'public.messages_guard()'::regprocedure;
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
 RESET ROLE;
-
-

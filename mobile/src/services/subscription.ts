@@ -1,8 +1,13 @@
-// Subscription & Pricing Service for CHAHAT / Milo Android
+// Subscription & Pricing Service for Chahat Android.
 // Server-backed entitlement definitions for Free, Premium (₹99), Plus (₹199), and VIP (₹399).
 // Subscriptions are strictly verified against the backend and cannot be granted client-side.
 
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { Platform } from "react-native";
+import * as Crypto from "expo-crypto";
+import type { Purchase, PurchaseError, Subscription } from "react-native-iap";
+
+export const BILLING_ENABLED = process.env.EXPO_PUBLIC_FEATURE_BILLING === "true";
 
 export type PlanTier = "free" | "premium" | "plus" | "vip";
 
@@ -68,7 +73,7 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlyPrice: 0,
     features: [
       "Profile बनाना (Create Profile)",
-      "रोज़ 20 Likes (20 Daily Likes per IST Day)", // 20 free likes per user per IST day
+      "Daily likes (server-configured limit per IST day)",
       "Limited Matching & Discover Deck",
       "Basic Chat — Match होने के बाद",
       "Free Selfie/Profile Verification Badge",
@@ -127,63 +132,99 @@ export interface UserSubscription {
   autoRenew: boolean;
 }
 
+export interface DailyLikeQuota {
+  dailyLimit: number;
+  likesRemaining: number;
+  resetAtIst: string;
+}
+
+export async function getDailyLikeQuota(): Promise<DailyLikeQuota> {
+  if (!isSupabaseConfigured()) throw new Error("Backend connection is not configured.");
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  if (!authData.user) throw new Error("You must be signed in to load your like limit.");
+
+  const { data, error } = await supabase.rpc("get_daily_like_quota");
+  if (error) throw error;
+  if (!data || typeof data !== "object") {
+    throw new Error("The server returned an invalid daily-like quota.");
+  }
+
+  const value = data as Record<string, unknown>;
+  const dailyLimit = value.daily_limit;
+  const likesRemaining = value.likes_remaining;
+  const resetAtIst = value.reset_at_ist;
+  if (
+    typeof dailyLimit !== "number" ||
+    !Number.isInteger(dailyLimit) ||
+    dailyLimit < 0 ||
+    typeof likesRemaining !== "number" ||
+    !Number.isInteger(likesRemaining) ||
+    likesRemaining < 0 ||
+    likesRemaining > dailyLimit ||
+    typeof resetAtIst !== "string"
+  ) {
+    throw new Error("The server returned an invalid daily-like quota.");
+  }
+  return { dailyLimit, likesRemaining, resetAtIst };
+}
+
 /**
- * Fetches the caller's verified subscription from Supabase.
- * Returns free tier if no record exists or if the subscription has expired/cancelled.
- * Client state or local storage CANNOT override this.
+ * Fetches the caller's verified subscription from Supabase. Errors are surfaced so the UI
+ * can distinguish an unknown entitlement state from a confirmed free subscription.
  */
 export async function getUserSubscription(): Promise<UserSubscription> {
-  const freeFallback: UserSubscription = {
+  const freeSubscription: UserSubscription = {
     tier: "free",
     status: "active",
-    startsAt: Date.now(),
+    startsAt: 0,
     expiresAt: null,
     autoRenew: false,
   };
 
   if (!isSupabaseConfigured()) {
-    return freeFallback;
+    throw new Error("Backend connection is not configured.");
   }
 
-  try {
-    const { data: authData, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !authData.user) {
-      return freeFallback;
-    }
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr) throw authErr;
+  if (!authData.user) throw new Error("You must be signed in to load subscription status.");
 
-    const { data, error } = await supabase
-      .from("user_subscriptions")
-      .select("tier, status, starts_at, expires_at, auto_renew")
-      .eq("user_id", authData.user.id)
-      .maybeSingle();
+  const { data, error } = await supabase
+    .from("user_subscriptions")
+    .select("tier, status, starts_at, expires_at, auto_renew")
+    .eq("user_id", authData.user.id)
+    .maybeSingle();
 
-    if (error || !data) {
-      return freeFallback;
-    }
+  if (error) throw error;
+  if (!data) return freeSubscription;
 
-    const expiresAt = data.expires_at ? new Date(data.expires_at).getTime() : null;
-    const isExpired = expiresAt !== null && Date.now() > expiresAt;
-    const isCancelled = data.status === "cancelled";
-
-    if (isExpired || isCancelled || data.status !== "active") {
-      return freeFallback;
-    }
-
-    const tier = (["free", "premium", "plus", "vip"].includes(data.tier)
-      ? data.tier
-      : "free") as PlanTier;
-
-    return {
-      tier,
-      status: "active",
-      startsAt: new Date(data.starts_at).getTime(),
-      expiresAt,
-      autoRenew: !!data.auto_renew,
-    };
-  } catch (err) {
-    console.warn("Could not query server subscription:", err);
-    return freeFallback;
+  const expiresAt = data.expires_at ? new Date(data.expires_at).getTime() : null;
+  const startsAt = new Date(data.starts_at).getTime();
+  if (!Number.isFinite(startsAt) || (expiresAt !== null && !Number.isFinite(expiresAt))) {
+    throw new Error("The server returned invalid subscription dates.");
   }
+  if (!["free", "premium", "plus", "vip"].includes(data.tier)) {
+    throw new Error("The server returned an unsupported subscription tier.");
+  }
+  const validTier = data.tier as PlanTier;
+  const expired = expiresAt !== null && Date.now() >= expiresAt;
+  if (expired || data.status === "expired") {
+    return { tier: "free", status: "expired", startsAt, expiresAt, autoRenew: false };
+  }
+  if (data.status === "cancelled") {
+    return { tier: "free", status: "cancelled", startsAt, expiresAt, autoRenew: false };
+  }
+  if (data.status !== "active")
+    throw new Error("The server returned an unsupported subscription status.");
+
+  return {
+    tier: validTier,
+    status: "active",
+    startsAt,
+    expiresAt,
+    autoRenew: !!data.auto_renew,
+  };
 }
 
 /**
@@ -205,10 +246,7 @@ export function hasEntitlement(
     return feature !== "incognito";
   }
   if (tier === "premium") {
-    return (
-      feature === "seeWhoLikedYou" ||
-      feature === "undoPass"
-    );
+    return feature === "seeWhoLikedYou" || feature === "undoPass";
   }
   // Free tier
   return false;
@@ -216,10 +254,148 @@ export function hasEntitlement(
 
 // Google Play subscription product IDs (must match Play Console; unverified until configured).
 export const PLAY_PRODUCT_IDS = {
-  premium: { "1m": "chahat_premium_1m", "3m": "chahat_premium_3m", "6m": "chahat_premium_6m", "12m": "chahat_premium_12m" },
+  premium: {
+    "1m": "chahat_premium_1m",
+    "3m": "chahat_premium_3m",
+    "6m": "chahat_premium_6m",
+    "12m": "chahat_premium_12m",
+  },
   plus: { "1m": "chahat_plus_1m" },
   vip: { "1m": "chahat_vip_1m" },
 } as const;
+
+export interface PlayBillingProduct {
+  productId: string;
+  localizedPrice: string | null;
+  currencyCode: string | null;
+  offerToken: string | null;
+}
+
+export type BillingEvent =
+  | { status: "completed"; tier: PlanTier; warning?: string }
+  | { status: "pending"; message: string }
+  | { status: "cancelled" }
+  | { status: "failed"; error: string };
+
+const ALL_PRODUCT_IDS = [
+  ...Object.values(PLAY_PRODUCT_IDS.premium),
+  ...Object.values(PLAY_PRODUCT_IDS.plus),
+  ...Object.values(PLAY_PRODUCT_IDS.vip),
+];
+let purchaseInProgress = false;
+const purchasesBeingVerified = new Set<string>();
+
+function isPurchased(purchase: Purchase): boolean {
+  return purchase.purchaseStateAndroid === 1;
+}
+
+export async function loadPlayBillingCatalog(): Promise<PlayBillingProduct[]> {
+  if (!BILLING_ENABLED || Platform.OS !== "android") return [];
+  const iap = await import("react-native-iap");
+  await iap.initConnection();
+  const subscriptions = await iap.getSubscriptions({ skus: ALL_PRODUCT_IDS });
+  return subscriptions.map((subscription: Subscription) => {
+    if (subscription.platform !== "android") {
+      return {
+        productId: subscription.productId,
+        localizedPrice: null,
+        currencyCode: null,
+        offerToken: null,
+      };
+    }
+    const offer =
+      subscription.subscriptionOfferDetails.find((item) => item.offerId === null) ??
+      subscription.subscriptionOfferDetails[0];
+    const phase =
+      offer?.pricingPhases.pricingPhaseList.find((item) => item.recurrenceMode === 1) ??
+      offer?.pricingPhases.pricingPhaseList[0];
+    return {
+      productId: subscription.productId,
+      localizedPrice: phase?.formattedPrice ?? null,
+      currencyCode: phase?.priceCurrencyCode ?? null,
+      offerToken: offer?.offerToken ?? null,
+    };
+  });
+}
+
+export async function listenForPurchaseUpdates(
+  onEvent: (event: BillingEvent) => void,
+): Promise<() => void> {
+  if (!BILLING_ENABLED || Platform.OS !== "android") return () => {};
+  const iap = await import("react-native-iap");
+  await iap.initConnection();
+  const updated = iap.purchaseUpdatedListener((purchase: Purchase) => {
+    void handlePurchaseUpdate(purchase, iap, onEvent);
+  });
+  const failed = iap.purchaseErrorListener((error: PurchaseError) => {
+    purchaseInProgress = false;
+    if (error.code === "E_USER_CANCELLED") {
+      onEvent({ status: "cancelled" });
+    } else {
+      onEvent({ status: "failed", error: error.message || "Google Play purchase failed." });
+    }
+  });
+  return () => {
+    updated.remove();
+    failed.remove();
+  };
+}
+
+async function handlePurchaseUpdate(
+  purchase: Purchase,
+  iap: typeof import("react-native-iap"),
+  onEvent: (event: BillingEvent) => void,
+): Promise<void> {
+  if (purchase.purchaseStateAndroid === 2) {
+    purchaseInProgress = false;
+    onEvent({
+      status: "pending",
+      message: "Google Play payment is pending. No subscription has been granted.",
+    });
+    return;
+  }
+  if (!isPurchased(purchase)) {
+    purchaseInProgress = false;
+    onEvent({ status: "failed", error: "Google Play has not marked this purchase as completed." });
+    return;
+  }
+  const token = purchase.purchaseToken;
+  if (!token || !purchase.productId) {
+    purchaseInProgress = false;
+    onEvent({ status: "failed", error: "Google Play purchase data is incomplete." });
+    return;
+  }
+  if (purchasesBeingVerified.has(token)) return;
+  purchasesBeingVerified.add(token);
+  try {
+    const result = await verifyAndCreditPurchase({
+      store: "google_play",
+      productId: purchase.productId,
+      purchaseToken: token,
+      orderId: purchase.transactionId,
+    });
+    if (!result.success || !result.tier || result.tier === "free") {
+      onEvent({ status: "failed", error: result.error ?? "Purchase verification failed." });
+      return;
+    }
+    let warning: string | undefined;
+    try {
+      await iap.finishTransaction({ purchase, isConsumable: false });
+    } catch {
+      warning = "Subscription verified; Google Play transaction acknowledgement will be retried.";
+    }
+    purchaseInProgress = false;
+    onEvent({ status: "completed", tier: result.tier, warning });
+  } catch (error) {
+    onEvent({
+      status: "failed",
+      error: error instanceof Error ? error.message : "Could not verify the Google Play purchase.",
+    });
+  } finally {
+    purchaseInProgress = false;
+    purchasesBeingVerified.delete(token);
+  }
+}
 
 export interface PurchaseResult {
   success: boolean;
@@ -241,6 +417,27 @@ export async function purchaseSubscription(
   }
 
   try {
+    if (!BILLING_ENABLED) {
+      return {
+        success: false,
+        status: "failed",
+        error: "Google Play Billing is disabled in this build. You have not been charged.",
+      };
+    }
+    if (Platform.OS !== "android") {
+      return {
+        success: false,
+        status: "failed",
+        error: "Google Play Billing is available on Android only.",
+      };
+    }
+    if (purchaseInProgress) {
+      return {
+        success: false,
+        status: "pending",
+        error: "A Google Play purchase is already being processed.",
+      };
+    }
     if (!isSupabaseConfigured()) {
       return {
         success: false,
@@ -249,9 +446,8 @@ export async function purchaseSubscription(
       };
     }
 
-    // Call server purchase initiation RPC if configured
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes.user) {
+    const { data: userRes, error: authError } = await supabase.auth.getUser();
+    if (authError || !userRes.user) {
       return {
         success: false,
         status: "failed",
@@ -259,15 +455,48 @@ export async function purchaseSubscription(
       };
     }
 
-    // Real Google Play Billing is NOT integrated yet (no native billing library, no
-    // purchase-token verification backend). Never imply a payment is in progress.
-    void durationId;
+    const productId =
+      tier === "premium"
+        ? PLAY_PRODUCT_IDS.premium[durationId as keyof typeof PLAY_PRODUCT_IDS.premium]
+        : tier === "plus"
+          ? PLAY_PRODUCT_IDS.plus[durationId as keyof typeof PLAY_PRODUCT_IDS.plus]
+          : PLAY_PRODUCT_IDS.vip[durationId as keyof typeof PLAY_PRODUCT_IDS.vip];
+    if (!productId) {
+      return {
+        success: false,
+        status: "failed",
+        error: "This subscription duration is not supported.",
+      };
+    }
+
+    const products = await loadPlayBillingCatalog();
+    const product = products.find((item) => item.productId === productId);
+    if (!product?.offerToken) {
+      return {
+        success: false,
+        status: "failed",
+        error: "This product is not available in Google Play. No purchase was started.",
+      };
+    }
+
+    const obfuscatedAccountIdAndroid = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      userRes.user.id,
+    );
+    const iap = await import("react-native-iap");
+    purchaseInProgress = true;
+    await iap.requestSubscription({
+      sku: productId,
+      subscriptionOffers: [{ sku: productId, offerToken: product.offerToken }],
+      obfuscatedAccountIdAndroid,
+    });
     return {
       success: false,
-      status: "failed",
-      error: "Subscriptions are not available in this build yet. You have not been charged.",
+      status: "pending",
+      error: "Waiting for Google Play to complete the purchase.",
     };
   } catch (err: any) {
+    purchaseInProgress = false;
     return {
       success: false,
       status: "failed",
@@ -277,22 +506,22 @@ export async function purchaseSubscription(
 }
 
 export interface VerifyPurchasePayload {
-  store: "google_play" | "stripe" | "manual_grant";
-  orderId?: string;
-  productId: string;
+  store: "google_play";
   purchaseToken: string;
-  tier: PlanTier;
-  amountInr?: number;
-  durationMonths: number;
+  productId: string;
+  orderId?: string;
 }
 
 /**
- * Submits a store purchase token to the server for verification and credentialing.
- * Strictly verifies JWT and relies on backend record_verified_purchase RPC to prevent token replay.
+ * Submits a Google Play purchase token for server-side verification. Product and entitlement
+ * details are determined by the server, not accepted from the app.
  */
 export async function verifyAndCreditPurchase(
   payload: VerifyPurchasePayload,
 ): Promise<PurchaseResult> {
+  if (payload.store !== "google_play") {
+    return { success: false, status: "failed", error: "Only Google Play purchases are supported." };
+  }
   if (!isSupabaseConfigured()) {
     return {
       success: false,
@@ -321,21 +550,35 @@ export async function verifyAndCreditPurchase(
 
     // Server-side verification Edge Function / RPC invocation
     const { data, error } = await supabase.functions.invoke("verify-purchase", {
-      body: payload,
+      body: {
+        store: "google_play",
+        productId: payload.productId,
+        purchaseToken: payload.purchaseToken.trim(),
+        orderId: payload.orderId,
+      },
     });
 
     if (error || !data?.success) {
       return {
         success: false,
-        status: "failed",
+        status: data?.status === "pending" ? "pending" : "failed",
         error: data?.error || error?.message || "Purchase token verification failed.",
+      };
+    }
+
+    const verifiedTier = data.tier;
+    if (verifiedTier !== "premium" && verifiedTier !== "plus" && verifiedTier !== "vip") {
+      return {
+        success: false,
+        status: "failed",
+        error: "The server did not confirm a valid paid subscription.",
       };
     }
 
     return {
       success: true,
       status: "completed",
-      tier: payload.tier,
+      tier: verifiedTier,
     };
   } catch (err: any) {
     return {
@@ -356,6 +599,12 @@ export interface RestorePurchasesResult {
  * Queries server-side subscription state to restore entitlements.
  */
 export async function restorePurchases(): Promise<RestorePurchasesResult> {
+  if (!BILLING_ENABLED || Platform.OS !== "android") {
+    return {
+      success: false,
+      error: "Google Play purchase restoration is unavailable in this build.",
+    };
+  }
   if (!isSupabaseConfigured()) {
     return {
       success: false,
@@ -364,6 +613,25 @@ export async function restorePurchases(): Promise<RestorePurchasesResult> {
   }
 
   try {
+    const iap = await import("react-native-iap");
+    await iap.initConnection();
+    const purchases = await iap.getAvailablePurchases();
+    for (const purchase of purchases) {
+      if (!isPurchased(purchase) || !purchase.purchaseToken || !purchase.productId) continue;
+      const result = await verifyAndCreditPurchase({
+        store: "google_play",
+        productId: purchase.productId,
+        purchaseToken: purchase.purchaseToken,
+        orderId: purchase.transactionId,
+      });
+      if (result.success) {
+        try {
+          await iap.finishTransaction({ purchase, isConsumable: false });
+        } catch {
+          // The server already persisted the entitlement; the next restore safely retries.
+        }
+      }
+    }
     const sub = await getUserSubscription();
     if (sub.tier !== "free") {
       return {
@@ -373,13 +641,17 @@ export async function restorePurchases(): Promise<RestorePurchasesResult> {
     }
     return {
       success: false,
-      error: "No active subscriptions found to restore.",
+      error:
+        sub.status === "expired"
+          ? "The verified subscription has expired."
+          : sub.status === "cancelled"
+            ? "The verified subscription was cancelled."
+            : "No active subscriptions found to restore.",
     };
-  } catch (err: any) {
+  } catch (err) {
     return {
       success: false,
-      error: err?.message || "Failed to restore purchases.",
+      error: err instanceof Error ? err.message : "Failed to restore purchases.",
     };
   }
 }
-

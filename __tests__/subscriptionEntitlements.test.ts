@@ -4,6 +4,15 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
   removeItem: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock(
+  "expo-crypto",
+  () => ({
+    CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+    digestStringAsync: jest.fn(),
+  }),
+  { virtual: true },
+);
+
 jest.mock("../mobile/src/services/supabase", () => ({
   isSupabaseConfigured: jest.fn().mockReturnValue(false),
   supabase: {
@@ -41,7 +50,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
   const evaluateSwipeQuota = (
     activeTier: PlanTier,
     likesUsedToday: number,
-    dailyLimit: number = 10,
+    dailyLimit: number = 20,
   ): { allowed: boolean; likesRemaining: number } => {
     // MVP: no paid-tier bypass. Every tier follows the same configured daily limit.
     void activeTier;
@@ -107,38 +116,38 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
     });
   });
 
-  describe("2. Free Daily Likes Limit (T6 Strict 10/day Enforcement)", () => {
-    test("free users are allowed to swipe up to 10 times per IST day", () => {
-      const result = evaluateSwipeQuota("free", 4, 10);
+  describe("2. Daily like limit follows the server setting", () => {
+    test("free users are allowed up to the configured 20 likes per IST day", () => {
+      const result = evaluateSwipeQuota("free", 4, 20);
       expect(result.allowed).toBe(true);
-      expect(result.likesRemaining).toBe(6);
+      expect(result.likesRemaining).toBe(16);
     });
 
-    test("free users are strictly blocked on the 10th like limit", () => {
-      const result = evaluateSwipeQuota("free", 10, 10);
+    test("free users are blocked after the configured daily limit", () => {
+      const result = evaluateSwipeQuota("free", 20, 20);
       expect(result.allowed).toBe(false);
       expect(result.likesRemaining).toBe(0);
     });
 
-    test("free users attempting 11th swipe remain blocked at 0", () => {
-      const result = evaluateSwipeQuota("free", 11, 10);
+    test("free users attempting another swipe remain blocked at 0", () => {
+      const result = evaluateSwipeQuota("free", 21, 20);
       expect(result.allowed).toBe(false);
       expect(result.likesRemaining).toBe(0);
     });
 
     test("paid tiers get no like-quota bypass in the MVP", () => {
-      const premiumResult = evaluateSwipeQuota("premium", 10, 10);
+      const premiumResult = evaluateSwipeQuota("premium", 20, 20);
       expect(premiumResult.allowed).toBe(false);
       expect(premiumResult.likesRemaining).toBe(0);
 
-      const vipResult = evaluateSwipeQuota("vip", 120, 10);
+      const vipResult = evaluateSwipeQuota("vip", 120, 20);
       expect(vipResult.allowed).toBe(false);
       expect(vipResult.likesRemaining).toBe(0);
 
-      expect(evaluateSwipeQuota("plus", 3, 10).likesRemaining).toBe(7);
+      expect(evaluateSwipeQuota("plus", 3, 20).likesRemaining).toBe(17);
     });
 
-    test("expired paid users immediately fall back to 10-like limit", () => {
+    test("expired paid users immediately follow the configured like limit", () => {
       const serverTier = resolveActiveServerTier({
         tier: "premium",
         status: "active",
@@ -146,7 +155,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       });
       expect(serverTier).toBe("free");
 
-      const quotaResult = evaluateSwipeQuota(serverTier, 10, 10);
+      const quotaResult = evaluateSwipeQuota(serverTier, 20, 20);
       expect(quotaResult.allowed).toBe(false);
       expect(quotaResult.likesRemaining).toBe(0);
     });
@@ -185,9 +194,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
 
   describe("4. Undo-Pass (Rewind) Authorization", () => {
     // Simulates RPC undo_swipe_pass authorization check
-    const authorizeUndoPass = (
-      activeTier: PlanTier,
-    ): { authorized: boolean; error?: string } => {
+    const authorizeUndoPass = (activeTier: PlanTier): { authorized: boolean; error?: string } => {
       if (activeTier === "premium" || activeTier === "plus" || activeTier === "vip") {
         return { authorized: true };
       }
@@ -270,8 +277,8 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       ]);
     });
 
-    test("free plan explicitly states 20 daily likes in feature list", () => {
-      const likeFeature = PLANS.free.features.find((f) => f.includes("20 Likes"));
+    test("free plan describes the server-configured daily limit", () => {
+      const likeFeature = PLANS.free.features.find((f) => f.includes("server-configured"));
       expect(likeFeature).toBeDefined();
     });
   });
@@ -307,10 +314,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
 
     test("defense-in-depth: paid member cannot read received likes from a blocked user", () => {
       // Simulates the hardened RLS policy on public.swipes
-      const canReadReceivedLike = (
-        viewerTier: PlanTier,
-        isBlocked: boolean,
-      ): boolean => {
+      const canReadReceivedLike = (viewerTier: PlanTier, isBlocked: boolean): boolean => {
         const isPaid = viewerTier === "premium" || viewerTier === "plus" || viewerTier === "vip";
         return isPaid && !isBlocked;
       };
@@ -322,19 +326,26 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       expect(canReadReceivedLike("free", false)).toBe(false);
     });
 
-    test("restorePurchases fails safely when backend is unconfigured", async () => {
+    test("restorePurchases fails safely when billing is unavailable in this build", async () => {
       const res = await restorePurchases();
       expect(res.success).toBe(false);
-      expect(res.error).toContain("Backend connection is not configured");
+      expect(res.error).toContain("unavailable in this build");
+    });
+
+    test("purchase verification fails safely when the backend is unconfigured", async () => {
+      const res = await verifyAndCreditPurchase({
+        store: "google_play",
+        productId: "chahat_premium_1m",
+        purchaseToken: "valid-google-purchase-token",
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toBe("Backend connection is not configured.");
     });
 
     test("verifyAndCreditPurchase rejects malformed or short purchase tokens", async () => {
       const res = await verifyAndCreditPurchase({
         store: "google_play",
-        productId: "chahat_premium_1m",
         purchaseToken: "short_tok",
-        tier: "premium",
-        durationMonths: 1,
       });
       expect(res.success).toBe(false);
       expect(res.status).toBe("failed");

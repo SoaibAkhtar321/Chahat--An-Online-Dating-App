@@ -9,7 +9,9 @@ const QUALITIES = [0.8, 0.7, 0.6, 0.5, 0.4];
 
 async function sizeOf(uri: string): Promise<number> {
   const res = await fetch(uri);
+  if (!res.ok) throw new Error("Selected image could not be read for compression.");
   const blob = await res.blob();
+  if (blob.size === 0) throw new Error("Selected image is empty or invalid.");
   return blob.size;
 }
 
