@@ -21,7 +21,7 @@ CREATE TABLE public.push_devices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   token text NOT NULL UNIQUE CHECK (
-    token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,256}\]$'
+    token ~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,255}\]$'
   ),
   platform text NOT NULL CHECK (platform IN ('ios', 'android')),
   app_version text CHECK (app_version IS NULL OR app_version ~ '^[A-Za-z0-9.+-]{1,32}$'),
@@ -54,7 +54,7 @@ BEGIN
     RAISE EXCEPTION 'Authentication required';
   END IF;
   IF _token IS NULL OR length(_token) > 300
-     OR _token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,256}\]$' THEN
+     OR _token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,255}\]$' THEN
     RAISE EXCEPTION 'Invalid Expo push token';
   END IF;
   IF _platform IS NULL OR _platform NOT IN ('ios', 'android') THEN

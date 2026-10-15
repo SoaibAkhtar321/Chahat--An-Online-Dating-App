@@ -108,16 +108,21 @@ SELECT 'RTDN owner lookup returns the account for an existing token',
   public.get_google_purchase_owner(repeat('c',64)) = '70000000-0000-0000-0000-000000000001'::uuid,
   public.get_google_purchase_owner(repeat('c',64))::text;
 
-INSERT INTO public.t_results
-SELECT 'verified revocation removes entitlement and retains token ownership',
-  public.revoke_verified_google_purchase(
+DO $$
+DECLARE revoked boolean;
+BEGIN
+  revoked := public.revoke_verified_google_purchase(
     '70000000-0000-0000-0000-000000000001', repeat('c',64), 'REVOKED'
-  )
-  AND (SELECT status = 'expired' AND tier = 'free'
-       FROM public.user_subscriptions
-       WHERE user_id = '70000000-0000-0000-0000-000000000001')
-  AND public.get_google_purchase_owner(repeat('c',64)) = '70000000-0000-0000-0000-000000000001'::uuid,
-  'revoked; retained for audit';
+  );
+  INSERT INTO public.t_results
+  SELECT 'verified revocation removes entitlement and retains token ownership',
+    coalesce(revoked, false)
+    AND coalesce((SELECT status = 'expired' AND tier = 'free'
+         FROM public.user_subscriptions
+         WHERE user_id = '70000000-0000-0000-0000-000000000001'), false)
+    AND public.get_google_purchase_owner(repeat('c',64)) = '70000000-0000-0000-0000-000000000001'::uuid,
+    'revoked; retained for audit';
+END $$;
 
 RESET ROLE;
 DELETE FROM auth.users WHERE id = '70000000-0000-0000-0000-000000000001';

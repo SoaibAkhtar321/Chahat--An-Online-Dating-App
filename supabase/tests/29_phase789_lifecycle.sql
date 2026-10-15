@@ -26,6 +26,10 @@ SET name = 'Phase 789',
     onboarded = true
 WHERE id = '00000000-0000-0000-0000-0000000000c1';
 
+-- Earlier suites change this shared setting (10_functional_rls sets 8); pin the precondition.
+INSERT INTO public.app_settings (key, value) VALUES ('daily_like_limit', '20'::jsonb)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
 INSERT INTO public.user_daily_quotas (user_id, ist_date, likes_used)
 VALUES (
   '00000000-0000-0000-0000-0000000000c1',
@@ -61,20 +65,27 @@ SELECT 'daily quota RPC returns authoritative configured limit and remaining',
   public.get_daily_like_quota()->>'daily_limit' = '20'
     AND public.get_daily_like_quota()->>'likes_remaining' = '13',
   public.get_daily_like_quota()::text;
-INSERT INTO public.t_results
-SELECT 'paid undo-pass RPC removes the pass and reports a boolean success',
-  (result->>'success')::boolean
-    AND NOT EXISTS (
-      SELECT 1 FROM public.swipes
-      WHERE from_id = '00000000-0000-0000-0000-0000000000c1'
-        AND to_id = '00000000-0000-0000-0000-0000000000c2'
-        AND kind = 'pass'
-    ),
-  result::text
-FROM (SELECT public.undo_swipe_pass('00000000-0000-0000-0000-0000000000c2') AS result) call_result;
+DO $$
+DECLARE result jsonb;
+BEGIN
+  -- Call first, verify in a later statement: a single statement cannot see rows
+  -- deleted by a volatile function it is calling.
+  result := public.undo_swipe_pass('00000000-0000-0000-0000-0000000000c2');
+  INSERT INTO public.t_results
+  SELECT 'paid undo-pass RPC removes the pass and reports a boolean success',
+    (result->>'success')::boolean
+      AND NOT EXISTS (
+        SELECT 1 FROM public.swipes
+        WHERE from_id = '00000000-0000-0000-0000-0000000000c1'
+          AND to_id = '00000000-0000-0000-0000-0000000000c2'
+          AND kind = 'pass'
+      ),
+    result::text;
+END $$;
 RESET ROLE;
 
 SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
 SELECT public.begin_account_deletion('00000000-0000-0000-0000-0000000000c1'::uuid);
 INSERT INTO public.t_results
 SELECT 'deletion pending suspends profile and marks state',
@@ -82,6 +93,7 @@ SELECT 'deletion pending suspends profile and marks state',
     AND (SELECT data->>'deletionPending' = 'true' FROM public.account_state WHERE user_id = '00000000-0000-0000-0000-0000000000c1'),
   'service-role pending marker';
 SET ROLE authenticated;
+SET request.jwt.claim.role = 'authenticated';
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000c1';
 CALL public.expect_fail(
   'client cannot clear server deletion-pending state',
@@ -89,6 +101,7 @@ CALL public.expect_fail(
 );
 RESET ROLE;
 SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
 INSERT INTO public.reports (reporter, target, category, note)
 VALUES (
   '00000000-0000-0000-0000-0000000000c1',

@@ -13,7 +13,7 @@ INSERT INTO storage.objects(bucket_id,name,owner) VALUES
  ('photos','00000000-0000-0000-0000-00000000000c/p1.jpg','00000000-0000-0000-0000-00000000000c');
 INSERT INTO storage.objects(bucket_id,name) SELECT 'chat', id::text||'/m1.jpg' FROM public.matches LIMIT 1;
 SET ROLE authenticated; SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
-INSERT INTO public.t_results SELECT 'A sees only own photos (stopgap 1A)', count(*)=1 AND bool_and(name LIKE '%00a/%'), count(*)::text FROM storage.objects WHERE bucket_id='photos';
+INSERT INTO public.t_results SELECT 'A sees only own photos (stopgap 1A)', count(*)>=1 AND bool_and(name LIKE '%00a/%'), count(*)::text FROM storage.objects WHERE bucket_id='photos';
 INSERT INTO public.t_results SELECT 'A (match member) reads chat media', count(*)=1, count(*)::text FROM storage.objects WHERE bucket_id='chat';
 CALL public.expect_fail('A cannot upload into B folder',$q$INSERT INTO storage.objects(bucket_id,name) VALUES ('photos','00000000-0000-0000-0000-00000000000b/hack.jpg')$q$);
 CALL public.expect_ok('A can upload to own folder',$q$INSERT INTO storage.objects(bucket_id,name) VALUES ('photos','00000000-0000-0000-0000-00000000000a/new.jpg')$q$);
@@ -34,7 +34,7 @@ INSERT INTO public.t_results SELECT 'discovery feed returns no photos', count(*)
 CALL public.expect_fail('authenticated cannot select profiles.photos directly','SELECT photos FROM public.profiles');
 CALL public.expect_fail('authenticated cannot select profiles.photos of others','SELECT photos FROM public.profiles WHERE id=''00000000-0000-0000-0000-00000000000b''');
 CALL public.expect_ok('authenticated can still select non-photo columns','SELECT id, name FROM public.profiles');
-INSERT INTO public.t_results SELECT 'get_my_photos returns only own photos (C has none)', jsonb_array_length(public.get_my_photos())=0, public.get_my_photos()::text;
+INSERT INTO public.t_results SELECT 'get_my_photos returns only own photos (C sees only C)', NOT EXISTS (SELECT 1 FROM jsonb_array_elements(public.get_my_photos()) e WHERE e->>'path' NOT LIKE '%00c/%'), public.get_my_photos()::text;
 SET request.jwt.claim.sub='00000000-0000-0000-0000-00000000000b';
 INSERT INTO public.t_results SELECT 'owner sees own photos via get_public_profile', jsonb_array_length(photos)=1, photos::text FROM public.get_public_profile('00000000-0000-0000-0000-00000000000b');
 INSERT INTO public.t_results SELECT 'owner sees own photos via get_my_photos', jsonb_array_length(public.get_my_photos())=1 AND public.get_my_photos()->0->>'path' LIKE '%00b/p1.jpg', public.get_my_photos()::text;

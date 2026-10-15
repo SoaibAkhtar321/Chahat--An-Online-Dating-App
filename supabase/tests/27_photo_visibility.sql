@@ -39,7 +39,7 @@ INSERT INTO public.t_results SELECT 'owner storage: sees all own objects incl. s
 INSERT INTO public.t_results SELECT 'get_my_photos: server status overrides forged client status',
   (SELECT e->>'status' FROM jsonb_array_elements(public.get_my_photos()) e WHERE e->>'id'='a')='approved'
   AND (SELECT e->>'status' FROM jsonb_array_elements(public.get_my_photos()) e WHERE e->>'id'='b')='pending'
-  AND (SELECT e->>'status' FROM jsonb_array_elements(public.get_my_photos()) e WHERE e->>'id'='s')='pending', public.get_my_photos()::text;
+  AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(public.get_my_photos()) e WHERE e->>'id'='s'), public.get_my_photos()::text;
 DO $$ DECLARE n int; BEGIN UPDATE storage.objects SET name=name WHERE bucket_id='photos' AND name='00000000-0000-0000-0000-0000000000f3/a.jpg'; GET DIAGNOSTICS n=ROW_COUNT; INSERT INTO public.t_results VALUES('owner cannot overwrite/update a stored photo object', n=0, n::text); END $$;
 RESET ROLE;
 

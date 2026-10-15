@@ -5,15 +5,9 @@ INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-0000000000f1', 'push-a@x'),
   ('00000000-0000-0000-0000-0000000000f2', 'push-b@x');
 
-SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
-UPDATE public.profiles
-SET name = 'Push A', gender = 'man', seeking = 'woman'
-WHERE id = '00000000-0000-0000-0000-0000000000f1';
-UPDATE public.profiles
-SET name = 'Push B', gender = 'woman', seeking = 'man'
-WHERE id = '00000000-0000-0000-0000-0000000000f2';
-RESET ROLE;
+-- Notification triggers only fire for active, onboarded, non-demo profiles.
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f1', 'Push A', '1995-01-01', 'man', 'woman');
+CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f2', 'Push B', '1995-01-01', 'woman', 'man');
 SET request.jwt.claim.role = 'authenticated';
 
 SET ROLE authenticated;
@@ -101,6 +95,10 @@ WHERE user_id = '00000000-0000-0000-0000-0000000000f1' AND active;
 INSERT INTO public.swipes(from_id, to_id, kind) VALUES
   ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f2', 'like'),
   ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000f1', 'like');
+-- The legacy on_swipe auto-match trigger was removed (matches come from record_swipe),
+-- so create the mutual match explicitly.
+INSERT INTO public.matches (user_a, user_b)
+VALUES ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f2');
 INSERT INTO public.messages(match_id, sender, body)
 SELECT id, '00000000-0000-0000-0000-0000000000f1', 'private message body must not enter push payload'
 FROM public.matches
@@ -118,7 +116,11 @@ WHERE (recipient_id = '00000000-0000-0000-0000-0000000000f2' AND category = 'lik
      WHERE user_a = '00000000-0000-0000-0000-0000000000f1'
        AND user_b = '00000000-0000-0000-0000-0000000000f2'
    ))
-   OR (category = 'message' AND route_data ? 'matchId');
+   OR (category = 'message' AND route_data->>'matchId' IN (
+     SELECT id::text FROM public.matches
+     WHERE user_a = '00000000-0000-0000-0000-0000000000f1'
+       AND user_b = '00000000-0000-0000-0000-0000000000f2'
+   ));
 INSERT INTO public.t_results
 SELECT 'notification outbox never includes message content',
   bool_and(route_data::text NOT LIKE '%private message body%'),

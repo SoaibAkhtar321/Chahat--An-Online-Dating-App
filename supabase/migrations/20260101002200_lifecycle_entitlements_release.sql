@@ -77,20 +77,64 @@ DECLARE
   _service_role boolean :=
     current_setting('request.jwt.claim.role', true) = 'service_role'
     OR coalesce(auth.role(), '') = 'service_role';
+  _verif_keys text[];
+  _new_verif jsonb;
+  _old_verif jsonb;
+  _new_status text;
+  _old_status text;
 BEGIN
-  IF NOT _service_role THEN
-    IF NEW.data->>'deletionPending' = 'true'
-       AND (TG_OP = 'INSERT' OR OLD.data->>'deletionPending' IS DISTINCT FROM 'true') THEN
-      RAISE EXCEPTION 'Deletion state is server controlled';
+  -- service_role (admin actions, backend scripts, webhooks) is unrestricted.
+  IF _service_role THEN
+    RETURN NEW;
+  END IF;
+
+  IF jsonb_typeof(NEW.data) <> 'object' THEN
+    RAISE EXCEPTION 'account_state data must be a JSON object';
+  END IF;
+
+  -- Server-controlled deletion state (phase 7-9).
+  IF NEW.data->>'deletionPending' = 'true'
+     AND (TG_OP = 'INSERT' OR OLD.data->>'deletionPending' IS DISTINCT FROM 'true') THEN
+    RAISE EXCEPTION 'Deletion state is server controlled';
+  END IF;
+  IF TG_OP = 'UPDATE' AND OLD.data->>'deletionPending' = 'true' THEN
+    RAISE EXCEPTION 'Account deletion is pending';
+  END IF;
+
+  -- Verification hardening (kept from 20260101001400; must not be dropped).
+  _new_verif := NEW.data -> 'verification';
+  _old_verif := CASE WHEN TG_OP = 'UPDATE' THEN OLD.data -> 'verification' ELSE NULL END;
+  _new_status := _new_verif ->> 'status';
+  _old_status := _old_verif ->> 'status';
+
+  -- 1. Client cannot self-approve.
+  IF _new_status = 'approved' AND _old_status IS DISTINCT FROM 'approved' THEN
+    RAISE EXCEPTION 'Verification status cannot be self-approved by client.';
+  END IF;
+
+  -- 2. Client cannot demote/clear an approved status: preserve it silently so
+  --    ordinary preference updates still succeed.
+  IF _old_status = 'approved' AND _new_status IS DISTINCT FROM 'approved' THEN
+    NEW.data := jsonb_set(NEW.data, '{verification}', _old_verif);
+    _new_verif := _old_verif;
+    _new_status := 'approved';
+  END IF;
+
+  -- 3. Client may only submit {status: pending|none}; no extra metadata keys.
+  IF _new_verif IS NOT NULL AND jsonb_typeof(_new_verif) = 'object'
+     AND _old_status IS DISTINCT FROM 'approved' THEN
+    SELECT coalesce(array_agg(key), ARRAY[]::text[])
+    INTO _verif_keys
+    FROM jsonb_object_keys(_new_verif) AS key;
+
+    IF EXISTS (SELECT 1 FROM unnest(_verif_keys) k WHERE k <> 'status') THEN
+      RAISE EXCEPTION 'Unauthorized verification metadata tampering: only status is client-modifiable';
     END IF;
-    IF TG_OP = 'UPDATE' AND OLD.data->>'deletionPending' = 'true' THEN
-      RAISE EXCEPTION 'Account deletion is pending';
-    END IF;
-    IF NEW.data->'verification'->>'status' = 'approved'
-       AND (TG_OP = 'INSERT' OR OLD.data->'verification'->>'status' IS DISTINCT FROM 'approved') THEN
-      RAISE EXCEPTION 'Verification status cannot be self-approved by client.';
+    IF _new_status IS NOT NULL AND _new_status NOT IN ('pending', 'none') THEN
+      RAISE EXCEPTION 'Invalid verification status: client may only set pending or none';
     END IF;
   END IF;
+
   RETURN NEW;
 END;
 $$;
