@@ -4,12 +4,14 @@ import { useRouter } from "expo-router";
 import { useAuth } from "../src/context/AuthContext";
 import { ThemeColors } from "../src/constants/theme";
 import { useTheme } from "../src/context/ThemeContext";
+import { Alert } from "../src/utils/alert";
 
 export default function Index() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
-  const { isLoggedIn, isOnboarded, loading, profile, profileError, refreshProfile, signOut } = useAuth();
+  const { isLoggedIn, isOnboarded, loading, profile, profileError, refreshProfile, signOut } =
+    useAuth();
 
   useEffect(() => {
     if (loading) return;
@@ -28,8 +30,25 @@ export default function Index() {
     return (
       <View style={styles.container}>
         <Text style={{ marginBottom: 16 }}>Could not load your profile.</Text>
-        <TouchableOpacity onPress={() => refreshProfile()}><Text style={{ color: Colors.primary, marginBottom: 16 }}>Try again</Text></TouchableOpacity>
-        <TouchableOpacity onPress={() => signOut()}><Text>Sign out</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => refreshProfile()}>
+          <Text style={{ color: Colors.primary, marginBottom: 16 }}>Try again</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={async () => {
+            try {
+              await signOut();
+            } catch (error) {
+              Alert.alert(
+                "Signed out with a warning",
+                error instanceof Error
+                  ? error.message
+                  : "Some server cleanup could not be confirmed.",
+              );
+            }
+          }}
+        >
+          <Text>Sign out</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -41,11 +60,12 @@ export default function Index() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  });

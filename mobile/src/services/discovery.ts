@@ -116,7 +116,9 @@ export async function fetchDiscoveryDeck(
       } else {
         const signed = await getSignedUrls(
           "photos",
-          rpcData.flatMap((r: any) => (Array.isArray(r.photos) ? r.photos.map((p: any) => p.path) : [])),
+          rpcData.flatMap((r: any) =>
+            Array.isArray(r.photos) ? r.photos.map((p: any) => p.path) : [],
+          ),
         );
         deck = rpcData.map((row: any) => formatProfileRow(row, signed));
       }
@@ -153,9 +155,7 @@ export async function fetchDiscoveryDeck(
 
 function formatProfileRow(r: any, signed: Record<string, string>): Profile {
   const photosArray = Array.isArray(r.photos)
-    ? r.photos
-        .map((p: any) => (p.path ? signed[p.path] || "" : p.src || ""))
-        .filter(Boolean)
+    ? r.photos.map((p: any) => (p.path ? signed[p.path] || "" : p.src || "")).filter(Boolean)
     : [];
 
   return {
@@ -185,6 +185,7 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
 export async function submitSwipe(
   toUserId: string,
   kind: "like" | "pass" | "priority",
+  currentUserId: string,
 ): Promise<SwipeResponse> {
   try {
     const { data, error } = await supabase.rpc("record_swipe", {
@@ -202,7 +203,7 @@ export async function submitSwipe(
     }
 
     if (data.is_match) {
-      pushNotificationToInbox({
+      pushNotificationToInbox(currentUserId, {
         kind: "match",
         title: "New Match!",
         text: "You and a new connection liked each other. Start a conversation!",

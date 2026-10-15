@@ -1,4 +1,6 @@
 import { supabase, isSupabaseConfigured, getConfigStatus } from "./supabase";
+import * as Linking from "expo-linking";
+import { clearNotificationState, unregisterPushNotificationToken } from "./notifications";
 
 export interface AuthResult {
   success: boolean;
@@ -23,6 +25,7 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password,
+      options: { emailRedirectTo: Linking.createURL("callback") },
     });
 
     if (error) {
@@ -35,7 +38,8 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
       if (/rate.*limit|too many requests|over_email_send_rate_limit/i.test(error.message)) {
         return {
           success: false,
-          error: "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
+          error:
+            "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
         };
       }
       return { success: false, error: error.message };
@@ -50,7 +54,8 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
     if (/rate.*limit|too many requests/i.test(err?.message || "")) {
       return {
         success: false,
-        error: "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
+        error:
+          "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
       };
     }
     return { success: false, error: err.message || "Failed to sign up" };
@@ -68,6 +73,17 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 
   try {
     const cleanEmail = email.trim().toLowerCase();
+    const { data: currentSession } = await supabase.auth.getSession();
+    const currentUserId = currentSession.session?.user.id;
+    if (currentUserId && currentSession.session?.user.email?.trim().toLowerCase() !== cleanEmail) {
+      const unregisterResult = await unregisterPushNotificationToken(currentUserId);
+      if (!unregisterResult.success) {
+        console.warn(
+          "Could not unregister prior account push token before account switch:",
+          unregisterResult.error,
+        );
+      }
+    }
     const { data, error } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password,
@@ -106,13 +122,19 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 }
 
 export async function signOutUser(): Promise<void> {
-  try {
-    if (isSupabaseConfigured()) {
-      await supabase.auth.signOut();
+  if (!isSupabaseConfigured()) return;
+  const { data, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const userId = data.session?.user.id;
+  if (userId) {
+    const tokenResult = await unregisterPushNotificationToken(userId);
+    if (!tokenResult.success) {
+      console.warn("Could not unregister push token before sign-out:", tokenResult.error);
     }
-  } catch (err) {
-    console.error("Sign out error", err);
   }
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+  if (userId) await clearNotificationState(userId);
 }
 
 export async function resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
@@ -122,11 +144,93 @@ export async function resetPassword(email: string): Promise<{ success: boolean; 
 
   try {
     const cleanEmail = email.trim().toLowerCase();
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: Linking.createURL("callback", { queryParams: { flow: "recovery" } }),
+    });
     if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || "Could not send reset email" };
+  }
+}
+
+export interface AuthLinkResult {
+  success: boolean;
+  flow: "recovery" | "confirmation";
+  error?: string;
+}
+
+export async function completeAuthLink(url: string): Promise<AuthLinkResult> {
+  let flow: AuthLinkResult["flow"] = "confirmation";
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol !== "milo:" ||
+      (parsed.hostname !== "callback" && parsed.pathname !== "/callback")
+    ) {
+      return { success: false, flow, error: "This is not a recognized Chahat account link." };
+    }
+    const params = new URLSearchParams(parsed.search);
+    const fragment = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+    flow = params.get("flow") === "recovery" ? "recovery" : "confirmation";
+    const providerError = params.get("error_description") || fragment.get("error_description");
+    if (providerError) return { success: false, flow, error: providerError };
+
+    const code = params.get("code");
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) return { success: false, flow, error: error.message };
+      return { success: true, flow };
+    }
+
+    const accessToken = fragment.get("access_token");
+    const refreshToken = fragment.get("refresh_token");
+    if (accessToken && refreshToken) {
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (error) return { success: false, flow, error: error.message };
+      return { success: true, flow };
+    }
+
+    return {
+      success: false,
+      flow,
+      error: "This sign-in link is incomplete or has expired. Request a new link and try again.",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      flow,
+      error: error instanceof Error ? error.message : "Could not process the sign-in link.",
+    };
+  }
+}
+
+export async function updateRecoveryPassword(
+  password: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) return { success: false, error: CONFIG_ERROR };
+  try {
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) return { success: false, error: sessionError.message };
+    if (!data.session) {
+      return {
+        success: false,
+        error: "The password reset session is missing. Request a new reset link.",
+      };
+    }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { success: false, error: error.message };
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+    if (signOutError) return { success: false, error: signOutError.message };
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not update the password.",
+    };
   }
 }
 
@@ -204,6 +308,8 @@ export async function deleteUserAccount(): Promise<DeleteAccountResult> {
   }
 
   try {
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData.user?.id;
     const { data, error } = await supabase.functions.invoke("delete-account", {
       body: { confirm: true },
     });
@@ -233,22 +339,37 @@ export async function deleteUserAccount(): Promise<DeleteAccountResult> {
       };
     }
 
+    let cleanupWarning: string | undefined;
+    if (userId) {
+      try {
+        await clearNotificationState(userId, true);
+      } catch (cleanupError) {
+        console.error("Account deleted but local notification cleanup failed:", cleanupError);
+        cleanupWarning =
+          "Your account was deleted, but some local notification data could not be cleared.";
+      }
+    }
+
     // Server reported success (the Auth user is gone): clear the local session without a server call.
     try {
       const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
       if (signOutError) {
         return {
           success: true,
-          warning: "Your account was deleted but you could not be signed out automatically.",
+          warning:
+            cleanupWarning ||
+            "Your account was deleted but you could not be signed out automatically.",
         };
       }
     } catch {
       return {
         success: true,
-        warning: "Your account was deleted but you could not be signed out automatically.",
+        warning:
+          cleanupWarning ||
+          "Your account was deleted but you could not be signed out automatically.",
       };
     }
-    return { success: true };
+    return { success: true, ...(cleanupWarning ? { warning: cleanupWarning } : {}) };
   } catch (err: any) {
     return { success: false, error: err?.message || DELETE_FAILED_MESSAGE };
   }

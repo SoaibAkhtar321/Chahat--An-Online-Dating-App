@@ -42,5 +42,6 @@ describe("supabase/config.toml auth block", () => {
     const scheme = app.expo?.scheme ?? app.scheme;
     expect(scheme).toBeTruthy();
     expect(toml).toContain(`"${scheme}://"`);
+    expect(toml).toContain(`"${scheme}://callback"`);
   });
 });

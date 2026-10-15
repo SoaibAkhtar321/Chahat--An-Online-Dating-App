@@ -40,27 +40,29 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
       const { data: profRows } = await supabase.rpc("get_public_profile", { _id: otherId });
       const prof = Array.isArray(profRows) ? (profRows[0] as any) : profRows;
 
-        if (prof) {
-          const signed = await getSignedUrls(
-            "photos",
-            Array.isArray(prof.photos) ? prof.photos.map((p: any) => p.path) : [],
-          );
-          const photos: string[] = Array.isArray(prof.photos)
-            ? prof.photos.map((p: any) => (p.path ? signed[p.path] || "" : p.src || "")).filter(Boolean)
-            : [];
+      if (prof) {
+        const signed = await getSignedUrls(
+          "photos",
+          Array.isArray(prof.photos) ? prof.photos.map((p: any) => p.path) : [],
+        );
+        const photos: string[] = Array.isArray(prof.photos)
+          ? prof.photos
+              .map((p: any) => (p.path ? signed[p.path] || "" : p.src || ""))
+              .filter(Boolean)
+          : [];
 
-          otherProfile = {
-            id: prof.id,
-            name: prof.name || "Member",
-            age: prof.age || 0,
-            city: prof.city || "",
-            distanceKm: 0,
-            bio: prof.bio || "",
-            photos,
-            interests: prof.interests || [],
-            intent: prof.intents?.[0] || "",
-          };
-        }
+        otherProfile = {
+          id: prof.id,
+          name: prof.name || "Member",
+          age: prof.age || 0,
+          city: prof.city || "",
+          distanceKm: 0,
+          bio: prof.bio || "",
+          photos,
+          interests: prof.interests || [],
+          intent: prof.intents?.[0] || "",
+        };
+      }
 
       if (otherProfile) {
         // Fetch last message
@@ -225,7 +227,7 @@ export async function sendChatMessage(
       sender: senderId,
       from: "me",
       text,
-      image: imagePath ? (await getSignedUrl("chat", imagePath)) ?? imageUri : imageUri,
+      image: imagePath ? ((await getSignedUrl("chat", imagePath)) ?? imageUri) : imageUri,
       at: Date.now(),
       status: "sent",
     };
@@ -271,10 +273,14 @@ export function subscribeToMatchMessages(
 
         // If the incoming message is from the other user, dispatch to in-app notifications
         if (currentUserId && msg && msg.sender !== currentUserId) {
-          pushNotificationToInbox({
+          pushNotificationToInbox(currentUserId, {
             kind: "message",
             title: "New Message",
-            text: msg.body ? (msg.body.length > 50 ? `${msg.body.slice(0, 50)}...` : msg.body) : "Sent a photo",
+            text: msg.body
+              ? msg.body.length > 50
+                ? `${msg.body.slice(0, 50)}...`
+                : msg.body
+              : "Sent a photo",
             data: {
               matchId,
               senderId: msg.sender,

@@ -2,11 +2,12 @@
 // STATUS: NOT DEPLOYED yet (deployed by the runbook in Part C / docs/DEPLOYMENT_RUNBOOK.md).
 //
 // Completely deletes the CALLING user. The user id is taken only from the verified JWT, never from the request body.
-// Order (every step is idempotent so the client can safely retry after a partial failure):
+// Order (every step is retryable after a partial failure):
 //   1. verify caller JWT
-//   2. delete the user's storage objects (photos/<uid>/*, and chat/<matchId>/* for all user's matches)
-//   3. purge DB rows via purge_user_data(uid) (service_role only RPC)
-//   4. delete the Supabase Auth user (treats "already deleted" as success)
+//   2. suspend the profile to stop further discovery/interactions
+//   3. delete the user's storage objects recursively
+//   4. purge DB rows via purge_user_data(uid) (service_role only RPC)
+//   5. delete the Supabase Auth user (treats "already deleted" as success)
 // The service-role key is read from the function's server-side environment (auto-injected by Supabase).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -15,21 +16,41 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 const json = (status: number, body: Record<string, unknown>) =>
-  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
 
-async function removeFolder(admin: ReturnType<typeof createClient>, bucket: string, folder: string) {
-  // list() is paginated; loop until the folder is completely emptied.
-  let remainingCount = 0;
+async function removeFolder(
+  admin: ReturnType<typeof createClient>,
+  bucket: string,
+  folder: string,
+  depth = 0,
+) {
+  if (depth > 20) throw new Error(`removeFolder nesting limit reached in ${bucket}/${folder}`);
   for (let guard = 0; guard < 50; guard++) {
     const { data, error } = await admin.storage.from(bucket).list(folder, { limit: 100 });
     if (error) throw new Error(`list ${bucket}/${folder}: ${error.message}`);
     if (!data || data.length === 0) return;
-    remainingCount = data.length;
-    const { error: rmErr } = await admin.storage.from(bucket).remove(data.map((f) => `${folder}/${f.name}`));
-    if (rmErr) throw new Error(`remove ${bucket}/${folder}: ${rmErr.message}`);
+
+    const files = data.filter((entry) => entry.id !== null);
+    const directories = data.filter((entry) => entry.id === null);
+    for (const directory of directories) {
+      await removeFolder(admin, bucket, `${folder}/${directory.name}`, depth + 1);
+    }
+    if (files.length > 0) {
+      const { error: rmErr } = await admin.storage
+        .from(bucket)
+        .remove(files.map((file) => `${folder}/${file.name}`));
+      if (rmErr) throw new Error(`remove ${bucket}/${folder}: ${rmErr.message}`);
+    } else if (directories.length === 0) {
+      throw new Error(`removeFolder could not classify entries in ${bucket}/${folder}`);
+    }
   }
-  // If files still remain after the 50 iterations, throw to prevent silent exit
-  const { data: finalCheck } = await admin.storage.from(bucket).list(folder, { limit: 1 });
+  const { data: finalCheck, error: finalError } = await admin.storage
+    .from(bucket)
+    .list(folder, { limit: 1 });
+  if (finalError) throw new Error(`verify ${bucket}/${folder}: ${finalError.message}`);
   if (finalCheck && finalCheck.length > 0) {
     throw new Error(`removeFolder guard limit reached: files still remain in ${bucket}/${folder}`);
   }
@@ -42,25 +63,40 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !anon || !serviceKey) return json(500, { success: false, error: "Server misconfigured" });
+  if (!url || !anon || !serviceKey)
+    return json(500, { success: false, error: "Server misconfigured" });
 
   const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) return json(401, { success: false, error: "Authentication required" });
+  if (!authHeader.startsWith("Bearer "))
+    return json(401, { success: false, error: "Authentication required" });
 
   let body: { confirm?: boolean } = {};
-  try { body = await req.json(); } catch { /* empty body */ }
+  try {
+    body = await req.json();
+  } catch {
+    /* empty body */
+  }
   if (body.confirm !== true) return json(400, { success: false, error: "Confirmation required" });
 
   // 1. identify the caller from their own JWT
-  const userClient = createClient(url, anon, { global: { headers: { Authorization: authHeader } } });
+  const userClient = createClient(url, anon, {
+    global: { headers: { Authorization: authHeader } },
+  });
   const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData.user) return json(401, { success: false, error: "Invalid or expired session" });
+  if (userErr || !userData.user)
+    return json(401, { success: false, error: "Invalid or expired session" });
   const uid = userData.user.id;
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const step = (name: string) => name;
   let current = step("start");
   try {
+    current = step("database:deletion_pending");
+    const { error: pendingErr } = await admin.rpc("begin_account_deletion", { _uid: uid });
+    if (pendingErr) throw new Error(pendingErr.message);
+
     // 2a. profile photos
     current = step("storage:photos");
     await removeFolder(admin, "photos", uid);
@@ -126,7 +162,7 @@ Deno.serve(async (req) => {
     return json(500, {
       success: false,
       retryable: true,
-      error: `Account deletion did not finish (${current}). Please try again; nothing is lost by retrying.`,
+      error: `Account deletion did not finish (${current}). Some cleanup may already have completed; retry to finish deletion.`,
     });
   }
 });

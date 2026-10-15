@@ -24,13 +24,14 @@ import { useMilo } from "../../src/context/MiloContext";
 import { calculateAge } from "../../src/services/profile";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
+import { Alert } from "../../src/utils/alert";
 
 export default function MeScreen() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { profile, signOut } = useAuth();
-  const { subscription, likesRemaining } = useMilo();
+  const { subscription, likesRemaining, dailyLikeLimit } = useMilo();
   const [logoutVisible, setLogoutVisible] = useState(false);
 
   const mainPhotoUri =
@@ -61,7 +62,10 @@ export default function MeScreen() {
     },
     {
       icon: Crown,
-      label: planTier === "free" ? "Upgrade to CHAHAT Premium" : `CHAHAT ${subscription?.tier ? subscription.tier.toUpperCase() : ""}`,
+      label:
+        planTier === "free"
+          ? "Upgrade to CHAHAT Premium"
+          : `CHAHAT ${subscription?.tier ? subscription.tier.toUpperCase() : ""}`,
       onPress: () => router.push("/premium"),
       badge: planTier === "free" ? "From ₹99" : "Active",
     },
@@ -161,7 +165,9 @@ export default function MeScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.planCardTitle}>
-                {planTier === "free" ? "Free Plan · 20 Likes/Day" : `CHAHAT ${subscription?.tier ? subscription.tier.toUpperCase() : ""}`}
+                {planTier === "free"
+                  ? `Free Plan · ${dailyLikeLimit ?? "—"} Likes/Day`
+                  : `CHAHAT ${subscription?.tier ? subscription.tier.toUpperCase() : ""}`}
               </Text>
               <Text style={styles.planCardSubtitle}>
                 {planTier === "free"
@@ -212,8 +218,18 @@ export default function MeScreen() {
         danger
         onConfirm={async () => {
           setLogoutVisible(false);
-          await signOut();
-          router.replace("/(auth)/welcome");
+          try {
+            await signOut();
+            router.replace("/(auth)/welcome");
+          } catch (error) {
+            Alert.alert(
+              "Signed out with a warning",
+              error instanceof Error
+                ? error.message
+                : "Some server cleanup could not be confirmed.",
+            );
+            router.replace("/(auth)/welcome");
+          }
         }}
         onCancel={() => setLogoutVisible(false)}
       />
@@ -221,184 +237,185 @@ export default function MeScreen() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-    gap: 16,
-  },
-  profileHeader: {
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  avatarWrapper: {
-    position: "relative",
-    marginBottom: 12,
-  },
-  avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: Radii.full,
-    borderWidth: 3,
-    borderColor: Colors.primary,
-  },
-  pctBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: Colors.primary,
-    borderRadius: Radii.full,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 2,
-    borderColor: Colors.card,
-  },
-  pctText: {
-    color: Colors.primaryForeground,
-    fontSize: 10,
-    fontWeight: Typography.weights.bold,
-  },
-  profileName: {
-    fontSize: Typography.sizes.xl,
-    fontWeight: Typography.weights.bold,
-    fontFamily: Typography.fontDisplay,
-    color: Colors.foreground,
-  },
-  badgeRow: {
-    marginTop: 6,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  verifiedTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.highlight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radii.full,
-  },
-  verifiedTagText: {
-    color: Colors.highlightForeground,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-  },
-  unverifiedButton: {
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  unverifiedText: {
-    color: Colors.primary,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.medium,
-  },
-  intentTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radii.full,
-    marginTop: 6,
-  },
-  intentTagText: {
-    fontSize: 11,
-    color: Colors.foreground,
-    fontWeight: Typography.weights.medium,
-  },
-  cityText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    marginTop: 6,
-  },
-  planCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radii.xl,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    ...Shadows.card,
-  },
-  planCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  planCardIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.secondary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  planCardTitle: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  planCardSubtitle: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    marginTop: 2,
-  },
-  planUpgradeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: Radii.full,
-  },
-  planUpgradeBtnText: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primaryForeground,
-  },
-  menuCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radii.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    gap: 12,
-  },
-  menuItemLast: {
-    borderBottomWidth: 0,
-  },
-  menuLabel: {
-    flex: 1,
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.foreground,
-  },
-  itemBadge: {
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radii.full,
-  },
-  itemBadgeText: {
-    fontSize: 10,
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    content: {
+      padding: 20,
+      paddingBottom: 40,
+      gap: 16,
+    },
+    profileHeader: {
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    avatarWrapper: {
+      position: "relative",
+      marginBottom: 12,
+    },
+    avatarImage: {
+      width: 100,
+      height: 100,
+      borderRadius: Radii.full,
+      borderWidth: 3,
+      borderColor: Colors.primary,
+    },
+    pctBadge: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      backgroundColor: Colors.primary,
+      borderRadius: Radii.full,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderWidth: 2,
+      borderColor: Colors.card,
+    },
+    pctText: {
+      color: Colors.primaryForeground,
+      fontSize: 10,
+      fontWeight: Typography.weights.bold,
+    },
+    profileName: {
+      fontSize: Typography.sizes.xl,
+      fontWeight: Typography.weights.bold,
+      fontFamily: Typography.fontDisplay,
+      color: Colors.foreground,
+    },
+    badgeRow: {
+      marginTop: 6,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    verifiedTag: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: Colors.highlight,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: Radii.full,
+    },
+    verifiedTagText: {
+      color: Colors.highlightForeground,
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.bold,
+    },
+    unverifiedButton: {
+      backgroundColor: Colors.secondary,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: Radii.full,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    unverifiedText: {
+      color: Colors.primary,
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.medium,
+    },
+    intentTag: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: Colors.secondary,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: Radii.full,
+      marginTop: 6,
+    },
+    intentTagText: {
+      fontSize: 11,
+      color: Colors.foreground,
+      fontWeight: Typography.weights.medium,
+    },
+    cityText: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.mutedForeground,
+      marginTop: 6,
+    },
+    planCard: {
+      backgroundColor: Colors.card,
+      borderRadius: Radii.xl,
+      padding: 16,
+      borderWidth: 1.5,
+      borderColor: Colors.primary,
+      ...Shadows.card,
+    },
+    planCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    planCardIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    planCardTitle: {
+      fontSize: Typography.sizes.base,
+      fontWeight: Typography.weights.bold,
+      color: Colors.foreground,
+    },
+    planCardSubtitle: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.mutedForeground,
+      marginTop: 2,
+    },
+    planUpgradeBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: Colors.primary,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: Radii.full,
+    },
+    planUpgradeBtnText: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.bold,
+      color: Colors.primaryForeground,
+    },
+    menuCard: {
+      backgroundColor: Colors.card,
+      borderRadius: Radii.xl,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      overflow: "hidden",
+    },
+    menuItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+      gap: 12,
+    },
+    menuItemLast: {
+      borderBottomWidth: 0,
+    },
+    menuLabel: {
+      flex: 1,
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.medium,
+      color: Colors.foreground,
+    },
+    itemBadge: {
+      backgroundColor: Colors.secondary,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: Radii.full,
+    },
+    itemBadgeText: {
+      fontSize: 10,
+      color: Colors.primary,
+      fontWeight: Typography.weights.bold,
+    },
+  });

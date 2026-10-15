@@ -1,4 +1,4 @@
-# Milo Deployment Runbook
+# Chahat Deployment Runbook
 
 Target Project: `milo-dev` (Ref: `tuptdzbdowqtmbyhazet`)  
 Working Directory: `<repository-root>`  
@@ -36,10 +36,12 @@ docker rm -f milo-pg
 ```
 
 **Expected Result:**
+
 ```text
 RESULT: ALL DATABASE TESTS PASSED
 ```
-*(Note: Passing on scratch PostgreSQL verifies migration syntax and security logic with stand-ins, but does not prove real-Supabase runtime behaviour.)*
+
+_(Note: Passing on scratch PostgreSQL verifies migration syntax and security logic with stand-ins, but does not prove real-Supabase runtime behaviour.)_
 
 ---
 
@@ -59,10 +61,15 @@ supabase functions serve delete-account --no-verify-jwt
 ```
 
 **Disposable Account Deletion Test (Local):**
+
 1. Create a temporary test account in the local app/Auth UI.
 2. Trigger account deletion via the app UI (Settings > Delete Account > Type `DELETE`).
 3. Interrupt the process or simulate partial failure (e.g., stop the function after storage deletion).
 4. Re-invoke deletion and verify it completes idempotently and removes the Auth user and database rows.
+
+The lifecycle migration marks the authenticated profile suspended before removing media, then purges
+account data and deletes the Auth user last. It retains provider transaction evidence with the Auth
+foreign-key identity removed. The disposable SQL suite must be run after applying all migrations.
 
 ---
 
@@ -71,6 +78,7 @@ supabase functions serve delete-account --no-verify-jwt
 Inspect the live remote database using read-only queries before linking or applying migrations.
 
 ### 3.1 Verify Project Reference in Mobile Configuration
+
 Run this PowerShell command to extract ONLY the host of your configured Supabase URL (never print the secret keys):
 
 ```powershell
@@ -79,11 +87,13 @@ Run this PowerShell command to extract ONLY the host of your configured Supabase
 
 **Expected Result:**
 The output host string **MUST** contain:
+
 ```text
 tuptdzbdowqtmbyhazet.supabase.co
 ```
 
 ### 3.2 Run Pre-deployment Checks in Supabase Dashboard
+
 1. Open the [Supabase Dashboard](https://supabase.com/dashboard/project/tuptdzbdowqtmbyhazet).
 2. Go to the **SQL Editor**.
 3. Paste and run the contents of `supabase/verification/remote_readonly_checks.sql`.
@@ -127,11 +137,31 @@ supabase db push
 # 5.6 Deploy Edge Functions
 # Note: Ensure SUPABASE_SERVICE_ROLE_KEY and GOOGLE_VISION_API_KEY are configured in remote secrets
 supabase functions deploy delete-account
+# This deployment intentionally returns 503 until the authoritative Google Play verifier is configured.
 supabase functions deploy verify-purchase
 supabase functions deploy moderate-photo
 ```
 
+### Android production prerequisites
+
+- Preserve Expo project ID `d40a4e1f-fbf8-4b44-93af-7c4e1fe39b8a`, owner `chahat-org`, scheme `milo`,
+  and Android package `com.milo.dating`. Configure production EAS environment values for
+  `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; never place a service-role key
+  in an `EXPO_PUBLIC_*` variable.
+- The preview profile is deliberately connected to the `milo-dev` Supabase project. Production builds
+  use the EAS `production` environment and must not inherit preview credentials.
+- Google Play billing is disabled in this source: no native billing client, authoritative purchase
+  verification, or localized Play catalog is enabled. Configure the Play Console products and verifier
+  before enabling any purchase flow. Displayed prices are reference prices, not a Play quote.
+- EAS submission references `google-play-service-account.json`; provision that credential through the
+  approved EAS/Play setup and keep the JSON out of Git. The submit profile currently targets the
+  internal track; review the intended track before submission.
+- Add `milo://callback` to Supabase Auth's hosted redirect allowlist and verify the email templates
+  before changing hosted settings. `supabase/config.toml` affects only the local stack unless explicitly
+  pushed; this runbook does not authorize a config push.
+
 **Migration Sequence Applied:**
+
 1. `20260101000000_core_schema.sql`
 2. `20260101000100_storage.sql`
 3. `20260101000200_admin_moderation.sql`
@@ -148,17 +178,20 @@ supabase functions deploy moderate-photo
 14. `20260101001300_critical_security_foundations.sql`
 15. `20260101001400_harden_verification_metadata_guard.sql`
 16. `20260101001500_subscription_orders_and_replay_protection.sql`
+17. `20260101002200_lifecycle_entitlements_release.sql`
 
 ---
 
 ## Step 6: Post-Deployment Verification
 
 ### 6.1 Run Verification Queries
+
 1. Return to the Supabase Dashboard SQL Editor for `tuptdzbdowqtmbyhazet`.
 2. Paste and run the contents of `supabase/verification/post_deploy_checks.sql`.
 3. Verify that all 11 checks return `true` / `all valid` / `none`.
 
 ### 6.2 Disposable Account Verification on Live System
+
 1. Sign up a temporary disposable account through the mobile app.
 2. Complete onboarding, upload a test profile photo, and send a message.
 3. Delete the test account via Settings > Delete Account (confirm with `DELETE`).
