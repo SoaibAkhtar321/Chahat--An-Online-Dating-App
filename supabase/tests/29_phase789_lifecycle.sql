@@ -109,8 +109,8 @@ INSERT INTO public.subscription_orders (
   now() + interval '1 month'
 );
 SELECT public.purge_user_data('00000000-0000-0000-0000-0000000000c1'::uuid);
-DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-0000000000c1';
 RESET ROLE;
+DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-0000000000c1';
 
 INSERT INTO public.t_results
 SELECT 'purge removes profile', count(*) = 0, count(*)::text
