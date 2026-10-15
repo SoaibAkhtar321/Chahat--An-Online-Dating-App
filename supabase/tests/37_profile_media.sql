@@ -112,7 +112,7 @@ CALL public.expect_fail(
 RESET ROLE;
 
 SET ROLE service_role;
-CALL public.clear_profile_photos_for_deletion('00000000-0000-0000-0000-0000000000e1'::uuid);
+SELECT public.clear_profile_photos_for_deletion('00000000-0000-0000-0000-0000000000e1'::uuid);
 INSERT INTO public.t_results
 SELECT 'account deletion clears profile media references first',
   NOT onboarded AND photos = '[]'::jsonb,
