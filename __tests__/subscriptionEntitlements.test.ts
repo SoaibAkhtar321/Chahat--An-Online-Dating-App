@@ -4,6 +4,15 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
   removeItem: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock(
+  "expo-crypto",
+  () => ({
+    CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+    digestStringAsync: jest.fn(),
+  }),
+  { virtual: true },
+);
+
 jest.mock("../mobile/src/services/supabase", () => ({
   isSupabaseConfigured: jest.fn().mockReturnValue(false),
   supabase: {
@@ -185,9 +194,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
 
   describe("4. Undo-Pass (Rewind) Authorization", () => {
     // Simulates RPC undo_swipe_pass authorization check
-    const authorizeUndoPass = (
-      activeTier: PlanTier,
-    ): { authorized: boolean; error?: string } => {
+    const authorizeUndoPass = (activeTier: PlanTier): { authorized: boolean; error?: string } => {
       if (activeTier === "premium" || activeTier === "plus" || activeTier === "vip") {
         return { authorized: true };
       }
@@ -307,10 +314,7 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
 
     test("defense-in-depth: paid member cannot read received likes from a blocked user", () => {
       // Simulates the hardened RLS policy on public.swipes
-      const canReadReceivedLike = (
-        viewerTier: PlanTier,
-        isBlocked: boolean,
-      ): boolean => {
+      const canReadReceivedLike = (viewerTier: PlanTier, isBlocked: boolean): boolean => {
         const isPaid = viewerTier === "premium" || viewerTier === "plus" || viewerTier === "vip";
         return isPaid && !isBlocked;
       };
@@ -322,10 +326,20 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
       expect(canReadReceivedLike("free", false)).toBe(false);
     });
 
-    test("restorePurchases fails safely when backend is unconfigured", async () => {
+    test("restorePurchases fails safely when billing is unavailable in this build", async () => {
       const res = await restorePurchases();
       expect(res.success).toBe(false);
-      expect(res.error).toContain("Backend connection is not configured");
+      expect(res.error).toContain("unavailable in this build");
+    });
+
+    test("purchase verification fails safely when the backend is unconfigured", async () => {
+      const res = await verifyAndCreditPurchase({
+        store: "google_play",
+        productId: "chahat_premium_1m",
+        purchaseToken: "valid-google-purchase-token",
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toBe("Backend connection is not configured.");
     });
 
     test("verifyAndCreditPurchase rejects malformed or short purchase tokens", async () => {

@@ -3,6 +3,11 @@
 // Subscriptions are strictly verified against the backend and cannot be granted client-side.
 
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { Platform } from "react-native";
+import * as Crypto from "expo-crypto";
+import type { Purchase, PurchaseError, Subscription } from "react-native-iap";
+
+export const BILLING_ENABLED = process.env.EXPO_PUBLIC_FEATURE_BILLING === "true";
 
 export type PlanTier = "free" | "premium" | "plus" | "vip";
 
@@ -221,6 +226,136 @@ export const PLAY_PRODUCT_IDS = {
   vip: { "1m": "chahat_vip_1m" },
 } as const;
 
+export interface PlayBillingProduct {
+  productId: string;
+  localizedPrice: string | null;
+  currencyCode: string | null;
+  offerToken: string | null;
+}
+
+export type BillingEvent =
+  | { status: "completed"; tier: PlanTier; warning?: string }
+  | { status: "pending"; message: string }
+  | { status: "cancelled" }
+  | { status: "failed"; error: string };
+
+const ALL_PRODUCT_IDS = [
+  ...Object.values(PLAY_PRODUCT_IDS.premium),
+  ...Object.values(PLAY_PRODUCT_IDS.plus),
+  ...Object.values(PLAY_PRODUCT_IDS.vip),
+];
+let purchaseInProgress = false;
+const purchasesBeingVerified = new Set<string>();
+
+function isPurchased(purchase: Purchase): boolean {
+  return purchase.purchaseStateAndroid === 1;
+}
+
+export async function loadPlayBillingCatalog(): Promise<PlayBillingProduct[]> {
+  if (!BILLING_ENABLED || Platform.OS !== "android") return [];
+  const iap = await import("react-native-iap");
+  await iap.initConnection();
+  const subscriptions = await iap.getSubscriptions({ skus: ALL_PRODUCT_IDS });
+  return subscriptions.map((subscription: Subscription) => {
+    if (subscription.platform !== "android") {
+      return {
+        productId: subscription.productId,
+        localizedPrice: null,
+        currencyCode: null,
+        offerToken: null,
+      };
+    }
+    const offer =
+      subscription.subscriptionOfferDetails.find((item) => item.offerId === null) ??
+      subscription.subscriptionOfferDetails[0];
+    const phase =
+      offer?.pricingPhases.pricingPhaseList.find((item) => item.recurrenceMode === 1) ??
+      offer?.pricingPhases.pricingPhaseList[0];
+    return {
+      productId: subscription.productId,
+      localizedPrice: phase?.formattedPrice ?? null,
+      currencyCode: phase?.priceCurrencyCode ?? null,
+      offerToken: offer?.offerToken ?? null,
+    };
+  });
+}
+
+export async function listenForPurchaseUpdates(
+  onEvent: (event: BillingEvent) => void,
+): Promise<() => void> {
+  if (!BILLING_ENABLED || Platform.OS !== "android") return () => {};
+  const iap = await import("react-native-iap");
+  await iap.initConnection();
+  const updated = iap.purchaseUpdatedListener((purchase: Purchase) => {
+    void handlePurchaseUpdate(purchase, iap, onEvent);
+  });
+  const failed = iap.purchaseErrorListener((error: PurchaseError) => {
+    purchaseInProgress = false;
+    if (error.code === "E_USER_CANCELLED") {
+      onEvent({ status: "cancelled" });
+    } else {
+      onEvent({ status: "failed", error: error.message || "Google Play purchase failed." });
+    }
+  });
+  return () => {
+    updated.remove();
+    failed.remove();
+  };
+}
+
+async function handlePurchaseUpdate(
+  purchase: Purchase,
+  iap: typeof import("react-native-iap"),
+  onEvent: (event: BillingEvent) => void,
+): Promise<void> {
+  if (purchase.purchaseStateAndroid === 2) {
+    purchaseInProgress = false;
+    onEvent({ status: "pending", message: "Google Play payment is pending. No subscription has been granted." });
+    return;
+  }
+  if (!isPurchased(purchase)) {
+    purchaseInProgress = false;
+    onEvent({ status: "failed", error: "Google Play has not marked this purchase as completed." });
+    return;
+  }
+  const token = purchase.purchaseToken;
+  if (!token || !purchase.productId) {
+    purchaseInProgress = false;
+    onEvent({ status: "failed", error: "Google Play purchase data is incomplete." });
+    return;
+  }
+  if (purchasesBeingVerified.has(token)) return;
+  purchasesBeingVerified.add(token);
+  try {
+    const result = await verifyAndCreditPurchase({
+      store: "google_play",
+      productId: purchase.productId,
+      purchaseToken: token,
+      orderId: purchase.transactionId,
+    });
+    if (!result.success || !result.tier || result.tier === "free") {
+      onEvent({ status: "failed", error: result.error ?? "Purchase verification failed." });
+      return;
+    }
+    let warning: string | undefined;
+    try {
+      await iap.finishTransaction({ purchase, isConsumable: false });
+    } catch {
+      warning = "Subscription verified; Google Play transaction acknowledgement will be retried.";
+    }
+    purchaseInProgress = false;
+    onEvent({ status: "completed", tier: result.tier, warning });
+  } catch (error) {
+    onEvent({
+      status: "failed",
+      error: error instanceof Error ? error.message : "Could not verify the Google Play purchase.",
+    });
+  } finally {
+    purchaseInProgress = false;
+    purchasesBeingVerified.delete(token);
+  }
+}
+
 export interface PurchaseResult {
   success: boolean;
   status: "completed" | "pending" | "cancelled" | "failed";
@@ -241,6 +376,19 @@ export async function purchaseSubscription(
   }
 
   try {
+    if (!BILLING_ENABLED) {
+      return {
+        success: false,
+        status: "failed",
+        error: "Google Play Billing is disabled in this build. You have not been charged.",
+      };
+    }
+    if (Platform.OS !== "android") {
+      return { success: false, status: "failed", error: "Google Play Billing is available on Android only." };
+    }
+    if (purchaseInProgress) {
+      return { success: false, status: "pending", error: "A Google Play purchase is already being processed." };
+    }
     if (!isSupabaseConfigured()) {
       return {
         success: false,
@@ -249,9 +397,8 @@ export async function purchaseSubscription(
       };
     }
 
-    // Call server purchase initiation RPC if configured
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes.user) {
+    const { data: userRes, error: authError } = await supabase.auth.getUser();
+    if (authError || !userRes.user) {
       return {
         success: false,
         status: "failed",
@@ -259,15 +406,40 @@ export async function purchaseSubscription(
       };
     }
 
-    // Real Google Play Billing is NOT integrated yet (no native billing library, no
-    // purchase-token verification backend). Never imply a payment is in progress.
-    void durationId;
-    return {
-      success: false,
-      status: "failed",
-      error: "Subscriptions are not available in this build yet. You have not been charged.",
-    };
+    const productId =
+      tier === "premium"
+        ? PLAY_PRODUCT_IDS.premium[durationId as keyof typeof PLAY_PRODUCT_IDS.premium]
+        : tier === "plus"
+          ? PLAY_PRODUCT_IDS.plus[durationId as keyof typeof PLAY_PRODUCT_IDS.plus]
+          : PLAY_PRODUCT_IDS.vip[durationId as keyof typeof PLAY_PRODUCT_IDS.vip];
+    if (!productId) {
+      return { success: false, status: "failed", error: "This subscription duration is not supported." };
+    }
+
+    const products = await loadPlayBillingCatalog();
+    const product = products.find((item) => item.productId === productId);
+    if (!product?.offerToken) {
+      return {
+        success: false,
+        status: "failed",
+        error: "This product is not available in Google Play. No purchase was started.",
+      };
+    }
+
+    const obfuscatedAccountIdAndroid = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      userRes.user.id,
+    );
+    const iap = await import("react-native-iap");
+    purchaseInProgress = true;
+    await iap.requestSubscription({
+      sku: productId,
+      subscriptionOffers: [{ sku: productId, offerToken: product.offerToken }],
+      obfuscatedAccountIdAndroid,
+    });
+    return { success: false, status: "pending", error: "Waiting for Google Play to complete the purchase." };
   } catch (err: any) {
+    purchaseInProgress = false;
     return {
       success: false,
       status: "failed",
@@ -281,9 +453,10 @@ export interface VerifyPurchasePayload {
   orderId?: string;
   productId: string;
   purchaseToken: string;
-  tier: PlanTier;
+  tier?: PlanTier;
   amountInr?: number;
-  durationMonths: number;
+  durationMonths?: number;
+  accountBinding?: string;
 }
 
 /**
@@ -293,6 +466,9 @@ export interface VerifyPurchasePayload {
 export async function verifyAndCreditPurchase(
   payload: VerifyPurchasePayload,
 ): Promise<PurchaseResult> {
+  if (payload.store !== "google_play") {
+    return { success: false, status: "failed", error: "Only Google Play purchases are supported." };
+  }
   if (!isSupabaseConfigured()) {
     return {
       success: false,
@@ -321,21 +497,35 @@ export async function verifyAndCreditPurchase(
 
     // Server-side verification Edge Function / RPC invocation
     const { data, error } = await supabase.functions.invoke("verify-purchase", {
-      body: payload,
+      body: {
+        store: "google_play",
+        productId: payload.productId,
+        purchaseToken: payload.purchaseToken.trim(),
+        orderId: payload.orderId,
+      },
     });
 
     if (error || !data?.success) {
       return {
         success: false,
-        status: "failed",
+        status: data?.status === "pending" ? "pending" : "failed",
         error: data?.error || error?.message || "Purchase token verification failed.",
+      };
+    }
+
+    const verifiedTier = data.tier;
+    if (!["premium", "plus", "vip"].includes(verifiedTier)) {
+      return {
+        success: false,
+        status: "failed",
+        error: "The server did not confirm a valid paid subscription.",
       };
     }
 
     return {
       success: true,
       status: "completed",
-      tier: payload.tier,
+      tier: verifiedTier as PlanTier,
     };
   } catch (err: any) {
     return {
@@ -356,6 +546,9 @@ export interface RestorePurchasesResult {
  * Queries server-side subscription state to restore entitlements.
  */
 export async function restorePurchases(): Promise<RestorePurchasesResult> {
+  if (!BILLING_ENABLED || Platform.OS !== "android") {
+    return { success: false, error: "Google Play purchase restoration is unavailable in this build." };
+  }
   if (!isSupabaseConfigured()) {
     return {
       success: false,
@@ -364,6 +557,25 @@ export async function restorePurchases(): Promise<RestorePurchasesResult> {
   }
 
   try {
+    const iap = await import("react-native-iap");
+    await iap.initConnection();
+    const purchases = await iap.getAvailablePurchases();
+    for (const purchase of purchases) {
+      if (!isPurchased(purchase) || !purchase.purchaseToken || !purchase.productId) continue;
+      const result = await verifyAndCreditPurchase({
+        store: "google_play",
+        productId: purchase.productId,
+        purchaseToken: purchase.purchaseToken,
+        orderId: purchase.transactionId,
+      });
+      if (result.success) {
+        try {
+          await iap.finishTransaction({ purchase, isConsumable: false });
+        } catch {
+          // The server already persisted the entitlement; the next restore safely retries.
+        }
+      }
+    }
     const sub = await getUserSubscription();
     if (sub.tier !== "free") {
       return {
@@ -382,4 +594,3 @@ export async function restorePurchases(): Promise<RestorePurchasesResult> {
     };
   }
 }
-

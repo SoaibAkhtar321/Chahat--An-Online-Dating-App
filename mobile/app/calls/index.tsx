@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -7,12 +7,51 @@ import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { useMilo } from "../../src/context/MiloContext";
+import { useAuth } from "../../src/context/AuthContext";
+import { Alert } from "../../src/utils/alert";
+import { getMyVideoCalls, transitionVideoCall, type VideoCall } from "../../src/services/calls";
 
 export default function CallsScreen() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { matches } = useMilo();
+  const { user } = useAuth();
+  const [calls, setCalls] = useState<VideoCall[]>([]);
+
+  const refreshCalls = async () => {
+    try {
+      setCalls(await getMyVideoCalls());
+    } catch (error) {
+      Alert.alert("Calls unavailable", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  useEffect(() => {
+    void refreshCalls();
+  }, []);
+
+  const handleCallAction = async (call: VideoCall, action: "accept" | "decline" | "cancel") => {
+    try {
+      const status = await transitionVideoCall(call.id, action);
+      await refreshCalls();
+      if (action === "accept" && status === "accepted") {
+        router.push({
+          pathname: "/call/[id]",
+          params: { id: call.match_id, callId: call.id, type: call.call_type },
+        });
+      }
+    } catch (error) {
+      Alert.alert("Call update failed", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const incomingCalls = calls.filter(
+    (call) => call.status === "pending" && call.recipient_id === user?.id,
+  );
+  const outgoingCalls = calls.filter(
+    (call) => call.status === "pending" && call.caller_id === user?.id,
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -63,6 +102,53 @@ export default function CallsScreen() {
               <Text style={styles.featureDesc}>Calls can only be initiated with members you have actively matched with.</Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.callRequestHeader}>
+            <Text style={styles.cardTitle}>Call requests</Text>
+            <TouchableOpacity onPress={() => void refreshCalls()} activeOpacity={0.7}>
+              <Text style={styles.refreshText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+          {incomingCalls.map((call) => (
+            <View key={call.id} style={styles.matchRow}>
+              <View style={styles.matchInfo}>
+                <Text style={styles.matchName}>
+                  Incoming {call.call_type} request
+                </Text>
+                <Text style={styles.matchCity}>Invitation expires soon</Text>
+              </View>
+              <View style={styles.callActions}>
+                <TouchableOpacity style={styles.requestButton} onPress={() => void handleCallAction(call, "decline")}>
+                  <Text style={styles.requestButtonText}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.requestButton, styles.acceptButton]}
+                  onPress={() => void handleCallAction(call, "accept")}
+                >
+                  <Text style={[styles.requestButtonText, styles.acceptText]}>Accept</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+          {outgoingCalls.map((call) => (
+            <View key={call.id} style={styles.matchRow}>
+              <View style={styles.matchInfo}>
+                <Text style={styles.matchName}>Waiting for response</Text>
+                <Text style={styles.matchCity}>{call.call_type} request sent</Text>
+              </View>
+              <TouchableOpacity style={styles.requestButton} onPress={() => void handleCallAction(call, "cancel")}>
+                <Text style={styles.requestButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          {incomingCalls.length === 0 && outgoingCalls.length === 0 && (
+            <Text style={styles.emptyText}>No pending requests.</Text>
+          )}
+          <Text style={styles.providerNotice}>
+            A call request is not a live media call. Audio/video provider setup is still required.
+          </Text>
         </View>
 
         {/* Call Logs & Matched Contacts */}
@@ -181,6 +267,41 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   matchList: {
     gap: 12,
+  },
+  callRequestHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  refreshText: {
+    color: Colors.primary,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+  },
+  requestButton: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.full,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  requestButtonText: {
+    color: Colors.foreground,
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+  },
+  acceptButton: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  acceptText: {
+    color: Colors.primaryForeground,
+  },
+  providerNotice: {
+    marginTop: 10,
+    fontSize: Typography.sizes.xs,
+    color: Colors.mutedForeground,
+    lineHeight: 16,
   },
   matchRow: {
     flexDirection: "row",

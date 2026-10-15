@@ -46,6 +46,12 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Chahat uses your location only when you choose nearby discovery."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Chahat needs access to your photos so you can add pictures to your friendship profile."

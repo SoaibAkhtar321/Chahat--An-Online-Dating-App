@@ -23,10 +23,15 @@ import { Alert } from "../../src/utils/alert";
 import {
   PLANS,
   PREMIUM_BILLING_DURATIONS,
+  PLAY_PRODUCT_IDS,
+  BILLING_ENABLED,
   getUserSubscription,
+  listenForPurchaseUpdates,
+  loadPlayBillingCatalog,
   purchaseSubscription,
   restorePurchases,
   type PlanTier,
+  type PlayBillingProduct,
   type UserSubscription,
 } from "../../src/services/subscription";
 
@@ -37,15 +42,62 @@ export default function PremiumScreen() {
   const [currentSub, setCurrentSub] = useState<UserSubscription | null>(null);
   const [processing, setProcessing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [billingProducts, setBillingProducts] = useState<PlayBillingProduct[]>([]);
 
   useEffect(() => {
-    getUserSubscription().then((sub) => {
+    let active = true;
+    let removePurchaseListeners: (() => void) | undefined;
+    void getUserSubscription().then((sub) => {
+      if (!active) return;
       setCurrentSub(sub);
-      if (sub.tier !== "free") {
-        setSelectedTier(sub.tier);
-      }
+      if (sub.tier !== "free") setSelectedTier(sub.tier);
     });
+    if (BILLING_ENABLED) {
+      void loadPlayBillingCatalog()
+        .then((products) => {
+          if (active) setBillingProducts(products);
+        })
+        .catch((error) => console.warn("Google Play product catalog unavailable:", error));
+      void listenForPurchaseUpdates((event) => {
+        if (!active) return;
+        setProcessing(false);
+        if (event.status === "completed") {
+          void getUserSubscription().then(setCurrentSub);
+          Alert.alert(
+            "Subscription verified",
+            event.warning
+              ? `${PLANS[event.tier].name} is active. ${event.warning}`
+              : `${PLANS[event.tier].name} is active.`,
+          );
+        } else if (event.status === "pending") {
+          Alert.alert("Payment pending", event.message);
+        } else if (event.status === "failed") {
+          Alert.alert("Purchase not verified", event.error);
+        }
+      })
+        .then((remove) => {
+          if (active) removePurchaseListeners = remove;
+          else remove();
+        })
+        .catch((error) => console.warn("Google Play purchase listener unavailable:", error));
+    }
+    return () => {
+      active = false;
+      removePurchaseListeners?.();
+    };
   }, []);
+
+  const productPrice = (productId: string) =>
+    billingProducts.find((product) => product.productId === productId)?.localizedPrice ??
+    (BILLING_ENABLED ? "Price unavailable" : "Google Play price");
+  const tierProductId =
+    selectedTier === "premium"
+      ? PLAY_PRODUCT_IDS.premium["1m"]
+      : selectedTier === "plus"
+        ? PLAY_PRODUCT_IDS.plus["1m"]
+        : selectedTier === "vip"
+          ? PLAY_PRODUCT_IDS.vip["1m"]
+          : null;
 
   const activeDurationObj =
     PREMIUM_BILLING_DURATIONS.find((d) => d.id === selectedDuration) ||
@@ -69,6 +121,10 @@ export default function PremiumScreen() {
       const updated = await getUserSubscription();
       setCurrentSub(updated);
     } else {
+      if (result.status === "pending") {
+        Alert.alert("Google Play purchase", result.error || "Waiting for Google Play.");
+        return;
+      }
       Alert.alert(
         "Google Play Billing",
         result.error ||
@@ -96,6 +152,13 @@ export default function PremiumScreen() {
       <Header title="CHAHAT Premium" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {!BILLING_ENABLED && (
+          <View style={[styles.singleMonthNoteBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.singleMonthNoteText, { color: colors.mutedForeground }]}>
+              Google Play checkout is disabled in this build. Displayed reference pricing is not a live price or charge.
+            </Text>
+          </View>
+        )}
         {/* Hero Branding */}
         <View style={[styles.heroBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.crownCircle, { backgroundColor: colors.secondary }]}>
@@ -174,6 +237,7 @@ export default function PremiumScreen() {
             <View style={styles.durationGrid}>
               {PREMIUM_BILLING_DURATIONS.map((dur) => {
                 const isSelected = selectedDuration === dur.id;
+                const productId = PLAY_PRODUCT_IDS.premium[dur.id];
                 return (
                   <TouchableOpacity
                     key={dur.id}
@@ -204,7 +268,7 @@ export default function PremiumScreen() {
                         { color: isSelected ? colors.primary : colors.foreground },
                       ]}
                     >
-                      ₹{dur.totalPrice}
+                      {productPrice(productId)}
                     </Text>
                     {dur.savings && (
                       <Text style={[styles.durationSavings, { color: colors.success }]}>
@@ -270,7 +334,7 @@ export default function PremiumScreen() {
 
                   <View style={styles.planPriceCol}>
                     <Text style={[styles.planPrice, { color: colors.foreground }]}>
-                      {plan.monthlyPrice === 0 ? "Free" : `₹${plan.monthlyPrice}`}
+                      {plan.monthlyPrice === 0 ? "Free" : productPrice(tierProductId ?? "")}
                     </Text>
                     {plan.monthlyPrice > 0 && (
                       <Text style={[styles.planPeriod, { color: colors.mutedForeground }]}>/month</Text>
@@ -333,14 +397,11 @@ export default function PremiumScreen() {
               {selectedTier === "premium" ? ` · ${activeDurationObj.label}` : ""}
             </Text>
             <Text style={[styles.ctaTotalAmount, { color: colors.primary }]}>
-              ₹
               {selectedTier === "free"
-                ? 0
+                ? "₹0"
                 : selectedTier === "premium"
-                  ? activeDurationObj.totalPrice
-                  : selectedTier === "plus"
-                    ? 199
-                    : 399}
+                  ? productPrice(PLAY_PRODUCT_IDS.premium[selectedDuration])
+                  : productPrice(tierProductId ?? "")}
             </Text>
           </View>
 
@@ -353,6 +414,7 @@ export default function PremiumScreen() {
                   : `Upgrade to ${PLANS[selectedTier].name}`
             }
             loading={processing}
+            disabled={selectedTier !== "free" && !BILLING_ENABLED}
             onPress={handleSelectOrPurchase}
           />
 

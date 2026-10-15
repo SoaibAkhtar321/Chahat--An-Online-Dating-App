@@ -87,7 +87,7 @@ describe("Phase B: Critical Security Foundations", () => {
         allMigrations.indexOf("20260101001300_critical_security_foundations.sql"),
       );
       expect(allMigrations[allMigrations.length - 1]).toBe(
-        "20260101001500_subscription_orders_and_replay_protection.sql",
+        "20260101002100_google_play_verification_hardening.sql",
       );
     });
 

@@ -1,8 +1,13 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import type { Profile, MatchItem, Filters, SwipeResponse } from "../types";
 import { DEFAULT_FILTERS } from "../types";
 import { useAuth } from "./AuthContext";
-import { fetchDiscoveryDeck, submitSwipe, undoLastPass } from "../services/discovery";
+import {
+  fetchDiscoveryPage,
+  submitSwipe,
+  undoLastPass,
+  type DiscoveryCursor,
+} from "../services/discovery";
 import { fetchUserMatches } from "../services/chat";
 import { getUserSubscription, type UserSubscription } from "../services/subscription";
 
@@ -24,6 +29,7 @@ interface MiloContextType {
   triggerBoost: () => void;
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
   refreshDeck: () => Promise<void>;
+  loadMoreDeck: () => Promise<void>;
   refreshMatches: () => Promise<void>;
 }
 
@@ -45,11 +51,12 @@ const MiloContext = createContext<MiloContextType>({
   triggerBoost: () => {},
   setFilters: () => {},
   refreshDeck: async () => {},
+  loadMoreDeck: async () => {},
   refreshMatches: async () => {},
 });
 
 export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, profile, isLoggedIn } = useAuth();
+  const { user, isLoggedIn } = useAuth();
   const [deck, setDeck] = useState<Profile[]>([]);
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [likesRemaining, setLikesRemaining] = useState<number>(20);
@@ -57,6 +64,8 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [lastPassedProfile, setLastPassedProfile] = useState<Profile | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [loadingDeck, setLoadingDeck] = useState<boolean>(false);
+  const [nextCursor, setNextCursor] = useState<DiscoveryCursor | null>(null);
+  const loadingMoreRef = useRef(false);
   const [isBoosting, setIsBoosting] = useState<boolean>(false);
   const [boostUntil, setBoostUntil] = useState<number>(0);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
@@ -70,12 +79,28 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
     setLoadingDeck(true);
     try {
-      const list = await fetchDiscoveryDeck(user.id, profile?.city || "", profile?.seeking || "", filters);
-      setDeck(list);
+      const page = await fetchDiscoveryPage(filters);
+      setDeck(page.profiles);
+      setNextCursor(page.nextCursor);
     } finally {
       setLoadingDeck(false);
     }
-  }, [user, profile?.city, profile?.seeking, filters]);
+  }, [user, filters]);
+
+  const loadMoreDeck = useCallback(async () => {
+    if (!user || !nextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    try {
+      const page = await fetchDiscoveryPage(filters, nextCursor);
+      setDeck((current) => {
+        const existing = new Set(current.map((item) => item.id));
+        return [...current, ...page.profiles.filter((item) => !existing.has(item.id))];
+      });
+      setNextCursor(page.nextCursor);
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [user, nextCursor, filters]);
 
   const refreshMatches = useCallback(async () => {
     if (!user) return;
@@ -112,6 +137,7 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const res = await submitSwipe(target.id, direction);
+    if (remainingDeck.length < 5) void loadMoreDeck();
     if (res.likesRemaining !== undefined) {
       setLikesRemaining(res.likesRemaining);
     }
@@ -165,6 +191,7 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         triggerBoost,
         setFilters,
         refreshDeck,
+        loadMoreDeck,
         refreshMatches,
       }}
     >
