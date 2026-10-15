@@ -13,13 +13,17 @@ jest.mock("../mobile/src/services/supabase", () => ({
     from: jest.fn((table: string) => {
       if (table === "account_state") {
         return {
-          select: () => ({ eq: () => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) }) }),
+          select: () => ({
+            eq: () => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) }),
+          }),
           upsert: mockUpsert,
         };
       }
       if (table === "profiles") {
         return {
-          select: () => ({ eq: () => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) }) }),
+          select: () => ({
+            eq: () => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) }),
+          }),
           update: () => ({
             eq: () => ({
               select: () => Promise.resolve({ data: [{ id: "test-user-id" }], error: null }),
@@ -80,15 +84,13 @@ describe("Phase B: Critical Security Foundations", () => {
         .filter((f) => f.endsWith(".sql"))
         .sort();
       expect(allMigrations.includes("20260101001300_critical_security_foundations.sql")).toBe(true);
-      expect(allMigrations.indexOf("20260101001300_critical_security_foundations.sql")).toBeGreaterThan(
-        allMigrations.indexOf("20260101001200_daily_like_limit_20.sql"),
-      );
-      expect(allMigrations.indexOf("20260101001400_harden_verification_metadata_guard.sql")).toBeGreaterThan(
+      expect(
         allMigrations.indexOf("20260101001300_critical_security_foundations.sql"),
-      );
-      expect(allMigrations[allMigrations.length - 1]).toBe(
-        "20260101001700_profile_completion_and_media_guard.sql",
-      );
+      ).toBeGreaterThan(allMigrations.indexOf("20260101001200_daily_like_limit_20.sql"));
+      expect(
+        allMigrations.indexOf("20260101001400_harden_verification_metadata_guard.sql"),
+      ).toBeGreaterThan(allMigrations.indexOf("20260101001300_critical_security_foundations.sql"));
+      expect(allMigrations[allMigrations.length - 1]).toBe("20260101001800_push_notifications.sql");
     });
 
     test("is_match_member enforces NOT public.is_blocked_pair", () => {
@@ -112,7 +114,9 @@ describe("Phase B: Critical Security Foundations", () => {
     test("on_block_cleanup trigger on public.blocks cascades matches and swipes", () => {
       const sql = read(migPath);
       expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.on_block_cleanup/);
-      expect(sql).toMatch(/DELETE FROM public\.matches\s+WHERE user_a = least\(NEW\.blocker,\s*NEW\.blocked\)/);
+      expect(sql).toMatch(
+        /DELETE FROM public\.matches\s+WHERE user_a = least\(NEW\.blocker,\s*NEW\.blocked\)/,
+      );
       expect(sql).toMatch(/DELETE FROM public\.swipes/);
       expect(sql).toMatch(/CREATE TRIGGER on_block_cleanup\s+AFTER INSERT ON public\.blocks/);
     });
@@ -128,7 +132,9 @@ describe("Phase B: Critical Security Foundations", () => {
       const sql = read(migPath);
       expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.account_state_guard/);
       expect(sql).toMatch(/Verification status cannot be self-approved/);
-      expect(sql).toMatch(/CREATE TRIGGER account_state_guard\s+BEFORE INSERT OR UPDATE ON public\.account_state/);
+      expect(sql).toMatch(
+        /CREATE TRIGGER account_state_guard\s+BEFORE INSERT OR UPDATE ON public\.account_state/,
+      );
     });
 
     test("purge_user_data explicitly cleans up photo_reviews", () => {
@@ -138,7 +144,9 @@ describe("Phase B: Critical Security Foundations", () => {
 
     test("all SECURITY DEFINER functions have pg_temp in search_path", () => {
       const sql = read(migPath);
-      const funcMatches = sql.match(/CREATE OR REPLACE FUNCTION [^(]+\([^)]*\)[\s\S]*?SET search_path = ([^;]+);/g);
+      const funcMatches = sql.match(
+        /CREATE OR REPLACE FUNCTION [^(]+\([^)]*\)[\s\S]*?SET search_path = ([^;]+);/g,
+      );
       expect(funcMatches).not.toBeNull();
       for (const m of funcMatches || []) {
         expect(m).toMatch(/search_path\s*=\s*public,\s*pg_temp/);
@@ -149,16 +157,22 @@ describe("Phase B: Critical Security Foundations", () => {
       const mig14Path = "supabase/migrations/20260101001400_harden_verification_metadata_guard.sql";
       expect(fs.existsSync(path.join(root, mig14Path))).toBe(true);
       const sql = read(mig14Path);
-      expect(sql).toMatch(/Unauthorized verification metadata tampering: only status is client-modifiable/);
+      expect(sql).toMatch(
+        /Unauthorized verification metadata tampering: only status is client-modifiable/,
+      );
       expect(sql).toMatch(/Invalid verification status: client may only set pending or none/);
-      expect(sql).toMatch(/NEW\.data := jsonb_set\(NEW\.data,\s*'\{verification\}',\s*_old_verif\);/);
+      expect(sql).toMatch(
+        /NEW\.data := jsonb_set\(NEW\.data,\s*'\{verification\}',\s*_old_verif\);/,
+      );
       expect(sql).toMatch(/SET search_path = public,\s*pg_temp/);
     });
 
     test("supabase/tests/run.sh includes 28_security_foundations.sql before 90_assert.sql", () => {
       const runSh = read("supabase/tests/run.sh");
       expect(runSh).toMatch(/28_security_foundations\.sql/);
-      expect(fs.existsSync(path.join(root, "supabase/tests/28_security_foundations.sql"))).toBe(true);
+      expect(fs.existsSync(path.join(root, "supabase/tests/28_security_foundations.sql"))).toBe(
+        true,
+      );
       const sqlTest = read("supabase/tests/28_security_foundations.sql");
       expect(sqlTest).toMatch(/on_block_cleanup/);
       expect(sqlTest).toMatch(/account_state_guard/);

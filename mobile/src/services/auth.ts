@@ -35,7 +35,8 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
       if (/rate.*limit|too many requests|over_email_send_rate_limit/i.test(error.message)) {
         return {
           success: false,
-          error: "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
+          error:
+            "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
         };
       }
       return { success: false, error: error.message };
@@ -50,7 +51,8 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
     if (/rate.*limit|too many requests/i.test(err?.message || "")) {
       return {
         success: false,
-        error: "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
+        error:
+          "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
       };
     }
     return { success: false, error: err.message || "Failed to sign up" };
@@ -68,6 +70,20 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 
   try {
     const cleanEmail = email.trim().toLowerCase();
+    const { data: currentSession, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const currentUser = currentSession.session?.user;
+    if (currentUser && currentUser.email?.trim().toLowerCase() !== cleanEmail) {
+      try {
+        const { unregisterPushNotificationToken } = await import("./notifications");
+        await unregisterPushNotificationToken(currentUser.id);
+      } catch (unregisterError) {
+        console.warn(
+          "Could not unregister prior account push token before account switch:",
+          unregisterError,
+        );
+      }
+    }
     const { data, error } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password,
@@ -108,6 +124,15 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 export async function signOutUser(): Promise<void> {
   try {
     if (isSupabaseConfigured()) {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        try {
+          const { unregisterPushNotificationToken } = await import("./notifications");
+          await unregisterPushNotificationToken(data.user.id);
+        } catch (err) {
+          console.warn("Could not unregister push token before sign out:", err);
+        }
+      }
       await supabase.auth.signOut();
     }
   } catch (err) {
