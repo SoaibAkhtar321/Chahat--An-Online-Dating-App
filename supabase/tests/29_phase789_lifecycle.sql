@@ -5,11 +5,24 @@ INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-0000000000c1', 'phase789-1@example.test'),
   ('00000000-0000-0000-0000-0000000000c2', 'phase789-2@example.test');
 
+INSERT INTO storage.objects (bucket_id, name, owner)
+VALUES (
+  'photos',
+  '00000000-0000-0000-0000-0000000000c1/phase789.jpg',
+  '00000000-0000-0000-0000-0000000000c1'
+);
+
 UPDATE public.profiles
 SET name = 'Phase 789',
     dob = '1995-01-01',
     gender = 'man',
     seeking = 'woman',
+    city = 'Pune',
+    bio = 'A complete profile for lifecycle regression tests.',
+    intents = ARRAY['Friendship'],
+    interests = ARRAY['Books', 'Coffee', 'Music'],
+    languages = ARRAY['English'],
+    photos = '[{"id":"phase789","path":"00000000-0000-0000-0000-0000000000c1/phase789.jpg","thumbPath":"00000000-0000-0000-0000-0000000000c1/phase789.jpg"}]'::jsonb,
     onboarded = true
 WHERE id = '00000000-0000-0000-0000-0000000000c1';
 
