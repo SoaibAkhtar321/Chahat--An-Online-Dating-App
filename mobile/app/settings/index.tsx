@@ -15,6 +15,13 @@ import { useAuth } from "../../src/context/AuthContext";
 import { deleteUserAccount } from "../../src/services/auth";
 import { runAccountDeletion } from "../../src/utils/deletionFlow";
 import {
+  describeLocationResult,
+  disableLocationSharing,
+  enableLocationSharing,
+  getMyLocationStatus,
+  setDistanceSharing,
+} from "../../src/services/location";
+import {
   getNotificationPreferences,
   openNotificationSettings,
   registerPushNotificationToken,
@@ -32,6 +39,8 @@ export default function SettingsScreen() {
   // Settings state
   const [showInDiscover, setShowInDiscover] = useState(true);
   const [showDistance, setShowDistance] = useState(true);
+  const [locBusy, setLocBusy] = useState(false);
+  const [locSummary, setLocSummary] = useState("");
   const [showOnline, setShowOnline] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
 
@@ -39,6 +48,58 @@ export default function SettingsScreen() {
   const [notifMatches, setNotifMatches] = useState(true);
   const [notifMessages, setNotifMessages] = useState(true);
   const [notifLikes, setNotifLikes] = useState(true);
+
+  const refreshLocationStatus = React.useCallback(async () => {
+    const st = await getMyLocationStatus().catch(() => null);
+    if (!st) return;
+    setShowDistance(st.shareDistance);
+    setLocSummary(!st.hasLocation ? (st.stale ? "Out of date" : "Not set") : "On");
+  }, []);
+
+  React.useEffect(() => {
+    void refreshLocationStatus();
+  }, [refreshLocationStatus]);
+
+  const handleToggleShowDistance = async (val: boolean) => {
+    const previous = showDistance;
+    setShowDistance(val); // optimistic; the server is the source of truth
+    const ok = await setDistanceSharing(val);
+    if (!ok) {
+      setShowDistance(previous);
+      Alert.alert("Couldn't update", "Your distance setting was not changed. Please try again.");
+    }
+  };
+
+  const handleUpdateLocation = async () => {
+    if (locBusy) return;
+    setLocBusy(true);
+    const result = await enableLocationSharing();
+    setLocBusy(false);
+    Alert.alert("Location", describeLocationResult(result));
+    void refreshLocationStatus();
+  };
+
+  const handleClearLocation = () => {
+    Alert.alert(
+      "Remove my location?",
+      "You'll stop appearing in distance-based results until you set a location again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await disableLocationSharing();
+            } catch {
+              Alert.alert("Couldn't remove", "Please try again.");
+            }
+            void refreshLocationStatus();
+          },
+        },
+      ],
+    );
+  };
 
   React.useEffect(() => {
     if (!user?.id) return;
@@ -233,8 +294,21 @@ export default function SettingsScreen() {
               label="Show my distance"
               hint="Others only ever see approximate distance, never coordinates."
               value={showDistance}
-              onValueChange={setShowDistance}
+              onValueChange={handleToggleShowDistance}
             />
+            <TouchableOpacity
+              style={styles.navRow}
+              onPress={handleUpdateLocation}
+              activeOpacity={0.7}
+              disabled={locBusy}
+            >
+              <Text style={styles.rowLabel}>{locBusy ? "Updating location…" : "Update my location"}</Text>
+              <Text style={styles.rowValue}>{locSummary}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navRow} onPress={handleClearLocation} activeOpacity={0.7}>
+              <Text style={styles.rowLabel}>Remove my location</Text>
+              <ChevronRight size={18} color={Colors.mutedForeground} />
+            </TouchableOpacity>
             <Toggle
               label="Show online status"
               hint="Others won't see when you were last active."

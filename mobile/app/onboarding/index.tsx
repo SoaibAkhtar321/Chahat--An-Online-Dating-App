@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import {
+  Linking,
   View,
   Text,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
+import { enableLocationSharing, describeLocationResult } from "../../src/services/location";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plus, X, MapPin, Navigation, Compass } from "lucide-react-native";
@@ -63,7 +65,7 @@ export default function OnboardingScreen() {
   const [intents, setIntents] = useState<string[]>(profile?.intents || []);
   const [city, setCity] = useState(profile?.city || "Mumbai");
   const [customCity, setCustomCity] = useState("");
-  const [locStatus, setLocStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
+  const [locStatus, setLocStatus] = useState<"idle" | "requesting" | "granted" | "denied" | "blocked" | "error">("idle");
   const [locMessage, setLocMessage] = useState("");
   const [work, setWork] = useState(profile?.work || "");
   const [education, setEducation] = useState(profile?.education || "");
@@ -104,46 +106,18 @@ export default function OnboardingScreen() {
   const handleRequestCurrentLocation = async () => {
     setLocStatus("requesting");
     setLocMessage("Detecting your location…");
-
-    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const { latitude, longitude } = position.coords;
-            // Reverse geocode with OpenStreetMap Nominatim for real city name
-            const res = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
-            );
-            const data = await res.json();
-            const detected =
-              data.address?.city ||
-              data.address?.town ||
-              data.address?.village ||
-              data.address?.suburb ||
-              data.address?.county ||
-              "Current Location";
-            setCity(detected);
-            setLocStatus("granted");
-            setLocMessage(`Location detected: ${detected}`);
-            setError("");
-          } catch {
-            setCity("Mumbai");
-            setLocStatus("granted");
-            setLocMessage("Location enabled. Defaulted to closest metro.");
-          }
-        },
-        (err) => {
-          setLocStatus("denied");
-          setLocMessage("Location permission not granted. You can select or enter your city below.");
-        },
-        { timeout: 10000 }
-      );
+    // Real device location via the location service: permission prompt, GPS fix, then server-side storage.
+    // Coordinates are never kept in this screen's state and no third-party geocoder is contacted.
+    const result = await enableLocationSharing();
+    if (result.status === "enabled") {
+      setLocStatus("granted");
+      setLocMessage("Location enabled. Pick your city below so others can find you by city too.");
+      setError("");
     } else {
-      // Mobile native fallback or simulated permission
-      setTimeout(() => {
-        setLocStatus("granted");
-        setLocMessage("Location permission granted.");
-      }, 500);
+      setLocMessage(describeLocationResult(result));
+      setLocStatus(
+        result.status === "permission_denied" || result.status === "services_disabled" ? "blocked" : "error",
+      );
     }
   };
 
@@ -450,7 +424,7 @@ export default function OnboardingScreen() {
           <View>
             <Text style={styles.stepTitle}>Where are you located?</Text>
             <Text style={styles.stepSubtitle}>
-              Discovery is organized by city. Others only see approximate distance.
+              People are shown nearest first. Others only ever see an approximate distance, never your exact location.
             </Text>
 
             {/* Current Location Permission Card */}
@@ -484,6 +458,16 @@ export default function OnboardingScreen() {
                   : "Allow Current Location"}
               </Text>
             </TouchableOpacity>
+
+            {locStatus === "blocked" ? (
+              <TouchableOpacity
+                style={[styles.locDetectBtn, { marginTop: 8 }]}
+                onPress={() => Linking.openSettings().catch(() => undefined)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.locDetectBtnText}>Open system settings</Text>
+              </TouchableOpacity>
+            ) : null}
 
             {locMessage ? (
               <View

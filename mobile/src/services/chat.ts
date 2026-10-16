@@ -60,7 +60,7 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
           name: prof.name || "Member",
           age: prof.age || 0,
           city: prof.city || "",
-          distanceKm: 0,
+          distanceKm: null,
           bio: prof.bio || "",
           photos,
           interests: prof.interests || [],

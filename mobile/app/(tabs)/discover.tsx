@@ -21,6 +21,7 @@ import { FilterModal } from "../../src/components/discovery/FilterModal";
 import { useMilo } from "../../src/context/MiloContext";
 import { hasEntitlement } from "../../src/services/subscription";
 import {
+  describeLocationResult,
   disableLocationSharing,
   enableLocationSharing,
   isLocationSharingEnabled,
@@ -63,7 +64,7 @@ export default function DiscoverScreen() {
     if (locationSharing) {
       Alert.alert(
         "Turn off location discovery?",
-        "Your precise location will be deleted. You can still discover profiles in your city.",
+        "Your stored location will be deleted. You can still discover profiles in your city.",
         [
           { text: "Keep on", style: "cancel" },
           {
@@ -89,7 +90,7 @@ export default function DiscoverScreen() {
 
     Alert.alert(
       "Use your location?",
-      "With your permission, Chahat stores precise coordinates privately to find nearby profiles. They are never shown to other members. You can turn this off any time.",
+      "With your permission, Chahat reads your location while the app is open and stores only a rounded area (about 1 km) privately. Other members only see an approximate distance. You can turn this off any time.",
       [
         { text: "Not now", style: "cancel" },
         {
@@ -113,11 +114,7 @@ export default function DiscoverScreen() {
                 result.status === "services_disabled"
                   ? "Location services are off"
                   : "Location unavailable",
-                result.status === "services_disabled"
-                  ? "Turn on device location services and try again."
-                  : result.status === "error"
-                    ? result.message
-                    : "Location discovery is unavailable on this device.",
+                describeLocationResult(result),
               );
             }
           },

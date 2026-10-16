@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { getDistanceTo } from "../../src/services/location";
+import { formatDistanceLabel } from "../../src/services/locationPolicy";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -69,13 +71,16 @@ export default function ProfileDetailScreen() {
               .filter(Boolean)
           : [];
 
+        // Bucketed distance from the server; null when unknown, hidden by the other member, or blocked.
+        const distanceKm = await getDistanceTo(prof.id).catch(() => null);
+
         if (!cancelled) {
           setFetchedProfile({
             id: prof.id,
             name: prof.name || "Member",
             age: prof.age || 0,
             city: prof.city || "",
-            distanceKm: 0,
+            distanceKm,
             bio: prof.bio || "",
             photos,
             interests: prof.interests || [],
@@ -190,7 +195,8 @@ export default function ProfileDetailScreen() {
           <View style={styles.metaRow}>
             <MapPin size={16} color={Colors.mutedForeground} />
             <Text style={styles.metaText}>
-              {targetProfile.city} · ~{targetProfile.distanceKm} km away
+              {[targetProfile.city, formatDistanceLabel(targetProfile.distanceKm)].filter(Boolean).join(" · ") ||
+                "Location not shared"}
             </Text>
           </View>
 

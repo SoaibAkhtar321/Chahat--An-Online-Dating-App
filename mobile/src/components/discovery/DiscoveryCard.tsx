@@ -7,6 +7,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { AvatarPlaceholder } from "../ui/AvatarPlaceholder";
 import { ProfilePhoto } from "../profile/ProfilePhoto";
 import type { Profile } from "../../types";
+import { formatDistanceLabel } from "../../services/locationPolicy";
 
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width - 32;
@@ -119,7 +120,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
             <View style={styles.locationRow}>
               <MapPin size={13} color={Colors.primaryForeground} />
               <Text style={styles.locationText}>
-                {profile.city} · ~{profile.distanceKm} km away
+                {[profile.city, formatDistanceLabel(profile.distanceKm)].filter(Boolean).join(" · ")}
               </Text>
             </View>
 

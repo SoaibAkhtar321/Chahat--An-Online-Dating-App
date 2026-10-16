@@ -24,8 +24,11 @@ export default function PrivacyScreen() {
           • Account info: Email address and authentication credentials.{"\n"}• Profile info: Name,
           date of birth (used strictly to calculate age, never displayed publicly), gender,
           relationship intents, city, work, education, and photos.{"\n"}• Discovery location:
-          City-level location only. Chahat never reveals your precise coordinates or physical address
-          to other users.
+          If you allow it, Chahat reads your device location only while the app is open. Our server
+          rounds it to an area of roughly 1 km before storing it and does not keep the exact point.
+          Other users only see an approximate distance (for example "~5 km away"), never your
+          coordinates or address. You can hide your distance or remove your stored location at any
+          time in Settings, and it is deleted with your account.
         </Text>
 
         <Text style={styles.subheading}>2. Private Photographs & Moderation</Text>

@@ -90,9 +90,10 @@ describe("Phase B: Critical Security Foundations", () => {
       expect(
         allMigrations.indexOf("20260101002500_voice_messages_and_chat_storage.sql"),
       ).toBeGreaterThan(allMigrations.indexOf("20260101002400_coin_wallet_and_call_billing.sql"));
-      expect(allMigrations[allMigrations.length - 1]).toBe(
-        "20260101002500_voice_messages_and_chat_storage.sql",
-      );
+      // Ordering guard: 2500 must still exist; newer migrations may legitimately follow it.
+      const idx2500 = allMigrations.indexOf("20260101002500_voice_messages_and_chat_storage.sql");
+      expect(idx2500).toBeGreaterThanOrEqual(0);
+      expect(allMigrations.slice(idx2500 + 1).every((f) => f > "20260101002500")).toBe(true);
     });
 
     test("is_match_member enforces NOT public.is_blocked_pair", () => {

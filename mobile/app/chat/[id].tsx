@@ -90,7 +90,7 @@ export default function ChatDetailScreen() {
     name: "Match",
     age: 0,
     city: "",
-    distanceKm: 0,
+    distanceKm: null,
     bio: "",
     photos: [],
     interests: [],

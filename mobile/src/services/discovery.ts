@@ -176,7 +176,7 @@ function filterDemoProfiles(filters?: import("../types").Filters): Profile[] {
     deck = deck.filter((profile) => {
       if (filters.ageMin && profile.age < filters.ageMin) return false;
       if (filters.ageMax && profile.age > filters.ageMax) return false;
-      if (filters.distance && profile.distanceKm > filters.distance) return false;
+      if (filters.distance && profile.distanceKm != null && profile.distanceKm > filters.distance) return false;
       if (filters.interests && filters.interests.length > 0) {
         const hasMatchingInterest = profile.interests.some((i) =>
           filters.interests.some((fi) => fi.toLowerCase() === i.toLowerCase()),
@@ -205,7 +205,7 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
     name: r.name || "Chahat Member",
     age: r.age || 25,
     city: r.city || "",
-    distanceKm: r.distance_km ?? r.distanceKm ?? 0,
+    distanceKm: typeof r.distance_km === "number" ? r.distance_km : null,
     bio: r.bio || "",
     photos: photosArray,
     interests: r.interests || [],

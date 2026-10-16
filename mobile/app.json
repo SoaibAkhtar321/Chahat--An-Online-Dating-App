@@ -49,7 +49,9 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Chahat uses your location only when you choose nearby discovery."
+          "locationWhenInUsePermission": "Chahat uses your approximate location to show people near you. Others only ever see a rough distance, never your exact location.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
         }
       ],
       [

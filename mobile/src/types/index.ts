@@ -18,7 +18,8 @@ export interface Profile {
   name: string;
   age: number;
   city: string;
-  distanceKm: number;
+  /** Server-bucketed distance in km; null when unknown, hidden by the other member, or blocked. */
+  distanceKm: number | null;
   bio: string;
   photos: string[];
   interests: string[];
