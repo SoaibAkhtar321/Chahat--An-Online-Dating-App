@@ -3,7 +3,9 @@
 // No provider secret, service-role key or other participant's data is ever returned.
 // The authorization flow lives in handler.ts so it can be tested without Deno.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { resolveCallProvider } from "../_shared/callProvider.ts";
+import { REGISTERED_CALL_PROVIDERS, resolveCallProvider } from "../_shared/callProvider.ts";
+import { createAgoraProviderFactory } from "../_shared/agoraProvider.ts";
+import { buildAgoraRtcToken } from "../_shared/agoraTokenBuilder.ts";
 import { CORS, handleIssueCallToken } from "./handler.ts";
 
 Deno.serve(async (request) => {
@@ -48,7 +50,14 @@ Deno.serve(async (request) => {
       if (error) throw new Error("extend coverage rpc failed");
       return data;
     },
-    provider: resolveCallProvider({ CALL_PROVIDER: Deno.env.get("CALL_PROVIDER") ?? undefined }),
+    provider: resolveCallProvider(
+      {
+        CALL_PROVIDER: Deno.env.get("CALL_PROVIDER") ?? undefined,
+        AGORA_APP_ID: Deno.env.get("AGORA_APP_ID") ?? undefined,
+        AGORA_APP_CERTIFICATE: Deno.env.get("AGORA_APP_CERTIFICATE") ?? undefined,
+      },
+      { ...REGISTERED_CALL_PROVIDERS, agora: createAgoraProviderFactory(buildAgoraRtcToken) },
+    ),
     logError: (message) => console.error(message),
   });
 });
