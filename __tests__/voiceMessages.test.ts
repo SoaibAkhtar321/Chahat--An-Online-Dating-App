@@ -373,7 +373,8 @@ describe("Phase 5: Secure Voice Messages and Chat Storage", () => {
 
     test("get_match_messages RPC returns audio metadata and enforces tier read receipt masking", () => {
       const sql = fs.readFileSync(migPath, "utf8");
-      expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.get_match_messages/);
+      expect(sql).toMatch(/DROP FUNCTION IF EXISTS public\.get_match_messages\(uuid\)/);
+      expect(sql).toMatch(/CREATE FUNCTION public\.get_match_messages/);
       expect(sql).toMatch(/audio_path text/);
       expect(sql).toMatch(/audio_duration_sec integer/);
       expect(sql).toMatch(/message_type text/);
