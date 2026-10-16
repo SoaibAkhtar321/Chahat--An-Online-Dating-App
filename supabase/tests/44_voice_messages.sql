@@ -36,7 +36,7 @@ SET request.jwt.claim.sub = '80000000-0000-0000-0000-00000000000a';
 -- Member A sends voice message to Match A1
 INSERT INTO public.messages(id, match_id, sender, body, audio_path, audio_duration_sec, message_type)
 VALUES (
-  'eeeeeeee-0000-0000-0000-0000000000m1',
+  'eeeeeeee-0000-0000-0000-0000000000f1',
   'eeeeeeee-0000-0000-0000-0000000000a1',
   '80000000-0000-0000-0000-00000000000a',
   'Voice note',
@@ -51,7 +51,7 @@ INSERT INTO public.t_results
 SELECT 'chat: member can insert voice message with audio_path and duration',
   EXISTS(
     SELECT 1 FROM public.messages
-    WHERE id = 'eeeeeeee-0000-0000-0000-0000000000m1'
+    WHERE id = 'eeeeeeee-0000-0000-0000-0000000000f1'
       AND message_type = 'voice'
       AND audio_path = 'eeeeeeee-0000-0000-0000-0000000000a1/voice_m1.m4a'
       AND audio_duration_sec = 15
@@ -67,7 +67,7 @@ BEGIN
   BEGIN
     INSERT INTO public.messages(id, match_id, sender, body, audio_path, audio_duration_sec, message_type)
     VALUES (
-      'eeeeeeee-0000-0000-0000-0000000000m2',
+      'eeeeeeee-0000-0000-0000-0000000000f2',
       'eeeeeeee-0000-0000-0000-0000000000a1',
       '80000000-0000-0000-0000-00000000000c',
       'Intruder voice',
@@ -86,7 +86,7 @@ RESET ROLE;
 INSERT INTO public.t_results
 SELECT 'chat: non-match participant is blocked from inserting voice messages',
   NOT EXISTS(
-    SELECT 1 FROM public.messages WHERE id = 'eeeeeeee-0000-0000-0000-0000000000m2'
+    SELECT 1 FROM public.messages WHERE id = 'eeeeeeee-0000-0000-0000-0000000000f2'
   ),
   'Stranger insertion rejected by RLS';
 
@@ -97,7 +97,7 @@ BEGIN
   BEGIN
     INSERT INTO public.messages(id, match_id, sender, body, audio_path, audio_duration_sec, message_type)
     VALUES (
-      'eeeeeeee-0000-0000-0000-0000000000m3',
+      'eeeeeeee-0000-0000-0000-0000000000f3',
       'eeeeeeee-0000-0000-0000-0000000000a1',
       '80000000-0000-0000-0000-00000000000a',
       'Long voice',
@@ -114,7 +114,7 @@ END $$;
 INSERT INTO public.t_results
 SELECT 'chat: duration check rejects voice messages longer than 300 seconds',
   NOT EXISTS(
-    SELECT 1 FROM public.messages WHERE id = 'eeeeeeee-0000-0000-0000-0000000000m3'
+    SELECT 1 FROM public.messages WHERE id = 'eeeeeeee-0000-0000-0000-0000000000f3'
   ),
   'Duration check constraint enforced';
 
@@ -124,7 +124,7 @@ BEGIN
   BEGIN
     INSERT INTO public.messages(id, match_id, sender, body, audio_path, audio_duration_sec, message_type)
     VALUES (
-      'eeeeeeee-0000-0000-0000-0000000000m4',
+      'eeeeeeee-0000-0000-0000-0000000000f4',
       'eeeeeeee-0000-0000-0000-0000000000a1',
       '80000000-0000-0000-0000-00000000000a',
       'Bad type',
@@ -141,7 +141,7 @@ END $$;
 INSERT INTO public.t_results
 SELECT 'chat: message_type check rejects unsupported message types',
   NOT EXISTS(
-    SELECT 1 FROM public.messages WHERE id = 'eeeeeeee-0000-0000-0000-0000000000m4'
+    SELECT 1 FROM public.messages WHERE id = 'eeeeeeee-0000-0000-0000-0000000000f4'
   ),
   'message_type check constraint enforced';
 
@@ -151,13 +151,13 @@ UPDATE public.messages
 SET audio_path = 'tampered_path.m4a',
     message_type = 'image',
     audio_duration_sec = 99
-WHERE id = 'eeeeeeee-0000-0000-0000-0000000000m1';
+WHERE id = 'eeeeeeee-0000-0000-0000-0000000000f1';
 
 INSERT INTO public.t_results
 SELECT 'chat: messages_guard prevents mutating audio_path and message_type on UPDATE',
   EXISTS(
     SELECT 1 FROM public.messages
-    WHERE id = 'eeeeeeee-0000-0000-0000-0000000000m1'
+    WHERE id = 'eeeeeeee-0000-0000-0000-0000000000f1'
       AND audio_path = 'eeeeeeee-0000-0000-0000-0000000000a1/voice_m1.m4a'
       AND message_type = 'voice'
       AND audio_duration_sec = 15
@@ -172,7 +172,7 @@ INSERT INTO public.t_results
 SELECT 'chat: get_match_messages returns voice columns to participant',
   EXISTS(
     SELECT 1 FROM public.get_match_messages('eeeeeeee-0000-0000-0000-0000000000a1')
-    WHERE id = 'eeeeeeee-0000-0000-0000-0000000000m1'
+    WHERE id = 'eeeeeeee-0000-0000-0000-0000000000f1'
       AND message_type = 'voice'
       AND audio_duration_sec = 15
       AND audio_path = 'eeeeeeee-0000-0000-0000-0000000000a1/voice_m1.m4a'

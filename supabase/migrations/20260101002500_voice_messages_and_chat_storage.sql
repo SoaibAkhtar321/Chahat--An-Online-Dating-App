@@ -52,17 +52,36 @@ ALTER TABLE public.messages
 CREATE INDEX IF NOT EXISTS messages_match_type_idx ON public.messages (match_id, message_type);
 
 -- ---------- 3. Hardened RLS INSERT policy ----------
+-- Media paths must be exactly "<this match id>/<single safe file name>".
+-- Rejects other matches' folders, nested folders, leading "/", "..", backslashes,
+-- empty names and anything outside [A-Za-z0-9._-].
+CREATE OR REPLACE FUNCTION public.is_valid_chat_media_path(_path text, _match_id uuid)
+RETURNS boolean LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = public, pg_temp AS $$
+  SELECT _path IS NOT NULL
+     AND _match_id IS NOT NULL
+     AND _path ~ ('^' || _match_id::text || '/[A-Za-z0-9][A-Za-z0-9._-]{0,199}$')
+     AND position('..' in _path) = 0
+$$;
+GRANT EXECUTE ON FUNCTION public.is_valid_chat_media_path(text, uuid) TO authenticated, service_role;
+
+-- Defense in depth: enforced for every writer (including service_role), not only via RLS.
+-- NOT VALID: new/updated rows are checked; existing rows are not scanned during deploy.
+-- Audit existing rows, then run: ALTER TABLE public.messages VALIDATE CONSTRAINT <name>;
+ALTER TABLE public.messages DROP CONSTRAINT IF EXISTS messages_image_path_in_match_folder;
+ALTER TABLE public.messages ADD CONSTRAINT messages_image_path_in_match_folder
+  CHECK (image_path IS NULL OR public.is_valid_chat_media_path(image_path, match_id)) NOT VALID;
+ALTER TABLE public.messages DROP CONSTRAINT IF EXISTS messages_audio_path_in_match_folder;
+ALTER TABLE public.messages ADD CONSTRAINT messages_audio_path_in_match_folder
+  CHECK (audio_path IS NULL OR public.is_valid_chat_media_path(audio_path, match_id)) NOT VALID;
+
 DROP POLICY IF EXISTS "members send messages" ON public.messages;
 CREATE POLICY "members send messages" ON public.messages FOR INSERT TO authenticated
   WITH CHECK (
     sender = auth.uid()::text
     AND public.is_match_member(match_id)
-    AND (
-      (message_type = 'text' AND body <> '')
-      OR (message_type = 'image' AND image_path IS NOT NULL)
-      OR (message_type = 'voice' AND audio_path IS NOT NULL)
-      OR (body <> '' OR image_path IS NOT NULL OR audio_path IS NOT NULL)
-    )
+    AND (body <> '' OR image_path IS NOT NULL OR audio_path IS NOT NULL)
+    AND (image_path IS NULL OR public.is_valid_chat_media_path(image_path, match_id))
+    AND (audio_path IS NULL OR public.is_valid_chat_media_path(audio_path, match_id))
     AND NOT EXISTS (
       SELECT 1 FROM public.matches m
       WHERE m.id = match_id
@@ -87,7 +106,9 @@ BEGIN
 END $$;
 
 -- ---------- 5. Update get_match_messages RPC ----------
-CREATE OR REPLACE FUNCTION public.get_match_messages(_match_id uuid)
+-- Return type gains columns; CREATE OR REPLACE cannot change OUT parameters.
+DROP FUNCTION IF EXISTS public.get_match_messages(uuid);
+CREATE FUNCTION public.get_match_messages(_match_id uuid)
 RETURNS TABLE (
   id uuid,
   match_id uuid,
