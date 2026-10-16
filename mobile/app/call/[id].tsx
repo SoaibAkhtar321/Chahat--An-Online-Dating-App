@@ -208,7 +208,7 @@ export default function CallScreen() {
           <Text style={styles.stateTitle}>{statusMessage}</Text>
           {freeSeconds !== null && status === "accepted" && (
             <Text style={styles.timer}>
-              Server-enforced free-call time remaining: {freeSeconds}s
+              Call time covered by the server: {freeSeconds}s
             </Text>
           )}
           {error ? <Text style={styles.error}>{error}</Text> : null}

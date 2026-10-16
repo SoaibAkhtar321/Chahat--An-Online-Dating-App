@@ -38,6 +38,7 @@ Authorization, in order. Any failure stops the request before the provider is co
 | Call is not declined, cancelled, timed out or ended | closed | 410 `call_ended` |
 | Free allowance has time left (when one applies) | used up | 410 `call_expired` |
 | Provider configured | not configured | 503 `provider_not_configured` |
+| Caller can pay for the next minute (Phase 4, only when metered and near the end of covered time) | no coins | 402 `insufficient_coins` |
 | Provider calls succeed | provider failure | 502 `provider_error` (generic text, details only in server logs) |
 
 On success the response contains only `provider`, `room_id`, `token`, `expires_at`, `call_type`.
@@ -81,7 +82,8 @@ reaches that point because the UI gate is closed. Nothing is simulated.
    `getCallMediaProvider` return it, add the native dependency and permissions, build a development
    client.
 3. Turn on `EXPO_PUBLIC_FEATURE_CALLS=true` in the EAS environment.
-4. Phase 4 adds billing and call duration metering; this phase does not charge or meter anything.
+4. Billing and call metering are described in `docs/BILLING.md` (Phase 4). `issue-call-token` now buys
+   the next prepaid minute server-side and answers `402 insufficient_coins` when the caller cannot pay.
 
 ## Local testing
 

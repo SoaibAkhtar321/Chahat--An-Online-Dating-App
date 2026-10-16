@@ -12,6 +12,7 @@ export type InvokeFunction = (callId: string) => Promise<InvokeResult>;
 const SERVER_CODE_MAP: Record<string, CallErrorCode> = {
   unauthenticated: "unauthenticated",
   rate_limited: "rate_limited",
+  insufficient_coins: "insufficient_coins",
   provider_not_configured: "provider_not_configured",
   provider_error: "provider_error",
   call_not_found: "call_unavailable",

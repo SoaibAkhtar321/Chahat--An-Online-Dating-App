@@ -40,6 +40,14 @@ Deno.serve(async (request) => {
       if (error) throw new Error("join context rpc failed");
       return data;
     },
+    extendCoverage: async (callId, userId) => {
+      const { data, error } = await admin.rpc("extend_call_coverage", {
+        _call_id: callId,
+        _user_id: userId,
+      });
+      if (error) throw new Error("extend coverage rpc failed");
+      return data;
+    },
     provider: resolveCallProvider({ CALL_PROVIDER: Deno.env.get("CALL_PROVIDER") ?? undefined }),
     logError: (message) => console.error(message),
   });

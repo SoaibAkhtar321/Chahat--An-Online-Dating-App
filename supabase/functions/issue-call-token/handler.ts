@@ -2,9 +2,11 @@
 // authorization flow can be unit tested without Deno, Supabase or a call provider.
 import type { CallProvider } from "../_shared/callProvider.ts";
 import {
+  MAX_TOKEN_TTL_SECONDS,
   evaluateJoinContext,
   extractBearerToken,
   parseCallTokenRequest,
+  parseExtensionResult,
   parseRateLimit,
 } from "./policy.ts";
 
@@ -21,6 +23,11 @@ export interface IssueCallTokenDeps {
   consumeRateLimit(userId: string): Promise<unknown>;
   /** Calls get_call_join_context; resolves to the raw JSON or throws on failure. */
   getJoinContext(callId: string, userId: string): Promise<unknown>;
+  /**
+   * Calls extend_call_coverage: buys the next prepaid minute when the authorised time is about to
+   * run out. Charges the caller's wallet on the server; resolves to the raw JSON or throws.
+   */
+  extendCoverage(callId: string, userId: string): Promise<unknown>;
   provider: CallProvider;
   logError?(message: string): void;
 }
@@ -106,11 +113,36 @@ export async function handleIssueCallToken(
       log(`Call provider could not prepare a room: ${room.code}`);
       return failure(502, "provider_error", "Could not start the call. Please try again.");
     }
+
+    // 6. Billing. Only now, with a configured provider and a prepared room, is the next minute
+    // bought, so a deployment without a provider can never charge anyone. The token lifetime is
+    // then bounded by the time the server has actually authorised.
+    let ttlSeconds = decision.value.ttlSeconds;
+    if (decision.value.needsExtension) {
+      let extension: unknown;
+      try {
+        extension = await deps.extendCoverage(parsed.value.callId, userId);
+      } catch {
+        log("Call billing extension failed.");
+        return failure(500, "internal_error", UNAVAILABLE);
+      }
+      const outcome = parseExtensionResult(extension);
+      if (!outcome.ok) {
+        if (outcome.error.status >= 500) log("Call billing returned an unreadable result.");
+        return failure(outcome.error.status, outcome.error.code, outcome.error.message);
+      }
+      if (outcome.value.coveredSeconds !== null) {
+        ttlSeconds = Math.max(1, Math.min(MAX_TOKEN_TTL_SECONDS, Math.floor(outcome.value.coveredSeconds)));
+      } else {
+        ttlSeconds = MAX_TOKEN_TTL_SECONDS;
+      }
+    }
+
     const grant = await provider.issueJoinToken({
       roomId: room.value.roomId,
       participantId: userId,
       callType: decision.value.callType,
-      ttlSeconds: decision.value.ttlSeconds,
+      ttlSeconds,
     });
     if (!grant.ok) {
       log(`Call provider could not issue a token: ${grant.code}`);

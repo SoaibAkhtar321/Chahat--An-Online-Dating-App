@@ -10,6 +10,7 @@ export type CallErrorCode =
   | "provider_not_configured"
   | "unauthenticated"
   | "rate_limited"
+  | "insufficient_coins"
   | "call_unavailable"
   | "permission_denied"
   | "network"
@@ -21,6 +22,7 @@ const USER_MESSAGES: Record<CallErrorCode, string> = {
   provider_not_configured: "Calling is not available yet.",
   unauthenticated: "Please sign in again to join the call.",
   rate_limited: "Too many call attempts. Please wait a moment and try again.",
+  insufficient_coins: "You don't have enough coins to continue this call.",
   call_unavailable: "This call is no longer available.",
   permission_denied: "Microphone or camera permission is needed to join the call.",
   network: "Network problem. Check your connection and try again.",

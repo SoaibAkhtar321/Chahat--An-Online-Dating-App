@@ -38,6 +38,7 @@ function makeDeps(overrides: Partial<IssueCallTokenDeps> = {}) {
     verifyUser: jest.fn(async () => USER_ID as string | null),
     consumeRateLimit: jest.fn(async () => ({ allowed: true, retry_after_seconds: 30 }) as unknown),
     getJoinContext: jest.fn(async () => acceptedContext as unknown),
+    extendCoverage: jest.fn(async () => ({ ok: true, exempt: true, covered_seconds_remaining: null }) as unknown),
     provider: makeProvider(),
     logError: jest.fn(),
     ...overrides,
@@ -89,7 +90,7 @@ describe("issue-call-token policy", () => {
   it("caps token lifetime and follows the remaining free allowance", () => {
     expect(evaluateJoinContext(acceptedContext)).toEqual({
       ok: true,
-      value: { callType: "video", ttlSeconds: MAX_TOKEN_TTL_SECONDS },
+      value: { callType: "video", ttlSeconds: MAX_TOKEN_TTL_SECONDS, needsExtension: false },
     });
     expect(evaluateJoinContext({ ...acceptedContext, free_seconds_remaining: 45.4 })).toMatchObject({
       ok: true,

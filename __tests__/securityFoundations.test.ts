@@ -91,7 +91,7 @@ describe("Phase B: Critical Security Foundations", () => {
         allMigrations.indexOf("20260101001400_harden_verification_metadata_guard.sql"),
       ).toBeGreaterThan(allMigrations.indexOf("20260101001300_critical_security_foundations.sql"));
       expect(allMigrations[allMigrations.length - 1]).toBe(
-        "20260101002300_call_token_rate_limit.sql",
+        "20260101002400_coin_wallet_and_call_billing.sql",
       );
     });
 

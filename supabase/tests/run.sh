@@ -116,7 +116,7 @@ setup_db() {
 # 10. Functional / RLS / Storage / Deletion Suite (Fail-Fast)
 echo "== functional / RLS / storage / deletion =="
 setup_db "$FUNC_DB" || exit 1
-for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 29_phase789_lifecycle.sql 35_uniform_quota.sql 36_purchase_verification.sql 37_profile_media.sql 38_push_notifications.sql 39_location_discovery.sql 40_video_calls.sql 41_google_play_verification.sql 42_call_tokens.sql 90_assert.sql; do
+for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 29_phase789_lifecycle.sql 35_uniform_quota.sql 36_purchase_verification.sql 37_profile_media.sql 38_push_notifications.sql 39_location_discovery.sql 40_video_calls.sql 41_google_play_verification.sql 42_call_tokens.sql 43_coin_billing.sql 90_assert.sql; do
   out_file="/tmp/${RUN_ID}_test_${f}.out"
   psql_test "$FUNC_DB" -f "$f" > "$out_file" 2>&1
   rc=$?
@@ -148,6 +148,13 @@ if [ $purchase_conc_rc -ne 0 ]; then
   echo "FAIL: Purchase concurrency tests failed (exit code $purchase_conc_rc)" >&2
   echo "ABORTING: Preserving databases '$FUNC_DB' and '$CONC_DB'." >&2
   exit $purchase_conc_rc
+fi
+bash 46_coin_concurrency.sh "$CONC_DB" "$LOCK_KEY"
+coin_conc_rc=$?
+if [ $coin_conc_rc -ne 0 ]; then
+  echo "FAIL: Coin wallet concurrency tests failed (exit code $coin_conc_rc)" >&2
+  echo "ABORTING: Preserving databases '$FUNC_DB' and '$CONC_DB'." >&2
+  exit $coin_conc_rc
 fi
 # 12. Isolated Cleanup (Only drops current run's exact databases; never masks test status)
 echo "All tests passed cleanly. Cleaning up run-specific databases..."

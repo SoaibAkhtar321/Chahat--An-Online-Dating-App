@@ -16,7 +16,7 @@ A production build is blocked by `mobile/scripts/check-release-env.js` if the fi
 | `EXPO_PUBLIC_FEATURE_PUSH` | `true` registers devices for push | Push notifications |
 | `EXPO_PUBLIC_FEATURE_CALLS` | `true` shows call actions | Audio/video calls |
 | `EXPO_PUBLIC_FEATURE_VOICE_MESSAGES` | `true` shows voice notes | Voice messages |
-| `EXPO_PUBLIC_FEATURE_COIN_TOPUP` | `true` shows coin top-up | Coin purchases |
+| `EXPO_PUBLIC_FEATURE_COIN_TOPUP` | `true` shows coin top-up. **Keep `false`**: no purchase adapter or coin pack exists yet (`docs/BILLING.md`) | Coin purchases |
 
 Flags must be the exact string `true` to enable. Anything else is OFF.
 
@@ -33,10 +33,13 @@ Set with `supabase secrets set NAME=value` against the target project. `SUPABASE
 | `PUSH_DISPATCH_SECRET` | dispatch-push | Shared secret the scheduler sends to authorize dispatch |
 | `GOOGLE_VISION_API_KEY` | moderate-photo | Image moderation |
 | `CALL_PROVIDER` | issue-call-token | Name of the registered call adapter to use. Unset means calling is reported as not configured. No adapter ships yet |
+| `COIN_PURCHASE_ADAPTER` | (future coin purchase function) | Name of the registered coin purchase adapter. Unset means coin purchases are not configured. No adapter ships yet; nothing reads it in production today |
 
 Added with a real call adapter (not yet read by any code): that provider's credentials, for
-example an app id and a signing certificate, set as Edge Function secrets only. Coin top-up
-product configuration arrives in a later phase.
+example an app id and a signing certificate, set as Edge Function secrets only. A coin purchase
+adapter likewise needs its own store credentials as Edge Function secrets, plus a server-side coin
+catalogue (packs and prices need explicit approval). Billing rates are NOT secrets: they live in
+`app_settings` (see `docs/BILLING.md`) and are changed only by an administrator with database access.
 
 ## C. Files and consoles (not environment variables)
 

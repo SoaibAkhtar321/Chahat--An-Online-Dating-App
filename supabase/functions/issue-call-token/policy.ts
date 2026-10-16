@@ -41,7 +41,15 @@ export function parseCallTokenRequest(body: unknown): PolicyResult<{ callId: str
 export interface JoinDecision {
   callType: "audio" | "video";
   ttlSeconds: number;
+  /**
+   * True when the call is metered and its authorised time is about to run out, so the server must
+   * try to buy the next minute (extend_call_coverage) before it issues another token.
+   */
+  needsExtension: boolean;
 }
+
+/** Used only if an older database function does not report the lead time. */
+export const DEFAULT_EXTENSION_LEAD_SECONDS = 20;
 
 /**
  * `context` is the JSON returned by public.get_call_join_context(call_id, authenticated_user_id).
@@ -74,16 +82,73 @@ export function evaluateJoinContext(context: unknown): PolicyResult<JoinDecision
     return fail(500, "internal_error", "Call state could not be read.");
   }
 
+  // `free_seconds_remaining` is the number of authorised seconds left: the free minute, then each
+  // prepaid minute. NULL means the call is unmetered (premium caller).
   const remaining = ctx.free_seconds_remaining;
+  let lead = DEFAULT_EXTENSION_LEAD_SECONDS;
+  if (ctx.extension_lead_seconds !== undefined && ctx.extension_lead_seconds !== null) {
+    const rawLead = ctx.extension_lead_seconds;
+    if (typeof rawLead !== "number" || !Number.isFinite(rawLead) || rawLead < 1 || rawLead > 50) {
+      return fail(500, "internal_error", "Call state could not be read.");
+    }
+    lead = rawLead;
+  }
   let ttlSeconds = MAX_TOKEN_TTL_SECONDS;
+  let needsExtension = false;
   if (remaining !== null && remaining !== undefined) {
     if (typeof remaining !== "number" || !Number.isFinite(remaining)) {
       return fail(500, "internal_error", "Call state could not be read.");
     }
     if (remaining <= 0) return fail(410, "call_expired", "The call time allowance has ended.");
     ttlSeconds = Math.min(MAX_TOKEN_TTL_SECONDS, Math.floor(remaining));
+    needsExtension = remaining <= lead && ctx.billing_exempt !== true;
   }
-  return { ok: true, value: { callType: ctx.call_type, ttlSeconds: Math.max(1, ttlSeconds) } };
+  return {
+    ok: true,
+    value: { callType: ctx.call_type, ttlSeconds: Math.max(1, ttlSeconds), needsExtension },
+  };
+}
+
+export interface ExtensionOutcome {
+  /** Authorised seconds remaining after the attempt; null when the call is unmetered. */
+  coveredSeconds: number | null;
+}
+
+/**
+ * `value` is the JSON returned by public.extend_call_coverage. Anything that is not an explicit
+ * success stops the request before a token is issued; in particular running out of coins is a
+ * 402 and never a silent free extension.
+ */
+export function parseExtensionResult(value: unknown): PolicyResult<ExtensionOutcome> {
+  if (typeof value !== "object" || value === null) {
+    return fail(500, "internal_error", "Call billing could not be checked.");
+  }
+  const v = value as Record<string, unknown>;
+  if (v.ok === true) {
+    const covered = v.covered_seconds_remaining;
+    if (covered === null || covered === undefined) {
+      if (v.exempt === true) return { ok: true, value: { coveredSeconds: null } };
+      return fail(500, "internal_error", "Call billing could not be checked.");
+    }
+    if (typeof covered !== "number" || !Number.isFinite(covered) || covered <= 0) {
+      return fail(500, "internal_error", "Call billing could not be checked.");
+    }
+    return { ok: true, value: { coveredSeconds: covered } };
+  }
+  switch (v.code) {
+    case "insufficient_coins":
+      return fail(402, "insufficient_coins", "Not enough coins to continue this call.");
+    case "call_expired":
+      return fail(410, "call_expired", "The call time allowance has ended.");
+    case "call_not_active":
+      return fail(410, "call_ended", "This call has already ended.");
+    case "call_not_allowed":
+      return fail(403, "call_not_allowed", "This call is no longer available to you.");
+    case "call_not_found":
+      return fail(404, "call_not_found", "Call not found.");
+    default:
+      return fail(500, "internal_error", "Call billing could not be checked.");
+  }
 }
 
 export interface RateLimitResult {
