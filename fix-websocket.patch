@@ -1,0 +1,35 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index e02e33d..bba3ae4 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -20,7 +20,7 @@ jobs:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-node@v4
+         with:
+-          node-version: 20
++          node-version: 22
+           cache: npm
+       - run: npm ci --no-audit --no-fund
+       - name: Install mobile dependencies
+diff --git a/jest.config.js b/jest.config.js
+index 4b2cbc0..b2fd6a4 100644
+--- a/jest.config.js
++++ b/jest.config.js
+@@ -1,6 +1,7 @@
+ module.exports = {
+   preset: "jest-expo",
+   resolver: "<rootDir>/jest.resolver.js",
++  setupFiles: ["<rootDir>/jest.setup.js"],
+   transformIgnorePatterns: [
+     "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)",
+   ],
+diff --git a/jest.setup.js b/jest.setup.js
+new file mode 100644
+index 0000000..de24af3
+--- /dev/null
++++ b/jest.setup.js
+@@ -0,0 +1,4 @@
++// supabase-js (realtime) needs a WebSocket global; Node < 22 has none. Tests never open sockets.
++if (typeof globalThis.WebSocket === "undefined") {
++  globalThis.WebSocket = class WebSocket {};
++}
