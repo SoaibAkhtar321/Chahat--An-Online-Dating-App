@@ -5,6 +5,7 @@ import {
   getSignedUrl,
   imageFileExtension,
   sanitizeAndPrepareImageUpload,
+  prepareVoiceUpload,
 } from "./storage";
 import { DEMO_PROFILES } from "./discovery";
 import { pushNotificationToInbox } from "./notifications";
@@ -85,10 +86,17 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
             matchId: m.id,
             sender: last.sender,
             from: last.sender === currentUserId ? "me" : "them",
-            text: last.body,
+            text:
+              last.message_type === "voice" || last.audio_path
+                ? `Voice note ${last.audio_duration_sec ? `(${last.audio_duration_sec}s)` : "🎤"}`
+                : last.body,
             at: new Date(last.created_at).getTime(),
             status: last.read_at ? "read" : "sent",
             image: last.image_path ? await getSignedUrl("chat", last.image_path) : undefined,
+            audio: last.audio_path ? await getSignedUrl("chat", last.audio_path) : undefined,
+            audioDurationSec: last.audio_duration_sec,
+            messageType:
+              last.message_type || (last.audio_path ? "voice" : last.image_path ? "image" : "text"),
           };
         }
 
@@ -146,10 +154,12 @@ export async function fetchMessagesForMatch(
 
     if (rows.length === 0) return [];
 
-    const signed = await getSignedUrls(
-      "chat",
-      rows.map((m: any) => m.image_path).filter(Boolean) as string[],
-    );
+    const mediaPaths = [
+      ...rows.map((m: any) => m.image_path),
+      ...rows.map((m: any) => m.audio_path),
+    ].filter(Boolean) as string[];
+
+    const signed = await getSignedUrls("chat", mediaPaths);
     return rows.map((m: any) => ({
       id: m.id,
       matchId: m.match_id,
@@ -159,6 +169,10 @@ export async function fetchMessagesForMatch(
       at: new Date(m.created_at).getTime(),
       status: m.read_at ? "read" : "sent",
       image: m.image_path ? signed[m.image_path] : undefined,
+      audio: m.audio_path ? signed[m.audio_path] : undefined,
+      audioDurationSec: m.audio_duration_sec,
+      messageType:
+        m.message_type || (m.audio_path ? "voice" : m.image_path ? "image" : "text"),
     }));
   } catch {
     return [];
@@ -178,8 +192,8 @@ export async function sendChatMessage(
 
     // Validate that matchId is a valid UUID for database integrity
     if (!isValidUUID(matchId)) {
-      // In demo/test preview mode where match is a non-UUID demo string:
-      if (!isSupabaseConfigured() || matchId.startsWith("demo_")) {
+      // In demo preview mode, only explicit demo_ prefix is supported
+      if (matchId.startsWith("demo_") && !isSupabaseConfigured()) {
         const demoMsg: Message = {
           id: generateUUID(),
           matchId,
@@ -229,6 +243,7 @@ export async function sendChatMessage(
       from: "me",
       text,
       image: imagePath ? ((await getSignedUrl("chat", imagePath)) ?? imageUri) : imageUri,
+      messageType: imagePath ? "image" : "text",
       at: Date.now(),
       status: "sent",
     };
@@ -236,6 +251,100 @@ export async function sendChatMessage(
     return { success: true, message: newMsg };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to send message" };
+  }
+}
+
+/**
+ * Securely uploads a voice recording to the private chat bucket and inserts a message record.
+ * Handles storage rollback and cleanup if database insertion fails.
+ */
+export async function sendVoiceMessage(
+  matchId: string,
+  senderId: string,
+  audioUri: string,
+  durationSec: number,
+  declaredMimeType = "audio/m4a",
+): Promise<{ success: boolean; message?: Message; error?: string }> {
+  try {
+    if (!matchId || !senderId || !audioUri) {
+      return { success: false, error: "Missing matchId, senderId, or audioUri." };
+    }
+
+    if (!isValidUUID(matchId)) {
+      if (matchId.startsWith("demo_") && !isSupabaseConfigured()) {
+        const demoMsg: Message = {
+          id: generateUUID(),
+          matchId,
+          sender: senderId,
+          from: "me",
+          text: "Voice message",
+          audio: audioUri,
+          audioDurationSec: durationSec,
+          messageType: "voice",
+          at: Date.now(),
+          status: "sent",
+        };
+        return { success: true, message: demoMsg };
+      }
+      return { success: false, error: "Invalid match reference. Please select a valid match." };
+    }
+
+    const { blob, mimeType, extension } = await prepareVoiceUpload(
+      audioUri,
+      durationSec,
+      declaredMimeType,
+    );
+
+    const messageId = generateUUID();
+    const audioPath = `${matchId}/voice_${messageId}.${extension}`;
+
+    // Upload voice recording to private chat storage
+    const { error: uploadErr } = await supabase.storage.from("chat").upload(audioPath, blob, {
+      contentType: mimeType,
+    });
+    if (uploadErr) {
+      return { success: false, error: uploadErr.message };
+    }
+
+    // Insert message into database with rollback cleanup on error
+    const { error: insertErr } = await supabase.from("messages").insert({
+      id: messageId,
+      match_id: matchId,
+      sender: senderId,
+      body: "Voice message",
+      audio_path: audioPath,
+      audio_duration_sec: Math.max(1, Math.min(300, Math.round(durationSec))),
+      message_type: "voice",
+      created_at: new Date().toISOString(),
+    });
+
+    if (insertErr) {
+      // Clean up orphaned upload on database insert failure
+      try {
+        await supabase.storage.from("chat").remove([audioPath]);
+      } catch {
+        // Log non-fatal cleanup error
+      }
+      return { success: false, error: insertErr.message };
+    }
+
+    const signedUrl = (await getSignedUrl("chat", audioPath)) ?? audioUri;
+    const newMsg: Message = {
+      id: messageId,
+      matchId,
+      sender: senderId,
+      from: "me",
+      text: "Voice message",
+      audio: signedUrl,
+      audioDurationSec: durationSec,
+      messageType: "voice",
+      at: Date.now(),
+      status: "sent",
+    };
+
+    return { success: true, message: newMsg };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to send voice message" };
   }
 }
 

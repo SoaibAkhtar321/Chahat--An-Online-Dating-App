@@ -16,7 +16,7 @@ import {
   verifyGooglePubSubJwt,
 } from "../verify-purchase/policy.ts";
 
-const PACKAGE_NAME = "com.chahat.dating";
+const PACKAGE_NAME = Deno.env.get("ANDROID_PACKAGE_NAME") || "com.chahat.dating";
 const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
     status,
@@ -58,7 +58,7 @@ Deno.serve(async (request) => {
   if (!message || typeof message.data !== "string") {
     return json(400, { error: "Pub/Sub message data is required." });
   }
-  const notification = parseGooglePlayNotification(message.data);
+  const notification = parseGooglePlayNotification(message.data, PACKAGE_NAME);
   if (!notification) return json(200, { accepted: true, ignored: true });
   const product = getGoogleProduct(notification.subscriptionId);
   if (!product) return json(200, { accepted: true, ignored: true });

@@ -1,10 +1,11 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useMemo, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
-import { Check, CheckCheck, AlertCircle } from "lucide-react-native";
+import { Check, CheckCheck, AlertCircle, Play, Pause, Mic } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Message } from "../../types";
+import { getAudioPlayerAdapter } from "../../services/voiceMedia";
 
 interface ChatBubbleProps {
   message: Message;
@@ -18,11 +19,36 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader =
   const date = new Date(message.at);
   const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  const isVoice = message.messageType === "voice" || !!message.audio;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const durationSec = message.audioDurationSec || 5;
+
   const formatDateHeader = (timestamp: number) => {
     const today = new Date().toDateString();
     const msgDate = new Date(timestamp).toDateString();
     if (today === msgDate) return "Today";
     return new Date(timestamp).toLocaleDateString([], { month: "short", day: "numeric" });
+  };
+
+  const handleTogglePlay = async () => {
+    if (!message.audio) return;
+    const player = getAudioPlayerAdapter();
+    if (isPlaying) {
+      await player.pauseAsync();
+      setIsPlaying(false);
+    } else {
+      setIsPlaying(true);
+      await player.playAsync(message.audio, (status) => {
+        if (status.durationMs > 0) {
+          setProgress(status.positionMs / status.durationMs);
+        }
+        if (status.didJustFinish) {
+          setIsPlaying(false);
+          setProgress(0);
+        }
+      });
+    }
   };
 
   return (
@@ -38,6 +64,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader =
           style={[
             styles.bubble,
             isMe ? styles.bubbleMe : styles.bubbleThem,
+            isVoice && styles.bubbleVoice,
             message.status === "failed" && styles.bubbleFailed,
           ]}
         >
@@ -45,7 +72,68 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader =
             <Image source={{ uri: message.image }} style={styles.image} contentFit="cover" />
           ) : null}
 
-          {message.text ? (
+          {isVoice ? (
+            <View style={styles.voiceContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.voicePlayBtn,
+                  isMe ? styles.voicePlayBtnMe : styles.voicePlayBtnThem,
+                ]}
+                onPress={handleTogglePlay}
+                activeOpacity={0.8}
+              >
+                {isPlaying ? (
+                  <Pause size={18} color={isMe ? Colors.primary : Colors.primaryForeground} />
+                ) : (
+                  <Play
+                    size={18}
+                    color={isMe ? Colors.primary : Colors.primaryForeground}
+                    style={{ marginLeft: 2 }}
+                  />
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.voiceDetails}>
+                <View style={styles.waveContainer}>
+                  {[30, 60, 45, 90, 70, 40, 85, 55, 100, 65, 45, 80, 50, 75, 35].map(
+                    (h, idx) => {
+                      const isActive = progress > idx / 15;
+                      return (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.waveBar,
+                            { height: (h / 100) * 20 },
+                            isMe
+                              ? isActive
+                                ? styles.waveBarActiveMe
+                                : styles.waveBarInactiveMe
+                              : isActive
+                                ? styles.waveBarActiveThem
+                                : styles.waveBarInactiveThem,
+                          ]}
+                        />
+                      );
+                    },
+                  )}
+                </View>
+
+                <View style={styles.voiceMetaRow}>
+                  <View style={styles.micTag}>
+                    <Mic size={10} color={isMe ? Colors.primaryForeground : Colors.mutedForeground} />
+                    <Text
+                      style={[
+                        styles.voiceDurationText,
+                        isMe ? styles.voiceTextMe : styles.voiceTextThem,
+                      ]}
+                    >
+                      {durationSec}s
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : message.text ? (
             <Text style={[styles.text, isMe ? styles.textMe : styles.textThem]}>
               {message.text}
             </Text>
@@ -154,5 +242,74 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   tick: {
     marginLeft: 2,
+  },
+  bubbleVoice: {
+    minWidth: 200,
+  },
+  voiceContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    gap: 10,
+  },
+  voicePlayBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voicePlayBtnMe: {
+    backgroundColor: Colors.primaryForeground,
+  },
+  voicePlayBtnThem: {
+    backgroundColor: Colors.primary,
+  },
+  voiceDetails: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  waveContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 24,
+    gap: 3,
+  },
+  waveBar: {
+    width: 3,
+    borderRadius: 1.5,
+  },
+  waveBarActiveMe: {
+    backgroundColor: Colors.primaryForeground,
+  },
+  waveBarInactiveMe: {
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+  },
+  waveBarActiveThem: {
+    backgroundColor: Colors.primary,
+  },
+  waveBarInactiveThem: {
+    backgroundColor: Colors.border,
+  },
+  voiceMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  micTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  voiceDurationText: {
+    fontSize: 10,
+    fontWeight: Typography.weights.semibold,
+  },
+  voiceTextMe: {
+    color: "rgba(255, 255, 255, 0.85)",
+  },
+  voiceTextThem: {
+    color: Colors.mutedForeground,
   },
 });

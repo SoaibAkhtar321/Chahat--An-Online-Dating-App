@@ -13,6 +13,41 @@ jest.mock(
   { virtual: true },
 );
 
+jest.mock(
+  "expo-constants",
+  () => {
+    const AppOwnership = {
+      Standalone: "standalone",
+      Expo: "expo",
+      Guest: "guest",
+    };
+    const ExecutionEnvironment = {
+      Bare: "bare",
+      Standalone: "standalone",
+      StoreClient: "storeClient",
+    };
+    const config = {
+      newArchEnabled: true,
+      android: { newArchEnabled: true },
+      ios: { newArchEnabled: true },
+      extra: { eas: { projectId: "test-id" } },
+    };
+    return {
+      __esModule: true,
+      AppOwnership,
+      ExecutionEnvironment,
+      default: {
+        appOwnership: AppOwnership.Standalone,
+        executionEnvironment: ExecutionEnvironment.Standalone,
+        expoConfig: config,
+        manifest: config,
+      },
+      expoConfig: config,
+    };
+  },
+  { virtual: true },
+);
+
 jest.mock("../mobile/src/services/supabase", () => ({
   isSupabaseConfigured: jest.fn().mockReturnValue(false),
   supabase: {

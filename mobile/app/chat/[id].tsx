@@ -30,6 +30,8 @@ import {
   Compass,
   ChevronDown,
   ChevronUp,
+  Mic,
+  Trash2,
 } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -43,9 +45,11 @@ import { useMilo } from "../../src/context/MiloContext";
 import {
   fetchMessagesForMatch,
   sendChatMessage,
+  sendVoiceMessage,
   markChatRead,
   subscribeToMatchMessages,
 } from "../../src/services/chat";
+import { getAudioRecorderAdapter, VOICE_LIMITS } from "../../src/services/voiceMedia";
 import { blockUser, reportUser, unmatchUser } from "../../src/services/moderation";
 import { supabase } from "../../src/services/supabase";
 import type { Message, Profile } from "../../src/types";
@@ -71,6 +75,11 @@ export default function ChatDetailScreen() {
   const [icebreakerLang, setIcebreakerLang] = useState<"hinglish" | "hindi" | "english">("hinglish");
   const [showGamesModal, setShowGamesModal] = useState(false);
   const [showJourney, setShowJourney] = useState(false);
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingTimerRef = useRef<any>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -167,6 +176,85 @@ export default function ChatDetailScreen() {
       refreshMatches();
       flatListRef.current?.scrollToEnd({ animated: true });
     }
+  };
+
+  const handleStartRecording = async () => {
+    const adapter = getAudioRecorderAdapter();
+    const perm = await adapter.requestPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        "Microphone Permission Required",
+        "Chahat needs access to your microphone to record voice messages.",
+      );
+      return;
+    }
+
+    const startRes = await adapter.startRecordingAsync(VOICE_LIMITS.maxDurationMs);
+    if (!startRes.success) {
+      Alert.alert("Recording Error", startRes.error || "Could not start audio recording.");
+      return;
+    }
+
+    setIsRecording(true);
+    setRecordingSeconds(0);
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingSeconds((prev) => {
+        const next = prev + 1;
+        if (next >= 60) {
+          handleStopAndSendRecording();
+        }
+        return next;
+      });
+    }, 1000);
+  };
+
+  const handleStopAndSendRecording = async () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setIsRecording(false);
+
+    const adapter = getAudioRecorderAdapter();
+    const stopRes = await adapter.stopRecordingAsync();
+    if (!stopRes.success || !stopRes.result) {
+      if (stopRes.error) {
+        Alert.alert("Voice Message", stopRes.error);
+      }
+      return;
+    }
+
+    if (!user || !matchId) return;
+
+    setSending(true);
+    const durationSec = Math.max(1, Math.round(stopRes.result.durationMs / 1000));
+    const res = await sendVoiceMessage(
+      matchId,
+      user.id,
+      stopRes.result.uri,
+      durationSec,
+      stopRes.result.mimeType,
+    );
+    setSending(false);
+
+    if (res.success && res.message) {
+      setMessages((prev) => [...prev, res.message!]);
+      refreshMatches();
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } else {
+      Alert.alert("Could not send voice message", res.error || "Please try again.");
+    }
+  };
+
+  const handleCancelRecording = async () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setIsRecording(false);
+    setRecordingSeconds(0);
+    const adapter = getAudioRecorderAdapter();
+    await adapter.cancelRecordingAsync();
   };
 
   const handleConfirmAction = async () => {

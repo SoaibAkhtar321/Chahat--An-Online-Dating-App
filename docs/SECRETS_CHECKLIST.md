@@ -53,8 +53,6 @@ catalogue (packs and prices need explicit approval). Billing rates are NOT secre
 | Play service account access | Play Console | Grants the service account API permission |
 | Release keystore | EAS credentials | App signing |
 
-## Known hardcoded value
+## Package name configuration
 
-`supabase/functions/verify-purchase/index.ts` hardcodes `PACKAGE_NAME = "com.chahat.dating"`.
-If the package ID changes (see `docs/RELEASE_DECISIONS.md`), this must change with it, along
-with `mobile/app.json`. Phase 6 moves this into configuration.
+`ANDROID_PACKAGE_NAME` can be optionally configured in Supabase Edge Function secrets if targeting an alternative package ID (defaults to `com.chahat.dating` if unset). It is read by both `verify-purchase` and `google-play-notifications`. Must remain in sync with `mobile/app.json`.

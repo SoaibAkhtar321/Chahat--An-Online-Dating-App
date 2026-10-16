@@ -27,7 +27,7 @@ jest.doMock("../mobile/src/services/supabase", () => ({
   getConfigStatus: () => ({ configured: true, missing: [] }),
 }));
 
-jest.doMock("../mobile/node_modules/expo-linking", () => ({
+jest.doMock("expo-linking", () => ({
   createURL: (path: string, options?: { queryParams?: Record<string, string> }) => {
     const query = options?.queryParams
       ? `?${new URLSearchParams(options.queryParams).toString()}`

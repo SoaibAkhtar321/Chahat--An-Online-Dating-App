@@ -4,11 +4,13 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+const isWeb = Platform.OS === "web";
+
 // Secure storage adapter for React Native mobile using hardware-backed SecureStore on device
 const ExpoSecureStoreAdapter = {
   getItem: async (key: string): Promise<string | null> => {
     try {
-      if (Platform.OS === "web") {
+      if (isWeb) {
         return await AsyncStorage.getItem(key);
       }
       return await SecureStore.getItemAsync(key);
@@ -19,7 +21,7 @@ const ExpoSecureStoreAdapter = {
   },
   setItem: async (key: string, value: string): Promise<void> => {
     try {
-      if (Platform.OS === "web") {
+      if (isWeb) {
         await AsyncStorage.setItem(key, value);
       } else {
         await SecureStore.setItemAsync(key, value);
@@ -31,7 +33,7 @@ const ExpoSecureStoreAdapter = {
   },
   removeItem: async (key: string): Promise<void> => {
     try {
-      if (Platform.OS === "web") {
+      if (isWeb) {
         await AsyncStorage.removeItem(key);
       } else {
         await SecureStore.deleteItemAsync(key);

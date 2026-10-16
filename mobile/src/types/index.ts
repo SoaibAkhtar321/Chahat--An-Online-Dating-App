@@ -77,6 +77,9 @@ export interface Message {
   from: "me" | "them";
   text: string;
   image?: string;
+  audio?: string;
+  audioDurationSec?: number;
+  messageType?: "text" | "image" | "voice" | "system";
   at: number;
   status: "sent" | "read" | "failed";
 }

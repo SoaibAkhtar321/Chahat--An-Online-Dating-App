@@ -6,7 +6,7 @@ const mockClearNotificationState = jest.fn();
 
 jest.resetModules();
 
-jest.doMock("../mobile/node_modules/expo-linking", () => ({
+jest.doMock("expo-linking", () => ({
   createURL: (path: string, options?: { queryParams?: Record<string, string> }) => {
     const query = options?.queryParams
       ? `?${new URLSearchParams(options.queryParams).toString()}`

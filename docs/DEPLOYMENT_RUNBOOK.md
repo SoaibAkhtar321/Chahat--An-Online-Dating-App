@@ -199,7 +199,9 @@ supabase functions deploy issue-call-token   # only after the call-token migrati
 21. `20260101002000_video_call_lifecycle.sql`
 22. `20260101002100_google_play_verification_hardening.sql`
 23. `20260101002200_lifecycle_entitlements_release.sql`
-24. `20260101002300_call_token_rate_limit.sql` (repository only; not yet applied to any remote)
+24. `20260101002300_call_token_rate_limit.sql`
+25. `20260101002400_coin_wallet_and_call_billing.sql`
+26. `20260101002500_voice_messages_and_chat_storage.sql` (repository only; not yet applied to any remote)
 
 ---
 

@@ -16,7 +16,7 @@ import {
   validatePurchaseRequest,
 } from "./policy.ts";
 
-const PACKAGE_NAME = "com.chahat.dating";
+const PACKAGE_NAME = Deno.env.get("ANDROID_PACKAGE_NAME") || "com.chahat.dating";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",

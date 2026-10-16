@@ -148,13 +148,16 @@ export interface GooglePlayNotification {
   notificationType: number;
 }
 
-export function parseGooglePlayNotification(encodedData: string): GooglePlayNotification | null {
+export function parseGooglePlayNotification(
+  encodedData: string,
+  expectedPackageName = "com.chahat.dating",
+): GooglePlayNotification | null {
   if (encodedData.length > 32768) return null;
   try {
     const decoded = JSON.parse(atob(encodedData));
     const note = decoded?.subscriptionNotification;
     if (
-      decoded?.packageName !== "com.chahat.dating" ||
+      decoded?.packageName !== expectedPackageName ||
       typeof note?.purchaseToken !== "string" ||
       note.purchaseToken.length < 16 ||
       note.purchaseToken.length > 4096 ||

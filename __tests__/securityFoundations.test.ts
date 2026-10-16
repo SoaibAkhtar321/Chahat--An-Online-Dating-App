@@ -88,10 +88,10 @@ describe("Phase B: Critical Security Foundations", () => {
         allMigrations.indexOf("20260101001300_critical_security_foundations.sql"),
       ).toBeGreaterThan(allMigrations.indexOf("20260101001200_daily_like_limit_20.sql"));
       expect(
-        allMigrations.indexOf("20260101001400_harden_verification_metadata_guard.sql"),
-      ).toBeGreaterThan(allMigrations.indexOf("20260101001300_critical_security_foundations.sql"));
+        allMigrations.indexOf("20260101002500_voice_messages_and_chat_storage.sql"),
+      ).toBeGreaterThan(allMigrations.indexOf("20260101002400_coin_wallet_and_call_billing.sql"));
       expect(allMigrations[allMigrations.length - 1]).toBe(
-        "20260101002400_coin_wallet_and_call_billing.sql",
+        "20260101002500_voice_messages_and_chat_storage.sql",
       );
     });
 
