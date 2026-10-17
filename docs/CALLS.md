@@ -1,7 +1,9 @@
 # Calls: provider architecture (Phase 3)
 
-Status: the server and client plumbing is complete and tested. **No call provider is integrated.**
-Until one is added, calling is reported as unavailable and no control implies a connection.
+Status: server side is implemented and tested locally (Agora token provider, authoritative expiry,
+recipient signaling, recovery snapshot, ringing push). **The mobile media adapter is not written and
+nothing has been deployed or verified against Supabase or Agora**, so the UI gate stays closed and
+calling is reported as unavailable. Not production-ready until the steps under "Deployment" are done.
 
 ## How a call works
 
@@ -72,6 +74,65 @@ could not work. They now pass the match id and an explicit type.
 
 The Edge Function answers `provider_not_configured` (503) to every authorised request. The app never
 reaches that point because the UI gate is closed. Nothing is simulated.
+
+## Lifecycle, expiry and signaling (migration `20260101002700_call_lifecycle_expiry_signaling.sql`)
+
+States: `pending` -> `accepted` | `declined` | `cancelled` | `timed_out`; `accepted` -> `ended`.
+All transitions happen in the database under a row lock (`transition_video_call`, `expire_video_calls`).
+
+### Expiry (authoritative, server-side)
+- `expire_video_calls(limit, users)` is idempotent and race-safe (`FOR UPDATE SKIP LOCKED` plus a
+  status re-check). It times out pending calls past `expires_at` (60 s, set at creation) and ends
+  accepted calls when the authorised time lapses (`free_call_until`), or, for unmetered calls, after
+  `call_max_duration_seconds` (default 10800, settable in `app_settings`, 600 to 86400). Ending an accepted call
+  fires the existing billing settlement trigger. It also deletes `call_events` older than 24 h.
+- Why it was needed (verified): expiry used to be lazy, so abandoned pending rows blocked the one-pending-per-match
+  index and abandoned accepted calls (notably unmetered ones) stayed `accepted` forever, blocked both users and
+  were never settled.
+- Scheduling: the migration schedules `expire-video-calls` every minute with `pg_cron` if the extension is available,
+  and only warns otherwise. Verify with `SELECT jobname, schedule, active FROM cron.job;` and inspect
+  `cron.job_run_details` for failures. A failed run is harmless: the next run retries, and lazy sweeps also run
+  in `create_video_call`, `get_call_sync`, `get_my_video_calls` and `transition_video_call`. Worst-case lag for a
+  ringing call to be marked `timed_out` is about 60 s after `expires_at`; accept is refused from `expires_at` onwards.
+
+### Signaling
+- `call_events` (RLS: `user_id = auth.uid()`, SELECT only, in the `supabase_realtime` publication). A trigger on
+  `video_calls` writes `incoming` to the recipient only, and the new status to both participants, for every
+  status change from any code path. Rows hold ids, type and `expires_at`; never provider tokens or billing data.
+- Client subscribes to INSERTs on `call_events` filtered by `user_id=eq.<own id>`.
+- Recovery: `get_call_sync()` returns `{server_time, last_event_id, incoming[], active[]}` after sweeping the
+  caller's own stale calls. Call it on app start, foreground and Realtime reconnect; apply events with
+  `id > last_event_id` on top; ignore an event whose call is already newer in the snapshot. Events and push are hints,
+  the database row is the truth.
+- Ringing push: category `call` through the existing outbox / `dispatch-push` pipeline (no new provider). TTL 60 s,
+  generic copy, data holds only `callId` and `matchId`. Deliveries are suppressed if the call is no longer pending,
+  the caller is blocked, or the recipient disabled `notification_preferences.calls`.
+
+### Abuse limits
+At most 3 unanswered invitations per caller per match and 6 per caller overall in 10 minutes
+(`call_create_limit_per_match_10min`, `call_create_limit_per_10min`). Accepted calls do not count.
+
+## Agora provider (server)
+`_shared/agoraProvider.ts` implements `CallProvider`; `_shared/agoraTokenBuilder.ts` wraps `npm:agora-token@2.0.5`
+(RTC token, user-account form, publisher role, at most 120 s). Channel name is `call_<call id>`, account is the verified
+user id. `endRoom` is a no-op; call length is enforced by token expiry plus the database lifecycle.
+
+## Deployment (not done)
+```bash
+supabase db push                       # applies 20260101002700 (enable pg_cron first in the dashboard)
+supabase secrets set CALL_PROVIDER=agora AGORA_APP_ID=<32 hex> AGORA_APP_CERTIFICATE=<32 hex>
+supabase functions deploy issue-call-token dispatch-push
+```
+Agora console: create the project with the App Certificate enabled (secured mode). Dashboard: confirm Realtime is on
+for `call_events`.
+
+## Known limitations
+- Mobile Agora adapter, Realtime subscription, `get_call_sync` wiring, call-push tap routing
+  (`resolveNotificationDestination` returns null for `call`) and an Android ringing channel are not implemented.
+- `is_blocked_pair()` returns false when `auth.uid()` is NULL (service role). The existing like, match and message push
+  paths use it, so they do not suppress for blocked pairs; the call path uses its own direct check. Not changed here.
+- Unmetered calls are capped by duration only; there is no media heartbeat, so an abandoned unmetered call lives until the cap.
+- Provider-side kick/webhooks are not implemented; Agora tokens simply expire.
 
 ## Adding a real provider later (needs separate approval)
 

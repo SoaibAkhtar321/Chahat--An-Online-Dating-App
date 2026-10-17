@@ -119,7 +119,7 @@ async function processDeliveries(admin: ReturnType<typeof createClient>) {
     notification_id: string;
     device_id: string;
     push_token: string;
-    category: "like" | "match" | "message";
+    category: "like" | "match" | "message" | "call";
     route_data: Record<string, unknown>;
   }>;
 
