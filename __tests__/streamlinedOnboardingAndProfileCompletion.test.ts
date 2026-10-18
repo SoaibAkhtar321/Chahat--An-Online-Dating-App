@@ -237,5 +237,14 @@ describe("Onboarding and Complete Profile Architecture & Navigation", () => {
       /unnest\(coalesce\(NEW\.intents, '{}'\) \|\| coalesce\(NEW\.interests, '{}'\) \|\| coalesce\(NEW\.languages, '{}'\)\)/,
     );
   });
+
+  test("migration 20260101002800 record_swipe inserts matches and returns is_match", () => {
+    const mig = read(
+      "supabase/migrations/20260101002800_entitlements_calling_view_once.sql",
+    );
+    expect(mig).toMatch(/INSERT INTO public\.matches \(user_a, user_b\)/);
+    expect(mig).toMatch(/'is_match', _is_match/);
+    expect(mig).toMatch(/'match', _is_match/);
+  });
 });
 

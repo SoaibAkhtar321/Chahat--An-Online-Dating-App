@@ -284,21 +284,27 @@ BEGIN
   DO UPDATE SET kind = EXCLUDED.kind, created_at = now();
 
   -- Check mutual like for instant match
-  IF _kind IN ('like','priority') THEN
-    IF EXISTS (
-      SELECT 1 FROM public.swipes
-      WHERE from_id = _to_id AND to_id = _from_id AND kind IN ('like','priority')
-    ) THEN
-      SELECT id INTO _match_id FROM public.matches
-      WHERE (user_a = _from_id AND user_b = _to_id) OR (user_a = _to_id AND user_b = _from_id);
-      _is_match := true;
-    END IF;
+  IF _kind IN ('like','priority') AND (
+       EXISTS (
+         SELECT 1 FROM public.swipes
+         WHERE from_id = _to_id AND to_id = _from_id AND kind IN ('like','priority')
+       )
+       OR (_them.is_demo AND _them.likes_you)
+  ) THEN
+    INSERT INTO public.matches (user_a, user_b)
+    VALUES (least(_from_id, _to_id), greatest(_from_id, _to_id))
+    ON CONFLICT (user_a, user_b) DO NOTHING;
+
+    SELECT id INTO _match_id FROM public.matches
+    WHERE user_a = least(_from_id, _to_id) AND user_b = greatest(_from_id, _to_id);
+    _is_match := true;
   END IF;
 
   RETURN jsonb_build_object(
     'success', true,
     'kind', _kind,
     'match', _is_match,
+    'is_match', _is_match,
     'match_id', _match_id,
     'likes_remaining', CASE WHEN _like_limit < 0 THEN -1 ELSE greatest(0, _like_limit - coalesce(_likes, 0)) END,
     'super_likes_remaining', greatest(0, _prio_limit - coalesce(_prio, 0)),
