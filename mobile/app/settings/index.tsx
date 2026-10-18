@@ -459,19 +459,10 @@ export default function SettingsScreen() {
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.navRow}
-              onPress={() => router.push("/legal/terms")}
+              onPress={() => router.push("/legal")}
               activeOpacity={0.7}
             >
-              <Text style={styles.rowLabel}>Terms of Service</Text>
-              <ChevronRight size={18} color={Colors.mutedForeground} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.navRow}
-              onPress={() => router.push("/legal/privacy")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.rowLabel}>Privacy Policy</Text>
+              <Text style={styles.rowLabel}>Legal & Privacy</Text>
               <ChevronRight size={18} color={Colors.mutedForeground} />
             </TouchableOpacity>
           </View>

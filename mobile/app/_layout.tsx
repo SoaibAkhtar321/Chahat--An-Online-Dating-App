@@ -74,6 +74,7 @@ function RootNavigation() {
           options={{ animation: "slide_from_bottom", presentation: "fullScreenModal" }}
         />
         <Stack.Screen name="explore/index" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="legal/index" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="legal/terms" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="legal/privacy" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="legal/accept" options={{ animation: "fade", gestureEnabled: false }} />
