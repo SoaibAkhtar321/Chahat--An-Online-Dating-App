@@ -1,5 +1,5 @@
 const mockStorage = new Map<string, string>();
-const mockPreferences = new Map<string, Record<string, boolean>>();
+const mockPreferences = new Map<string, Record<string, boolean | string>>();
 const mockRpc = jest.fn();
 let mockCurrentUserId = "user-a";
 
@@ -94,12 +94,18 @@ jest.doMock("../mobile/src/services/supabase", () => ({
         matches: boolean;
         messages: boolean;
         likes: boolean;
+        lock_screen_details?: string;
       }) => {
         if (table === "notification_preferences") {
+          // Postgres upsert only touches the columns that were supplied.
           mockPreferences.set(row.user_id, {
+            ...(mockPreferences.get(row.user_id) ?? {}),
             matches: row.matches,
             messages: row.messages,
             likes: row.likes,
+            ...(row.lock_screen_details !== undefined
+              ? { lock_screen_details: row.lock_screen_details }
+              : {}),
           });
         }
         return { error: null };
@@ -136,6 +142,7 @@ describe("account-scoped notification state", () => {
       matches: false,
       messages: true,
       likes: false,
+      lockScreenDetails: "name",
     });
     await expect(getNotificationPreferences("user-b")).rejects.toThrow(
       "limited to the signed-in account",
@@ -145,7 +152,31 @@ describe("account-scoped notification state", () => {
       matches: true,
       messages: true,
       likes: true,
+      lockScreenDetails: "name",
     });
+  });
+
+  it("stores the lock-screen detail level without clobbering it on partial saves, and rejects bad values", async () => {
+    await expect(
+      saveNotificationPreferences("user-a", {
+        matches: true,
+        messages: true,
+        likes: true,
+        lockScreenDetails: "preview",
+      }),
+    ).resolves.toEqual({ success: true });
+    await saveNotificationPreferences("user-a", { matches: false, messages: true, likes: true });
+    await expect(getNotificationPreferences("user-a")).resolves.toMatchObject({
+      matches: false,
+      lockScreenDetails: "preview",
+    });
+    const bad = await saveNotificationPreferences("user-a", {
+      matches: true,
+      messages: true,
+      likes: true,
+      lockScreenDetails: "everything" as never,
+    });
+    expect(bad.success).toBe(false);
   });
 
   it("clears only the specified account inbox and legacy global keys", async () => {

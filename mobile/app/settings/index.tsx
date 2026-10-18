@@ -27,6 +27,7 @@ import {
   registerPushNotificationToken,
   saveNotificationPreferences,
   unregisterPushNotificationToken,
+  type LockScreenDetails,
   type NotificationPreferences,
 } from "../../src/services/notifications";
 
@@ -53,6 +54,7 @@ export default function SettingsScreen() {
   const [notifMatches, setNotifMatches] = useState(true);
   const [notifMessages, setNotifMessages] = useState(true);
   const [notifLikes, setNotifLikes] = useState(true);
+  const [lockScreenDetails, setLockScreenDetails] = useState<LockScreenDetails>("name");
 
   const refreshLocationStatus = React.useCallback(async () => {
     const st = await getMyLocationStatus().catch(() => null);
@@ -169,6 +171,7 @@ export default function SettingsScreen() {
         setNotifMatches(prefs.matches);
         setNotifMessages(prefs.messages);
         setNotifLikes(prefs.likes);
+        setLockScreenDetails(prefs.lockScreenDetails);
       })
       .catch((error) => Alert.alert("Notifications unavailable", error.message));
   }, [user?.id]);
@@ -209,6 +212,7 @@ export default function SettingsScreen() {
         matches: val,
         messages: notifMessages,
         likes: notifLikes,
+        lockScreenDetails,
       })
     ) {
       setNotifMatches(val);
@@ -222,6 +226,7 @@ export default function SettingsScreen() {
         matches: notifMatches,
         messages: val,
         likes: notifLikes,
+        lockScreenDetails,
       })
     ) {
       setNotifMessages(val);
@@ -235,10 +240,31 @@ export default function SettingsScreen() {
         matches: notifMatches,
         messages: notifMessages,
         likes: val,
+        lockScreenDetails,
       })
     ) {
       setNotifLikes(val);
       if (val) await registerAfterEnable(true);
+    }
+  };
+
+  const LOCK_SCREEN_LABELS: Record<LockScreenDetails, string> = {
+    none: "Hidden",
+    name: "Name only",
+    preview: "Name and message preview",
+  };
+  const handleCycleLockScreenDetails = async () => {
+    const order: LockScreenDetails[] = ["none", "name", "preview"];
+    const next = order[(order.indexOf(lockScreenDetails) + 1) % order.length]!;
+    if (
+      await updateNotificationPreferences({
+        matches: notifMatches,
+        messages: notifMessages,
+        likes: notifLikes,
+        lockScreenDetails: next,
+      })
+    ) {
+      setLockScreenDetails(next);
     }
   };
 
@@ -420,6 +446,16 @@ export default function SettingsScreen() {
                   value={notifLikes}
                   onValueChange={handleToggleNotifLikes}
                 />
+                <TouchableOpacity
+                  style={styles.navRow}
+                  onPress={() => void handleCycleLockScreenDetails()}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Lock screen details: ${LOCK_SCREEN_LABELS[lockScreenDetails]}. Tap to change.`}
+                >
+                  <Text style={styles.rowLabel}>Lock screen details</Text>
+                  <Text style={styles.rowLabel}>{LOCK_SCREEN_LABELS[lockScreenDetails]}</Text>
+                </TouchableOpacity>
               </>
             ) : null}
             <TouchableOpacity

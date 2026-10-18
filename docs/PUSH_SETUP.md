@@ -24,3 +24,25 @@ The architecture is complete. Push stays **off** until you do the steps below. W
 Install the new build on a physical Android phone, sign in, accept the permission, and trigger a
 match or message from a second account. Inspect `notification_deliveries` (status, `last_error`).
 Emulators cannot receive real pushes.
+
+## What each push contains (Phase 1)
+| Event | Fired by (database, after the row is committed) | Lock-screen text | Tap opens |
+|---|---|---|---|
+| Match | `matches` insert, once per user | "It's a match!" (+ partner first name unless hidden) | that chat |
+| Message | `messages` insert (not `system` rows) | sender first name + "Sent you a message", or a 80-char preview if opted in | that chat |
+| Like / priority like | `swipes` insert, only if not already matched | "Someone likes you" - never the sender | Likes tab |
+
+- Lock-screen detail is per user (`notification_preferences.lock_screen_details`: `none`, `name` (default),
+  `preview`), read by the dispatcher at send time through the service-role-only
+  `get_push_display_context()`. Message text is never stored in the outbox. Photos, voice and
+  view-once messages are never quoted.
+- Duplicates are impossible at the key level: `UNIQUE (recipient_id, category, event_id)` on the outbox and
+  `UNIQUE (notification_id, device_id)` on deliveries.
+- Blocks, suspension, disabled categories and deleted conversations are re-checked at send time
+  (`_pair_blocked`, which works without an `auth.uid()`), so an event enqueued before a block is suppressed.
+- Foreground: a push for the chat that is currently open is not shown. Background/killed: the OS shows it;
+  tapping validates the match belongs to the signed-in user before opening it.
+- Delivery latency equals the scheduler interval. `pg_cron` runs at best every minute on standard plans
+  (sub-minute needs a recent pg_cron); a database webhook on `notification_outbox` insert that calls
+  `dispatch-push` gives near-instant delivery and is safe because dispatch is idempotent.
+- Run `supabase functions deploy dispatch-push --no-verify-jwt` again after this phase (index.ts and policy.ts changed).

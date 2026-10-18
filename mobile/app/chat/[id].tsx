@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
 import { buildNewCallRoute } from "../../src/services/calls";
 import { isCallingAvailable } from "../../src/services/callMedia";
 import { Image } from "expo-image";
@@ -96,6 +97,15 @@ export default function ChatDetailScreen() {
     interests: [],
     intent: "",
   };
+
+  // While this chat is focused, a foreground push for the same conversation is redundant.
+  useFocusEffect(
+    useCallback(() => {
+      if (!matchId) return undefined;
+      setActiveConversation(matchId);
+      return () => clearActiveConversation(matchId);
+    }, [matchId]),
+  );
 
   useEffect(() => {
     if (!matchId || !user) return;

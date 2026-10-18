@@ -1,0 +1,1288 @@
+diff --git a/__tests__/notificationLifecycle.test.ts b/__tests__/notificationLifecycle.test.ts
+index 3eaf467..2d3ac4e 100644
+--- a/__tests__/notificationLifecycle.test.ts
++++ b/__tests__/notificationLifecycle.test.ts
+@@ -1,5 +1,5 @@
+ const mockStorage = new Map<string, string>();
+-const mockPreferences = new Map<string, Record<string, boolean>>();
++const mockPreferences = new Map<string, Record<string, boolean | string>>();
+ const mockRpc = jest.fn();
+ let mockCurrentUserId = "user-a";
+ 
+@@ -94,12 +94,18 @@ jest.doMock("../mobile/src/services/supabase", () => ({
+         matches: boolean;
+         messages: boolean;
+         likes: boolean;
++        lock_screen_details?: string;
+       }) => {
+         if (table === "notification_preferences") {
++          // Postgres upsert only touches the columns that were supplied.
+           mockPreferences.set(row.user_id, {
++            ...(mockPreferences.get(row.user_id) ?? {}),
+             matches: row.matches,
+             messages: row.messages,
+             likes: row.likes,
++            ...(row.lock_screen_details !== undefined
++              ? { lock_screen_details: row.lock_screen_details }
++              : {}),
+           });
+         }
+         return { error: null };
+@@ -136,6 +142,7 @@ describe("account-scoped notification state", () => {
+       matches: false,
+       messages: true,
+       likes: false,
++      lockScreenDetails: "name",
+     });
+     await expect(getNotificationPreferences("user-b")).rejects.toThrow(
+       "limited to the signed-in account",
+@@ -145,9 +152,33 @@ describe("account-scoped notification state", () => {
+       matches: true,
+       messages: true,
+       likes: true,
++      lockScreenDetails: "name",
+     });
+   });
+ 
++  it("stores the lock-screen detail level without clobbering it on partial saves, and rejects bad values", async () => {
++    await expect(
++      saveNotificationPreferences("user-a", {
++        matches: true,
++        messages: true,
++        likes: true,
++        lockScreenDetails: "preview",
++      }),
++    ).resolves.toEqual({ success: true });
++    await saveNotificationPreferences("user-a", { matches: false, messages: true, likes: true });
++    await expect(getNotificationPreferences("user-a")).resolves.toMatchObject({
++      matches: false,
++      lockScreenDetails: "preview",
++    });
++    const bad = await saveNotificationPreferences("user-a", {
++      matches: true,
++      messages: true,
++      likes: true,
++      lockScreenDetails: "everything" as never,
++    });
++    expect(bad.success).toBe(false);
++  });
++
+   it("clears only the specified account inbox and legacy global keys", async () => {
+     mockStorage.set("milo_notifications_inbox:user-a", "[]");
+     mockStorage.set("milo_notifications_inbox:user-b", "[]");
+diff --git a/__tests__/notificationPolicy.test.ts b/__tests__/notificationPolicy.test.ts
+index 0141963..f46cf2e 100644
+--- a/__tests__/notificationPolicy.test.ts
++++ b/__tests__/notificationPolicy.test.ts
+@@ -1,4 +1,12 @@
+-import { resolveNotificationDestination } from "../mobile/src/services/notificationPolicy";
++import {
++  resolveNotificationDestination,
++  shouldPresentInForeground,
++} from "../mobile/src/services/notificationPolicy";
++import {
++  clearActiveConversation,
++  getActiveConversation,
++  setActiveConversation,
++} from "../mobile/src/services/activeConversation";
+ 
+ const match = {
+   id: "00000000-0000-4000-8000-000000000001",
+@@ -27,3 +35,33 @@ describe("notification destination authorization", () => {
+     expect(resolveNotificationDestination("safety", match.id, "user-a", match)).toBeNull();
+   });
+ });
++
++describe("foreground presentation", () => {
++  const open = "00000000-0000-4000-8000-0000000000AA";
++  const other = "00000000-0000-4000-8000-0000000000BB";
++
++  it("suppresses message and match alerts for the conversation already on screen", () => {
++    expect(shouldPresentInForeground({ category: "message", matchId: open }, open.toLowerCase())).toBe(false);
++    expect(shouldPresentInForeground({ category: "match", matchId: open }, open)).toBe(false);
++  });
++
++  it("still presents other conversations, likes, and anything unparseable", () => {
++    expect(shouldPresentInForeground({ category: "message", matchId: other }, open)).toBe(true);
++    expect(shouldPresentInForeground({ category: "like" }, open)).toBe(true);
++    expect(shouldPresentInForeground({ category: "message", matchId: open }, null)).toBe(true);
++    expect(shouldPresentInForeground(undefined, open)).toBe(true);
++    expect(shouldPresentInForeground("junk", open)).toBe(true);
++  });
++
++  it("tracks the active conversation and ignores a stale blur", () => {
++    setActiveConversation(open);
++    expect(getActiveConversation()).toBe(open.toLowerCase());
++    setActiveConversation(other);
++    clearActiveConversation(open);
++    expect(getActiveConversation()).toBe(other.toLowerCase());
++    clearActiveConversation(other);
++    expect(getActiveConversation()).toBeNull();
++    setActiveConversation("");
++    expect(getActiveConversation()).toBeNull();
++  });
++});
+diff --git a/__tests__/pushNotificationPolicy.test.ts b/__tests__/pushNotificationPolicy.test.ts
+index ff4c633..4525517 100644
+--- a/__tests__/pushNotificationPolicy.test.ts
++++ b/__tests__/pushNotificationPolicy.test.ts
+@@ -33,4 +33,61 @@ describe("server push payload policy", () => {
+     expect(isRetryableProviderStatus(503)).toBe(true);
+     expect(isRetryableProviderStatus(400)).toBe(false);
+   });
++
++  describe("authorised lock-screen details", () => {
++    const TOKEN = "ExponentPushToken[12345678-1234-1234-1234-123456789abc]";
++    const MATCH = { matchId: "00000000-0000-0000-0000-000000000001" };
++
++    it("shows the sender first name and preview for messages when the database supplied them", () => {
++      const payload = buildPushPayload(TOKEN, "n1", "message", MATCH, {
++        senderName: "Aisha",
++        preview: "see you at 7?",
++      });
++      expect(payload.title).toBe("Aisha");
++      expect(payload.body).toBe("see you at 7?");
++      expect(payload.data).toEqual({ category: "message", matchId: MATCH.matchId, notificationId: "n1" });
++    });
++
++    it("uses a neutral body when only the name is permitted", () => {
++      const payload = buildPushPayload(TOKEN, "n1", "message", MATCH, { senderName: "Aisha" });
++      expect(payload.title).toBe("Aisha");
++      expect(payload.body).toBe("Sent you a message");
++    });
++
++    it("names the match partner only in the match body", () => {
++      const payload = buildPushPayload(TOKEN, "n2", "match", MATCH, { senderName: "Aisha" });
++      expect(payload.title).toBe("It's a match!");
++      expect(payload.body).toBe("You and Aisha matched on Chahat.");
++    });
++
++    it("never identifies the sender of a like or a call, whatever the context says", () => {
++      for (const category of ["like", "call"] as const) {
++        const payload = buildPushPayload(TOKEN, "n3", category, MATCH, {
++          senderName: "Aisha",
++          preview: "secret",
++        });
++        expect(JSON.stringify(payload)).not.toContain("Aisha");
++        expect(JSON.stringify(payload)).not.toContain("secret");
++      }
++      expect(buildPushPayload(TOKEN, "n3", "like", {}, { senderName: "Aisha" }).title).toBe(
++        "Someone likes you",
++      );
++    });
++
++    it("sanitises and bounds names and previews", () => {
++      const payload = buildPushPayload(TOKEN, "n4", "message", MATCH, {
++        senderName: "  Ai\nsha\u0007  ",
++        preview: "x".repeat(500),
++      });
++      expect(payload.title).toBe("Ai sha");
++      expect(Array.from(payload.body).length).toBeLessThanOrEqual(80);
++      expect(payload.body.endsWith("…")).toBe(true);
++    });
++
++    it("falls back to generic copy for missing or blank context", () => {
++      const payload = buildPushPayload(TOKEN, "n5", "message", MATCH, { senderName: "  ", preview: null });
++      expect(payload.title).toBe("New message");
++      expect(payload.body).toBe("You received a new message.");
++    });
++  });
+ });
+diff --git a/docs/PUSH_SETUP.md b/docs/PUSH_SETUP.md
+index 5dce26b..198c3c3 100644
+--- a/docs/PUSH_SETUP.md
++++ b/docs/PUSH_SETUP.md
+@@ -24,3 +24,25 @@ The architecture is complete. Push stays **off** until you do the steps below. W
+ Install the new build on a physical Android phone, sign in, accept the permission, and trigger a
+ match or message from a second account. Inspect `notification_deliveries` (status, `last_error`).
+ Emulators cannot receive real pushes.
++
++## What each push contains (Phase 1)
++| Event | Fired by (database, after the row is committed) | Lock-screen text | Tap opens |
++|---|---|---|---|
++| Match | `matches` insert, once per user | "It's a match!" (+ partner first name unless hidden) | that chat |
++| Message | `messages` insert (not `system` rows) | sender first name + "Sent you a message", or a 80-char preview if opted in | that chat |
++| Like / priority like | `swipes` insert, only if not already matched | "Someone likes you" - never the sender | Likes tab |
++
++- Lock-screen detail is per user (`notification_preferences.lock_screen_details`: `none`, `name` (default),
++  `preview`), read by the dispatcher at send time through the service-role-only
++  `get_push_display_context()`. Message text is never stored in the outbox. Photos, voice and
++  view-once messages are never quoted.
++- Duplicates are impossible at the key level: `UNIQUE (recipient_id, category, event_id)` on the outbox and
++  `UNIQUE (notification_id, device_id)` on deliveries.
++- Blocks, suspension, disabled categories and deleted conversations are re-checked at send time
++  (`_pair_blocked`, which works without an `auth.uid()`), so an event enqueued before a block is suppressed.
++- Foreground: a push for the chat that is currently open is not shown. Background/killed: the OS shows it;
++  tapping validates the match belongs to the signed-in user before opening it.
++- Delivery latency equals the scheduler interval. `pg_cron` runs at best every minute on standard plans
++  (sub-minute needs a recent pg_cron); a database webhook on `notification_outbox` insert that calls
++  `dispatch-push` gives near-instant delivery and is safe because dispatch is idempotent.
++- Run `supabase functions deploy dispatch-push --no-verify-jwt` again after this phase (index.ts and policy.ts changed).
+diff --git a/mobile/app/chat/[id].tsx b/mobile/app/chat/[id].tsx
+index 070d523..d0514e3 100644
+--- a/mobile/app/chat/[id].tsx
++++ b/mobile/app/chat/[id].tsx
+@@ -1,4 +1,4 @@
+-import React, { useEffect, useState, useRef, useMemo } from "react";
++import React, { useCallback, useEffect, useState, useRef, useMemo } from "react";
+ import {
+   View,
+   Text,
+@@ -12,7 +12,8 @@ import {
+ } from "react-native";
+ import { Alert } from "../../src/utils/alert";
+ import { SafeAreaView } from "react-native-safe-area-context";
+-import { useLocalSearchParams, useRouter } from "expo-router";
++import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
++import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
+ import { buildNewCallRoute } from "../../src/services/calls";
+ import { isCallingAvailable } from "../../src/services/callMedia";
+ import { Image } from "expo-image";
+@@ -97,6 +98,15 @@ export default function ChatDetailScreen() {
+     intent: "",
+   };
+ 
++  // While this chat is focused, a foreground push for the same conversation is redundant.
++  useFocusEffect(
++    useCallback(() => {
++      if (!matchId) return undefined;
++      setActiveConversation(matchId);
++      return () => clearActiveConversation(matchId);
++    }, [matchId]),
++  );
++
+   useEffect(() => {
+     if (!matchId || !user) return;
+ 
+diff --git a/mobile/app/settings/index.tsx b/mobile/app/settings/index.tsx
+index 04032d3..c4586e6 100644
+--- a/mobile/app/settings/index.tsx
++++ b/mobile/app/settings/index.tsx
+@@ -27,6 +27,7 @@ import {
+   registerPushNotificationToken,
+   saveNotificationPreferences,
+   unregisterPushNotificationToken,
++  type LockScreenDetails,
+   type NotificationPreferences,
+ } from "../../src/services/notifications";
+ 
+@@ -53,6 +54,7 @@ export default function SettingsScreen() {
+   const [notifMatches, setNotifMatches] = useState(true);
+   const [notifMessages, setNotifMessages] = useState(true);
+   const [notifLikes, setNotifLikes] = useState(true);
++  const [lockScreenDetails, setLockScreenDetails] = useState<LockScreenDetails>("name");
+ 
+   const refreshLocationStatus = React.useCallback(async () => {
+     const st = await getMyLocationStatus().catch(() => null);
+@@ -169,6 +171,7 @@ export default function SettingsScreen() {
+         setNotifMatches(prefs.matches);
+         setNotifMessages(prefs.messages);
+         setNotifLikes(prefs.likes);
++        setLockScreenDetails(prefs.lockScreenDetails);
+       })
+       .catch((error) => Alert.alert("Notifications unavailable", error.message));
+   }, [user?.id]);
+@@ -209,6 +212,7 @@ export default function SettingsScreen() {
+         matches: val,
+         messages: notifMessages,
+         likes: notifLikes,
++        lockScreenDetails,
+       })
+     ) {
+       setNotifMatches(val);
+@@ -222,6 +226,7 @@ export default function SettingsScreen() {
+         matches: notifMatches,
+         messages: val,
+         likes: notifLikes,
++        lockScreenDetails,
+       })
+     ) {
+       setNotifMessages(val);
+@@ -235,6 +240,7 @@ export default function SettingsScreen() {
+         matches: notifMatches,
+         messages: notifMessages,
+         likes: val,
++        lockScreenDetails,
+       })
+     ) {
+       setNotifLikes(val);
+@@ -242,6 +248,26 @@ export default function SettingsScreen() {
+     }
+   };
+ 
++  const LOCK_SCREEN_LABELS: Record<LockScreenDetails, string> = {
++    none: "Hidden",
++    name: "Name only",
++    preview: "Name and message preview",
++  };
++  const handleCycleLockScreenDetails = async () => {
++    const order: LockScreenDetails[] = ["none", "name", "preview"];
++    const next = order[(order.indexOf(lockScreenDetails) + 1) % order.length]!;
++    if (
++      await updateNotificationPreferences({
++        matches: notifMatches,
++        messages: notifMessages,
++        likes: notifLikes,
++        lockScreenDetails: next,
++      })
++    ) {
++      setLockScreenDetails(next);
++    }
++  };
++
+   // Dialogs
+   const [logoutVisible, setLogoutVisible] = useState(false);
+   const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0);
+@@ -420,6 +446,16 @@ export default function SettingsScreen() {
+                   value={notifLikes}
+                   onValueChange={handleToggleNotifLikes}
+                 />
++                <TouchableOpacity
++                  style={styles.navRow}
++                  onPress={() => void handleCycleLockScreenDetails()}
++                  activeOpacity={0.7}
++                  accessibilityRole="button"
++                  accessibilityLabel={`Lock screen details: ${LOCK_SCREEN_LABELS[lockScreenDetails]}. Tap to change.`}
++                >
++                  <Text style={styles.rowLabel}>Lock screen details</Text>
++                  <Text style={styles.rowLabel}>{LOCK_SCREEN_LABELS[lockScreenDetails]}</Text>
++                </TouchableOpacity>
+               </>
+             ) : null}
+             <TouchableOpacity
+diff --git a/mobile/src/components/notifications/NotificationResponseHandler.tsx b/mobile/src/components/notifications/NotificationResponseHandler.tsx
+index 407989d..71fef12 100644
+--- a/mobile/src/components/notifications/NotificationResponseHandler.tsx
++++ b/mobile/src/components/notifications/NotificationResponseHandler.tsx
+@@ -1,18 +1,20 @@
+ import { useEffect, useRef } from "react";
+ import { Alert } from "../../utils/alert";
+ import * as Notifications from "expo-notifications";
+-import { useRouter } from "expo-router";
++import { useRootNavigationState, useRouter } from "expo-router";
+ import { useAuth } from "../../context/AuthContext";
+ import { supabase } from "../../services/supabase";
+ import { resolveNotificationDestination } from "../../services/notificationPolicy";
+ 
+ export function NotificationResponseHandler() {
+   const router = useRouter();
++  // A cold-start tap can arrive before the root navigator has mounted; navigating then throws.
++  const navigationReady = Boolean(useRootNavigationState()?.key);
+   const { user } = useAuth();
+   const handled = useRef(new Set<string>());
+ 
+   useEffect(() => {
+-    if (!user) return;
++    if (!user || !navigationReady) return;
+     let active = true;
+ 
+     const openDestination = async (response: Notifications.NotificationResponse) => {
+@@ -64,7 +66,7 @@ export function NotificationResponseHandler() {
+       active = false;
+       subscription.remove();
+     };
+-  }, [router, user]);
++  }, [router, user, navigationReady]);
+ 
+   return null;
+ }
+diff --git a/mobile/src/services/activeConversation.ts b/mobile/src/services/activeConversation.ts
+new file mode 100644
+index 0000000..8229889
+--- /dev/null
++++ b/mobile/src/services/activeConversation.ts
+@@ -0,0 +1,16 @@
++// Tracks which chat the signed-in user is looking at right now, so a foreground push for that same
++// conversation can be suppressed. Module-level on purpose: the notification handler runs outside React.
++let activeMatchId: string | null = null;
++
++export function setActiveConversation(matchId: string | null | undefined): void {
++  activeMatchId = typeof matchId === "string" && matchId.length > 0 ? matchId.toLowerCase() : null;
++}
++
++/** Clears only if `matchId` is still the active one, so a late blur can't wipe a newer chat. */
++export function clearActiveConversation(matchId: string | null | undefined): void {
++  if (typeof matchId === "string" && activeMatchId === matchId.toLowerCase()) activeMatchId = null;
++}
++
++export function getActiveConversation(): string | null {
++  return activeMatchId;
++}
+diff --git a/mobile/src/services/notificationPolicy.ts b/mobile/src/services/notificationPolicy.ts
+index e8a69d6..3dcdd90 100644
+--- a/mobile/src/services/notificationPolicy.ts
++++ b/mobile/src/services/notificationPolicy.ts
+@@ -21,3 +21,20 @@ export function resolveNotificationDestination(
+   }
+   return { kind: "chat", matchId };
+ }
++
++/**
++ * Foreground presentation: stay quiet when the push is about the conversation that is already open
++ * (the message or match is visible on screen). Everything else is presented normally.
++ */
++export function shouldPresentInForeground(data: unknown, activeMatchId: string | null): boolean {
++  if (!activeMatchId || !data || typeof data !== "object") return true;
++  const { category, matchId } = data as { category?: unknown; matchId?: unknown };
++  if (
++    (category === "message" || category === "match") &&
++    typeof matchId === "string" &&
++    matchId.toLowerCase() === activeMatchId.toLowerCase()
++  ) {
++    return false;
++  }
++  return true;
++}
+diff --git a/mobile/src/services/notifications.ts b/mobile/src/services/notifications.ts
+index 7f6633c..db28f63 100644
+--- a/mobile/src/services/notifications.ts
++++ b/mobile/src/services/notifications.ts
+@@ -8,6 +8,8 @@ import { Platform } from "react-native";
+ import { isServiceConfigured } from "../config/appConfig";
+ import { supabase, isSupabaseConfigured } from "./supabase";
+ import { hasConsent } from "./consent";
++import { getActiveConversation } from "./activeConversation";
++import { shouldPresentInForeground } from "./notificationPolicy";
+ 
+ export interface NoticeItem {
+   id: string;
+@@ -24,10 +26,14 @@ export interface NoticeItem {
+   };
+ }
+ 
++export type LockScreenDetails = "none" | "name" | "preview";
++
+ export interface NotificationPreferences {
+   matches: boolean;
+   messages: boolean;
+   likes: boolean;
++  /** What a lock screen may show for matches/messages: nothing, the sender's first name, or a preview. */
++  lockScreenDetails: LockScreenDetails;
+ }
+ 
+ export type PushRegistrationResult =
+@@ -46,8 +52,11 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
+   matches: true,
+   messages: true,
+   likes: true,
++  lockScreenDetails: "name",
+ };
+ 
++const LOCK_SCREEN_DETAILS: readonly LockScreenDetails[] = ["none", "name", "preview"];
++
+ const LEGACY_STORAGE_KEY_NOTICES = "milo_notifications_inbox";
+ const LEGACY_STORAGE_KEY_PREFS = "milo_notification_prefs";
+ const LEGACY_STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
+@@ -77,23 +86,40 @@ export async function getNotificationPreferences(userId: string): Promise<Notifi
+   await requireAuthenticatedUser(userId);
+   const { data, error } = await supabase
+     .from("notification_preferences")
+-    .select("matches, messages, likes")
++    .select("matches, messages, likes, lock_screen_details")
+     .eq("user_id", userId)
+     .maybeSingle();
+   if (error) throw new Error(`Could not load notification preferences: ${error.message}`);
+-  return { ...DEFAULT_PREFERENCES, ...(data ?? {}) };
++  const row = data as {
++    matches?: boolean;
++    messages?: boolean;
++    likes?: boolean;
++    lock_screen_details?: string;
++  } | null;
++  return {
++    matches: row?.matches ?? DEFAULT_PREFERENCES.matches,
++    messages: row?.messages ?? DEFAULT_PREFERENCES.messages,
++    likes: row?.likes ?? DEFAULT_PREFERENCES.likes,
++    lockScreenDetails: LOCK_SCREEN_DETAILS.includes(row?.lock_screen_details as LockScreenDetails)
++      ? (row?.lock_screen_details as LockScreenDetails)
++      : DEFAULT_PREFERENCES.lockScreenDetails,
++  };
+ }
+ 
+ export async function saveNotificationPreferences(
+   userId: string,
+-  prefs: NotificationPreferences,
++  // lockScreenDetails is optional so a partial update (e.g. a single toggle) never overwrites it.
++  prefs: Omit<NotificationPreferences, "lockScreenDetails"> & {
++    lockScreenDetails?: LockScreenDetails;
++  },
+ ): Promise<{ success: boolean; error?: string }> {
+   if (
+     typeof prefs.matches !== "boolean" ||
+     typeof prefs.messages !== "boolean" ||
+-    typeof prefs.likes !== "boolean"
++    typeof prefs.likes !== "boolean" ||
++    (prefs.lockScreenDetails !== undefined && !LOCK_SCREEN_DETAILS.includes(prefs.lockScreenDetails))
+   ) {
+-    return { success: false, error: "Notification preferences must be boolean values." };
++    return { success: false, error: "Notification preferences are invalid." };
+   }
+   try {
+     await requireAuthenticatedUser(userId);
+@@ -102,6 +128,9 @@ export async function saveNotificationPreferences(
+       matches: prefs.matches,
+       messages: prefs.messages,
+       likes: prefs.likes,
++      ...(prefs.lockScreenDetails !== undefined
++        ? { lock_screen_details: prefs.lockScreenDetails }
++        : {}),
+       updated_at: new Date().toISOString(),
+     });
+     if (error) return { success: false, error: error.message };
+@@ -329,9 +358,11 @@ export async function openNotificationSettings(): Promise<void> {
+ }
+ 
+ Notifications.setNotificationHandler({
+-  handleNotification: async () => ({
+-    shouldShowAlert: true,
+-    shouldPlaySound: true,
+-    shouldSetBadge: false,
+-  }),
++  handleNotification: async (notification) => {
++    const present = shouldPresentInForeground(
++      notification.request.content.data,
++      getActiveConversation(),
++    );
++    return { shouldShowAlert: present, shouldPlaySound: present, shouldSetBadge: false };
++  },
+ });
+diff --git a/supabase/functions/dispatch-push/index.ts b/supabase/functions/dispatch-push/index.ts
+index 34864c7..50831aa 100644
+--- a/supabase/functions/dispatch-push/index.ts
++++ b/supabase/functions/dispatch-push/index.ts
+@@ -1,5 +1,5 @@
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+-import { buildPushPayload, isRetryableProviderStatus } from "./policy.ts";
++import { buildPushPayload, isRetryableProviderStatus, type PushDisplayContext } from "./policy.ts";
+ import { safeErrorSummary } from "../_shared/safeLog.ts";
+ 
+ const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
+@@ -58,12 +58,30 @@ async function completeReceipt(
+ 
+ async function processReceipts(admin: ReturnType<typeof createClient>) {
+   const receiptCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
++  // Expo only keeps receipts for 24 hours. Anything older can never be confirmed, so close it out
++  // instead of re-querying it forever (and starving fresher rows of the 1000-row window).
++  const expiryCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
++  const { data: stale, error: staleError } = await admin
++    .from("notification_deliveries")
++    .select("id")
++    .eq("status", "submitted")
++    .is("receipt_checked_at", null)
++    .lt("submitted_at", expiryCutoff)
++    .order("submitted_at", { ascending: true })
++    .limit(200);
++  if (staleError) throw new Error(`Receipt expiry query failed: ${staleError.message}`);
++  for (const row of (stale ?? []) as Array<{ id: string }>) {
++    await completeReceipt(admin, row.id, false, "ReceiptExpired");
++  }
++
+   const { data, error } = await admin
+     .from("notification_deliveries")
+     .select("id, device_id, provider_ticket")
+     .eq("status", "submitted")
+     .is("receipt_checked_at", null)
+     .lte("submitted_at", receiptCutoff)
++    .gte("submitted_at", expiryCutoff)
++    .order("submitted_at", { ascending: true })
+     .limit(1000);
+   if (error) throw new Error(`Receipt query failed: ${error.message}`);
+ 
+@@ -106,6 +124,33 @@ async function processReceipts(admin: ReturnType<typeof createClient>) {
+   }
+ }
+ 
++async function loadDisplayContexts(
++  admin: ReturnType<typeof createClient>,
++  notificationIds: string[],
++): Promise<Map<string, PushDisplayContext>> {
++  const contexts = new Map<string, PushDisplayContext>();
++  const unique = [...new Set(notificationIds)];
++  for (let offset = 0; offset < unique.length; offset += 100) {
++    const { data, error } = await admin.rpc("get_push_display_context", {
++      _notification_ids: unique.slice(offset, offset + 100),
++    });
++    // Lock-screen details are optional: on any failure fall back to the generic copy rather than
++    // failing or delaying the notification.
++    if (error) {
++      console.error("Push display context unavailable; using generic copy.");
++      continue;
++    }
++    for (const row of (data ?? []) as Array<{
++      notification_id: string;
++      sender_name: string | null;
++      preview: string | null;
++    }>) {
++      contexts.set(row.notification_id, { senderName: row.sender_name, preview: row.preview });
++    }
++  }
++  return contexts;
++}
++
+ async function processDeliveries(admin: ReturnType<typeof createClient>) {
+   const { error: materializeError } = await admin.rpc("materialize_push_deliveries", {
+     _limit: 100,
+@@ -124,6 +169,11 @@ async function processDeliveries(admin: ReturnType<typeof createClient>) {
+     route_data: Record<string, unknown>;
+   }>;
+ 
++  const displayContexts = await loadDisplayContexts(
++    admin,
++    jobs.filter((job) => job.category === "message" || job.category === "match").map((job) => job.notification_id),
++  );
++
+   for (let offset = 0; offset < jobs.length; offset += 100) {
+     const batch = jobs.slice(offset, offset + 100);
+     let response: Response;
+@@ -138,6 +188,7 @@ async function processDeliveries(admin: ReturnType<typeof createClient>) {
+               job.notification_id,
+               job.category,
+               job.route_data ?? {},
++              displayContexts.get(job.notification_id),
+             ),
+           ),
+         ),
+diff --git a/supabase/functions/dispatch-push/policy.ts b/supabase/functions/dispatch-push/policy.ts
+index 19ac0aa..e46446d 100644
+--- a/supabase/functions/dispatch-push/policy.ts
++++ b/supabase/functions/dispatch-push/policy.ts
+@@ -16,11 +16,34 @@ export interface PushPayload {
+   ttl: number;
+ }
+ 
++/**
++ * Lock-screen details the database already authorised for this recipient
++ * (get_push_display_context honours notification_preferences.lock_screen_details).
++ * Never taken from route_data, and ignored for likes and calls so a sender can never be identified.
++ */
++export interface PushDisplayContext {
++  senderName?: string | null;
++  preview?: string | null;
++}
++
++const MAX_NAME = 20;
++const MAX_PREVIEW = 80;
++
++function cleanText(value: unknown, max: number): string | undefined {
++  if (typeof value !== "string") return undefined;
++  // eslint-disable-next-line no-control-regex
++  const text = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
++  if (!text) return undefined;
++  const chars = Array.from(text);
++  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : text;
++}
++
+ export function buildPushPayload(
+   token: string,
+   notificationId: string,
+   category: NotificationCategory,
+   routeData: Record<string, unknown>,
++  display: PushDisplayContext = {},
+ ): PushPayload {
+   const copy = {
+     like: { title: "Someone likes you", body: "Open Chahat to see who." },
+@@ -28,6 +51,15 @@ export function buildPushPayload(
+     message: { title: "New message", body: "You received a new message." },
+     call: { title: "Incoming call", body: "Someone is calling you on Chahat." },
+   }[category];
++  const name =
++    category === "match" || category === "message" ? cleanText(display.senderName, MAX_NAME) : undefined;
++  if (category === "match" && name) {
++    copy.body = `You and ${name} matched on Chahat.`;
++  }
++  if (category === "message" && name) {
++    copy.title = name;
++    copy.body = cleanText(display.preview, MAX_PREVIEW) ?? "Sent you a message";
++  }
+   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+   const callId =
+     category === "call" && typeof routeData.callId === "string" && UUID.test(routeData.callId)
+diff --git a/supabase/migrations/20260101003700_push_phase1_display_and_dedupe.sql b/supabase/migrations/20260101003700_push_phase1_display_and_dedupe.sql
+new file mode 100644
+index 0000000..a576404
+--- /dev/null
++++ b/supabase/migrations/20260101003700_push_phase1_display_and_dedupe.sql
+@@ -0,0 +1,400 @@
++-- 20260101003700_push_phase1_display_and_dedupe.sql
++-- Chahat Phase 1 (standard push): repairs/extends the existing outbox -> dispatch-push pipeline.
++-- No new tables and no new dispatcher. Changes:
++--   1. notification_preferences.lock_screen_details: what a lock screen may show (none | name | preview).
++--   2. Priority likes ("kind = priority") also enqueue the same privacy-safe like event.
++--   3. System chat messages never enqueue a push.
++--   4. get_push_display_context(): service-role-only lookup of the permitted sender first name and
++--      optional preview, read at dispatch time (nothing about message content is stored in the outbox).
++--   5. claim_push_deliveries(): suppress match/message pushes whose source row no longer exists.
++BEGIN;
++
++-- ---------- 1. Lock-screen detail preference ----------
++ALTER TABLE public.notification_preferences
++  ADD COLUMN IF NOT EXISTS lock_screen_details text NOT NULL DEFAULT 'name'
++  CHECK (lock_screen_details IN ('none', 'name', 'preview'));
++
++-- ---------- 2. Likes: include priority likes, still never reveal the sender ----------
++CREATE OR REPLACE FUNCTION public.enqueue_like_notification()
++RETURNS trigger
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _recipient uuid;
++BEGIN
++  IF NEW.kind NOT IN ('like', 'priority')
++     OR NEW.from_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
++     OR NEW.to_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
++     OR EXISTS (
++       SELECT 1 FROM public.matches m
++       WHERE m.user_a = least(NEW.from_id, NEW.to_id)
++         AND m.user_b = greatest(NEW.from_id, NEW.to_id)
++     ) THEN
++    RETURN NEW;
++  END IF;
++
++  _recipient := NEW.to_id::uuid;
++  INSERT INTO public.notification_outbox (recipient_id, actor_id, category, event_id)
++  SELECT _recipient, NEW.from_id, 'like', NEW.from_id || ':' || NEW.to_id
++  WHERE EXISTS (
++    SELECT 1 FROM public.profiles recipient
++    JOIN public.profiles actor ON actor.id = NEW.from_id
++    WHERE recipient.id = NEW.to_id AND recipient.is_demo = false
++      AND recipient.status = 'active' AND recipient.onboarded
++      AND actor.is_demo = false AND actor.status = 'active' AND actor.onboarded
++      AND NOT public._pair_blocked(NEW.from_id, NEW.to_id)
++  )
++  ON CONFLICT (recipient_id, category, event_id) DO NOTHING;
++  RETURN NEW;
++END;
++$$;
++REVOKE EXECUTE ON FUNCTION public.enqueue_like_notification() FROM PUBLIC, anon, authenticated;
++
++-- ---------- 3. Messages: skip system rows ----------
++CREATE OR REPLACE FUNCTION public.enqueue_message_notification()
++RETURNS trigger
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _match public.matches;
++  _recipient text;
++BEGIN
++  IF NEW.message_type = 'system' THEN
++    RETURN NEW;
++  END IF;
++  SELECT * INTO _match FROM public.matches WHERE id = NEW.match_id;
++  IF _match.id IS NULL OR public._pair_blocked(_match.user_a, _match.user_b) THEN
++    RETURN NEW;
++  END IF;
++  _recipient := CASE WHEN NEW.sender = _match.user_a THEN _match.user_b ELSE _match.user_a END;
++
++  IF _recipient ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
++     AND NEW.sender ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
++    INSERT INTO public.notification_outbox (
++      recipient_id, actor_id, category, event_id, route_data
++    )
++    SELECT _recipient::uuid, NEW.sender, 'message', NEW.id::text,
++           jsonb_build_object('matchId', _match.id::text)
++    WHERE EXISTS (
++      SELECT 1 FROM public.profiles recipient
++      JOIN public.profiles actor ON actor.id = NEW.sender
++      WHERE recipient.id = _recipient AND recipient.is_demo = false
++        AND recipient.status = 'active' AND recipient.onboarded
++        AND actor.is_demo = false AND actor.status = 'active' AND actor.onboarded
++        AND NOT public._pair_blocked(_recipient, NEW.sender)
++    )
++    ON CONFLICT (recipient_id, category, event_id) DO NOTHING;
++  END IF;
++  RETURN NEW;
++END;
++$$;
++REVOKE EXECUTE ON FUNCTION public.enqueue_message_notification() FROM PUBLIC, anon, authenticated;
++
++-- ---------- 4. Source-row existence + display context (internal / service role only) ----------
++CREATE OR REPLACE FUNCTION public._notification_source_exists(_category text, _event_id text)
++RETURNS boolean
++LANGUAGE sql
++STABLE
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++  SELECT CASE _category
++    WHEN 'match'   THEN EXISTS (SELECT 1 FROM public.matches  WHERE id::text = _event_id)
++    WHEN 'message' THEN EXISTS (SELECT 1 FROM public.messages WHERE id::text = _event_id)
++    ELSE true
++  END
++$$;
++REVOKE EXECUTE ON FUNCTION public._notification_source_exists(text, text)
++  FROM PUBLIC, anon, authenticated, service_role;
++
++CREATE OR REPLACE FUNCTION public.get_push_display_context(_notification_ids uuid[])
++RETURNS TABLE (notification_id uuid, sender_name text, preview text)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++BEGIN
++  IF coalesce(auth.role(), '') <> 'service_role' THEN
++    RAISE EXCEPTION 'Service role required';
++  END IF;
++  IF _notification_ids IS NULL OR cardinality(_notification_ids) > 100 THEN
++    RAISE EXCEPTION 'Invalid batch size';
++  END IF;
++
++  RETURN QUERY
++  SELECT
++    o.id,
++    -- First name only; never for likes. Gated by the recipient's lock-screen preference.
++    CASE
++      WHEN o.category IN ('match', 'message')
++       AND coalesce(pref.lock_screen_details, 'name') IN ('name', 'preview')
++      THEN nullif(left(split_part(btrim(regexp_replace(actor.name, '[[:cntrl:]]+', ' ', 'g')), ' ', 1), 20), '')
++    END,
++    -- Preview only when the recipient opted in; media and view-once content is never quoted.
++    CASE
++      WHEN o.category = 'message'
++       AND coalesce(pref.lock_screen_details, 'name') = 'preview'
++       AND m.id IS NOT NULL
++      THEN CASE
++        WHEN m.is_view_once OR m.message_type = 'image' OR m.image_path IS NOT NULL
++          THEN 'Sent you a photo'
++        WHEN m.message_type = 'voice' OR m.audio_path IS NOT NULL
++          THEN 'Sent you a voice message'
++        WHEN btrim(m.body) <> ''
++          THEN left(btrim(regexp_replace(m.body, '[[:space:][:cntrl:]]+', ' ', 'g')), 80)
++        ELSE 'Sent you a message'
++      END
++    END
++  FROM unnest(_notification_ids) AS ids(id)
++  JOIN public.notification_outbox o ON o.id = ids.id
++  JOIN public.profiles actor ON actor.id = o.actor_id
++  LEFT JOIN public.notification_preferences pref ON pref.user_id = o.recipient_id
++  LEFT JOIN public.messages m ON o.category = 'message' AND m.id::text = o.event_id;
++END;
++$$;
++REVOKE EXECUTE ON FUNCTION public.get_push_display_context(uuid[]) FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.get_push_display_context(uuid[]) TO service_role;
++
++-- ---------- 4b. Blocks must hold when no auth.uid() exists (cron / service role / system) ----------
++-- public.is_blocked_pair() deliberately answers false unless the caller is one of the pair, so a block placed
++-- after an event was enqueued did not stop its delivery. Every enqueue/dispatch path below uses the
++-- unconditional internal helper public._pair_blocked() instead.
++CREATE OR REPLACE FUNCTION public.enqueue_match_notifications()
++RETURNS trigger
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _recipient text;
++  _actor text;
++BEGIN
++  IF public._pair_blocked(NEW.user_a, NEW.user_b) THEN
++    RETURN NEW;
++  END IF;
++
++  FOREACH _recipient IN ARRAY ARRAY[NEW.user_a, NEW.user_b] LOOP
++    _actor := CASE WHEN _recipient = NEW.user_a THEN NEW.user_b ELSE NEW.user_a END;
++    IF _recipient ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
++       AND _actor ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
++      INSERT INTO public.notification_outbox (
++        recipient_id, actor_id, category, event_id, route_data
++      )
++      SELECT _recipient::uuid, _actor, 'match', NEW.id::text,
++             jsonb_build_object('matchId', NEW.id::text)
++      WHERE EXISTS (
++        SELECT 1 FROM public.profiles recipient
++        JOIN public.profiles actor ON actor.id = _actor
++        WHERE recipient.id = _recipient AND recipient.is_demo = false
++          AND recipient.status = 'active' AND recipient.onboarded
++          AND actor.is_demo = false AND actor.status = 'active' AND actor.onboarded
++          AND NOT public._pair_blocked(_recipient, _actor)
++      )
++      ON CONFLICT (recipient_id, category, event_id) DO NOTHING;
++    END IF;
++  END LOOP;
++  RETURN NEW;
++END;
++$$;
++REVOKE EXECUTE ON FUNCTION public.enqueue_match_notifications() FROM PUBLIC, anon, authenticated;
++
++CREATE OR REPLACE FUNCTION public.materialize_push_deliveries(_limit integer DEFAULT 100)
++RETURNS integer
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _processed integer;
++BEGIN
++  IF coalesce(auth.role(), '') <> 'service_role' THEN
++    RAISE EXCEPTION 'Service role required';
++  END IF;
++  IF _limit < 1 OR _limit > 500 THEN
++    RAISE EXCEPTION 'Invalid batch size';
++  END IF;
++
++  WITH candidates AS MATERIALIZED (
++    SELECT o.id
++    FROM public.notification_outbox o
++    WHERE o.processed_at IS NULL
++    ORDER BY o.created_at, o.id
++    FOR UPDATE SKIP LOCKED
++    LIMIT _limit
++  ),
++  eligible AS (
++    SELECT o.id AS notification_id, d.id AS device_id
++    FROM candidates c
++    JOIN public.notification_outbox o ON o.id = c.id
++    JOIN public.profiles recipient ON recipient.id = o.recipient_id::text
++    JOIN public.profiles actor ON actor.id = o.actor_id
++    JOIN public.push_devices d ON d.user_id = o.recipient_id AND d.active
++    LEFT JOIN public.notification_preferences pref ON pref.user_id = o.recipient_id
++    WHERE recipient.is_demo = false AND recipient.status = 'active' AND recipient.onboarded
++      AND actor.is_demo = false AND actor.status = 'active' AND actor.onboarded
++      AND NOT public._pair_blocked(recipient.id, actor.id)
++      AND CASE o.category
++        WHEN 'like' THEN coalesce(pref.likes, true)
++        WHEN 'match' THEN coalesce(pref.matches, true)
++        WHEN 'message' THEN coalesce(pref.messages, true)
++        WHEN 'call' THEN coalesce(pref.calls, true)
++      END
++      AND (o.category <> 'call' OR (
++        EXISTS (
++          SELECT 1 FROM public.video_calls vc
++          WHERE vc.id::text = o.event_id AND vc.status = 'pending' AND vc.expires_at > now()
++        )
++        AND NOT public._pair_blocked(o.recipient_id::text, o.actor_id)
++      ))
++  ),
++  inserted AS (
++    INSERT INTO public.notification_deliveries (notification_id, device_id)
++    SELECT notification_id, device_id FROM eligible
++    ON CONFLICT (notification_id, device_id) DO NOTHING
++    RETURNING id
++  )
++  UPDATE public.notification_outbox o
++  SET processed_at = now()
++  FROM candidates c
++  WHERE o.id = c.id;
++
++  GET DIAGNOSTICS _processed = ROW_COUNT;
++  RETURN _processed;
++END;
++$$;
++REVOKE EXECUTE ON FUNCTION public.materialize_push_deliveries(integer) FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.materialize_push_deliveries(integer) TO service_role;
++
++-- ---------- 5. Claim: also suppress pushes whose source row is gone (and honour blocks) ----------
++CREATE OR REPLACE FUNCTION public.claim_push_deliveries(_limit integer DEFAULT 100)
++RETURNS TABLE (
++  delivery_id uuid,
++  notification_id uuid,
++  device_id uuid,
++  push_token text,
++  category text,
++  route_data jsonb
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++BEGIN
++  IF coalesce(auth.role(), '') <> 'service_role' THEN
++    RAISE EXCEPTION 'Service role required';
++  END IF;
++  IF _limit < 1 OR _limit > 100 THEN
++    RAISE EXCEPTION 'Invalid batch size';
++  END IF;
++
++  UPDATE public.notification_deliveries d
++  SET status = 'suppressed', last_error = 'RecipientIneligible'
++  FROM public.notification_outbox o, public.profiles recipient, public.profiles actor,
++       public.notification_preferences pref
++  WHERE d.notification_id = o.id
++    AND recipient.id = o.recipient_id::text
++    AND actor.id = o.actor_id
++    AND pref.user_id = o.recipient_id
++    AND (
++      d.status = 'pending'
++      OR (d.status = 'processing' AND d.locked_at < now() - interval '5 minutes')
++    )
++    AND (
++      recipient.is_demo OR recipient.status <> 'active' OR NOT recipient.onboarded
++      OR actor.is_demo OR actor.status <> 'active' OR NOT actor.onboarded
++      OR public._pair_blocked(recipient.id, actor.id)
++      OR CASE o.category
++        WHEN 'like' THEN NOT pref.likes
++        WHEN 'match' THEN NOT pref.matches
++        WHEN 'message' THEN NOT pref.messages
++        WHEN 'call' THEN NOT pref.calls
++      END
++    );
++
++  UPDATE public.notification_deliveries d
++  SET status = 'suppressed', last_error = 'RecipientIneligible'
++  FROM public.notification_outbox o, public.profiles recipient, public.profiles actor
++  WHERE d.notification_id = o.id
++    AND recipient.id = o.recipient_id::text
++    AND actor.id = o.actor_id
++    AND (
++      d.status = 'pending'
++      OR (d.status = 'processing' AND d.locked_at < now() - interval '5 minutes')
++    )
++    AND (
++      recipient.is_demo OR recipient.status <> 'active' OR NOT recipient.onboarded
++      OR actor.is_demo OR actor.status <> 'active' OR NOT actor.onboarded
++      OR public._pair_blocked(recipient.id, actor.id)
++    );
++
++  -- A ringing push is only useful while the call is still pending and unexpired.
++  UPDATE public.notification_deliveries d
++  SET status = 'suppressed', last_error = 'CallNoLongerRinging'
++  FROM public.notification_outbox o
++  WHERE d.notification_id = o.id
++    AND o.category = 'call'
++    AND (
++      d.status = 'pending'
++      OR (d.status = 'processing' AND d.locked_at < now() - interval '5 minutes')
++    )
++    AND (
++      NOT EXISTS (
++        SELECT 1 FROM public.video_calls vc
++        WHERE vc.id::text = o.event_id AND vc.status = 'pending' AND vc.expires_at > now()
++      )
++      OR public._pair_blocked(o.recipient_id::text, o.actor_id)
++    );
++
++  -- Phase 1: a match / message push is pointless once the underlying row is gone (unmatched, deleted).
++  UPDATE public.notification_deliveries d
++  SET status = 'suppressed', last_error = 'SourceGone'
++  FROM public.notification_outbox o
++  WHERE d.notification_id = o.id
++    AND o.category IN ('match', 'message')
++    AND (
++      d.status = 'pending'
++      OR (d.status = 'processing' AND d.locked_at < now() - interval '5 minutes')
++    )
++    AND NOT public._notification_source_exists(o.category, o.event_id);
++
++  RETURN QUERY
++  WITH due AS (
++    SELECT d.id
++    FROM public.notification_deliveries d
++    JOIN public.notification_outbox o ON o.id = d.notification_id
++    JOIN public.push_devices device ON device.id = d.device_id AND device.active
++    JOIN public.profiles recipient ON recipient.id = o.recipient_id::text
++    JOIN public.profiles actor ON actor.id = o.actor_id
++    LEFT JOIN public.notification_preferences pref ON pref.user_id = o.recipient_id
++    WHERE ((d.status = 'pending' AND d.next_attempt_at <= now())
++       OR (d.status = 'processing' AND d.locked_at < now() - interval '5 minutes'))
++      AND recipient.is_demo = false AND recipient.status = 'active' AND recipient.onboarded
++      AND actor.is_demo = false AND actor.status = 'active' AND actor.onboarded
++      AND NOT public._pair_blocked(recipient.id, actor.id)
++      AND public._notification_source_exists(o.category, o.event_id)
++      AND CASE o.category
++        WHEN 'like' THEN coalesce(pref.likes, true)
++        WHEN 'match' THEN coalesce(pref.matches, true)
++        WHEN 'message' THEN coalesce(pref.messages, true)
++        WHEN 'call' THEN coalesce(pref.calls, true)
++      END
++    ORDER BY d.next_attempt_at, d.created_at
++    FOR UPDATE OF d SKIP LOCKED
++    LIMIT _limit
++  )
++  UPDATE public.notification_deliveries d
++  SET status = 'processing', attempt_count = d.attempt_count + 1, locked_at = now()
++  FROM due, public.notification_outbox o, public.push_devices device
++  WHERE d.id = due.id AND o.id = d.notification_id AND device.id = d.device_id AND device.active
++  RETURNING d.id, d.notification_id, d.device_id, device.token, o.category, o.route_data;
++END;
++$$;
++REVOKE EXECUTE ON FUNCTION public.claim_push_deliveries(integer) FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.claim_push_deliveries(integer) TO service_role;
++
++COMMIT;
+diff --git a/supabase/tests/56_push_phase1.sql b/supabase/tests/56_push_phase1.sql
+new file mode 100644
+index 0000000..55f679e
+--- /dev/null
++++ b/supabase/tests/56_push_phase1.sql
+@@ -0,0 +1,164 @@
++\set ON_ERROR_STOP on
++-- Chahat Phase 1: match/message/like events, display context, block + source suppression at dispatch time.
++INSERT INTO auth.users(id, email) VALUES
++  ('56565656-0000-0000-0000-000000000001', 'p1-sender@x'),
++  ('56565656-0000-0000-0000-000000000002', 'p1-recipient@x'),
++  ('56565656-0000-0000-0000-000000000003', 'p1-third@x');
++INSERT INTO public.consent_records (user_id, purpose, notice_version, decision, method)
++SELECT id, 'push_notifications', '2026-10-18', 'granted', 'in_app_notice'
++FROM auth.users WHERE id IN ('56565656-0000-0000-0000-000000000002', '56565656-0000-0000-0000-000000000003');
++CALL public.test_complete_profile('56565656-0000-0000-0000-000000000001', 'Sender Alpha', '1995-01-01', 'man', 'woman');
++CALL public.test_complete_profile('56565656-0000-0000-0000-000000000002', 'Recipient Beta', '1995-01-01', 'woman', 'man');
++CALL public.test_complete_profile('56565656-0000-0000-0000-000000000003', 'Third Gamma', '1995-01-01', 'woman', 'man');
++INSERT INTO public.push_devices (user_id, token, platform) VALUES
++  ('56565656-0000-0000-0000-000000000002', 'ExponentPushToken[p1recipientdevice0001]', 'android'),
++  ('56565656-0000-0000-0000-000000000002', 'ExponentPushToken[p1recipientdevice0002]', 'android'),
++  ('56565656-0000-0000-0000-000000000003', 'ExponentPushToken[p1thirddevice00000001]', 'android');
++
++-- ---- Likes: priority likes enqueue the generic like event; passes do not; no sender identity in outbox ----
++INSERT INTO public.swipes(from_id, to_id, kind) VALUES
++  ('56565656-0000-0000-0000-000000000001', '56565656-0000-0000-0000-000000000002', 'priority');
++INSERT INTO public.swipes(from_id, to_id, kind) VALUES
++  ('56565656-0000-0000-0000-000000000003', '56565656-0000-0000-0000-000000000001', 'pass');
++INSERT INTO public.t_results SELECT 'p1: priority like enqueues exactly one like event',
++  count(*) = 1, count(*)::text FROM public.notification_outbox
++  WHERE recipient_id = '56565656-0000-0000-0000-000000000002' AND category = 'like';
++INSERT INTO public.t_results SELECT 'p1: pass never enqueues a notification',
++  count(*) = 0, count(*)::text FROM public.notification_outbox
++  WHERE recipient_id = '56565656-0000-0000-0000-000000000001';
++INSERT INTO public.t_results SELECT 'p1: like event route data carries no sender or profile id',
++  count(*) = 1 AND bool_and(route_data = '{}'::jsonb), 'route_data empty'
++  FROM public.notification_outbox WHERE category = 'like' AND actor_id = '56565656-0000-0000-0000-000000000001';
++
++-- ---- Match: both users notified once; duplicate event insert is a no-op; later like does not double-notify ----
++INSERT INTO public.matches (user_a, user_b)
++VALUES ('56565656-0000-0000-0000-000000000001', '56565656-0000-0000-0000-000000000002');
++INSERT INTO public.t_results SELECT 'p1: genuine match notifies both users once each',
++  count(*) = 2 AND count(DISTINCT recipient_id) = 2, count(*)::text
++  FROM public.notification_outbox WHERE category = 'match'
++  AND event_id IN (SELECT id::text FROM public.matches WHERE user_a = '56565656-0000-0000-0000-000000000001');
++INSERT INTO public.notification_outbox (recipient_id, actor_id, category, event_id)
++SELECT recipient_id, actor_id, category, event_id FROM public.notification_outbox
++WHERE category = 'match' AND (actor_id = '56565656-0000-0000-0000-000000000001' OR recipient_id = '56565656-0000-0000-0000-000000000001'::uuid)
++ON CONFLICT (recipient_id, category, event_id) DO NOTHING;
++INSERT INTO public.t_results SELECT 'p1: duplicate match event is rejected by the unique key',
++  count(*) = 2, count(*)::text FROM public.notification_outbox
++  WHERE category = 'match' AND (actor_id = '56565656-0000-0000-0000-000000000001' OR recipient_id = '56565656-0000-0000-0000-000000000001'::uuid);
++INSERT INTO public.swipes(from_id, to_id, kind) VALUES
++  ('56565656-0000-0000-0000-000000000002', '56565656-0000-0000-0000-000000000001', 'like');
++INSERT INTO public.t_results SELECT 'p1: a like between already-matched users does not enqueue a like push',
++  count(*) = 0, count(*)::text FROM public.notification_outbox
++  WHERE recipient_id = '56565656-0000-0000-0000-000000000001' AND category = 'like';
++
++-- ---- Messages: text/image enqueue; system rows do not ----
++INSERT INTO public.messages(match_id, sender, body)
++SELECT id, '56565656-0000-0000-0000-000000000001', E'  hello   there\n friend  '
++FROM public.matches WHERE user_a = '56565656-0000-0000-0000-000000000001' AND user_b = '56565656-0000-0000-0000-000000000002';
++INSERT INTO public.messages(match_id, sender, body, image_path, message_type)
++SELECT id, '56565656-0000-0000-0000-000000000001', '', id::text || '/photo1.jpg', 'image'
++FROM public.matches WHERE user_a = '56565656-0000-0000-0000-000000000001' AND user_b = '56565656-0000-0000-0000-000000000002';
++INSERT INTO public.messages(match_id, sender, body, message_type)
++SELECT id, '56565656-0000-0000-0000-000000000001', 'system note', 'system'
++FROM public.matches WHERE user_a = '56565656-0000-0000-0000-000000000001' AND user_b = '56565656-0000-0000-0000-000000000002';
++INSERT INTO public.t_results SELECT 'p1: text and image messages enqueue, system message does not',
++  count(*) = 2, count(*)::text FROM public.notification_outbox
++  WHERE category = 'message' AND actor_id = '56565656-0000-0000-0000-000000000001' AND recipient_id = '56565656-0000-0000-0000-000000000002'::uuid;
++
++-- ---- Display context is service-role only, never for clients ----
++SET ROLE authenticated;
++SET request.jwt.claim.role = 'authenticated';
++SET request.jwt.claim.sub = '56565656-0000-0000-0000-000000000002';
++CALL public.expect_fail('p1: authenticated clients cannot read push display context',
++  $q$SELECT * FROM public.get_push_display_context(ARRAY[gen_random_uuid()])$q$);
++RESET ROLE;
++
++SET ROLE service_role;
++SET request.jwt.claim.role = 'service_role';
++RESET request.jwt.claim.sub;
++-- default preference ("name"): first name, no preview
++CREATE TEMP TABLE p1_ctx AS
++SELECT o.category, o.event_id, c.sender_name, c.preview
++FROM public.notification_outbox o
++CROSS JOIN LATERAL public.get_push_display_context(ARRAY[o.id]) c
++WHERE o.recipient_id = '56565656-0000-0000-0000-000000000002';
++INSERT INTO public.t_results SELECT 'p1: default lock-screen detail is first name only, no preview',
++  bool_and(sender_name IS NOT DISTINCT FROM CASE WHEN category IN ('match','message') THEN 'Sender' END AND preview IS NULL),
++  string_agg(category || ':' || coalesce(sender_name, '-'), ',') FROM p1_ctx;
++INSERT INTO public.t_results SELECT 'p1: like context never exposes the sender',
++  bool_and(sender_name IS NULL AND preview IS NULL), count(*)::text FROM p1_ctx WHERE category = 'like';
++DROP TABLE p1_ctx;
++
++RESET ROLE;
++INSERT INTO public.notification_preferences (user_id, lock_screen_details)
++VALUES ('56565656-0000-0000-0000-000000000002', 'preview')
++ON CONFLICT (user_id) DO UPDATE SET lock_screen_details = 'preview';
++SET ROLE service_role;
++SET request.jwt.claim.role = 'service_role';
++CREATE TEMP TABLE p1_ctx AS
++SELECT o.category, m.message_type, c.sender_name, c.preview
++FROM public.notification_outbox o
++LEFT JOIN public.messages m ON o.category = 'message' AND m.id::text = o.event_id
++CROSS JOIN LATERAL public.get_push_display_context(ARRAY[o.id]) c
++WHERE o.recipient_id = '56565656-0000-0000-0000-000000000002';
++INSERT INTO public.t_results SELECT 'p1: preview opt-in collapses whitespace in text messages',
++  count(*) = 1, max(preview) FROM p1_ctx WHERE category = 'message' AND message_type = 'text' AND preview = 'hello there friend';
++INSERT INTO public.t_results SELECT 'p1: preview never quotes media',
++  count(*) = 1, max(preview) FROM p1_ctx WHERE message_type = 'image' AND preview = 'Sent you a photo';
++INSERT INTO public.t_results SELECT 'p1: like context stays anonymous even with preview opt-in',
++  bool_and(sender_name IS NULL AND preview IS NULL), count(*)::text FROM p1_ctx WHERE category = 'like';
++DROP TABLE p1_ctx;
++
++RESET ROLE;
++UPDATE public.notification_preferences SET lock_screen_details = 'none'
++WHERE user_id = '56565656-0000-0000-0000-000000000002';
++SET ROLE service_role;
++SET request.jwt.claim.role = 'service_role';
++INSERT INTO public.t_results SELECT 'p1: "none" hides both name and preview',
++  bool_and(c.sender_name IS NULL AND c.preview IS NULL), count(*)::text
++FROM public.notification_outbox o CROSS JOIN LATERAL public.get_push_display_context(ARRAY[o.id]) c
++WHERE o.recipient_id = '56565656-0000-0000-0000-000000000002';
++RESET ROLE;
++CALL public.expect_fail('p1: invalid lock-screen detail value is rejected',
++  $q$UPDATE public.notification_preferences SET lock_screen_details = 'everything' WHERE user_id = '56565656-0000-0000-0000-000000000002'$q$);
++
++-- ---- Dispatch time: blocks placed AFTER enqueue must suppress delivery (no auth.uid() in service role) ----
++SET ROLE service_role;
++SET request.jwt.claim.role = 'service_role';
++SELECT public.materialize_push_deliveries(100);
++INSERT INTO public.t_results SELECT 'p1: both recipient devices get a delivery per eligible event',
++  count(DISTINCT device_id) = 2, count(*)::text
++FROM public.notification_deliveries d JOIN public.notification_outbox o ON o.id = d.notification_id
++WHERE o.recipient_id = '56565656-0000-0000-0000-000000000002' AND o.category = 'match';
++RESET ROLE;
++INSERT INTO public.blocks (blocker, blocked)
++VALUES ('56565656-0000-0000-0000-000000000002', '56565656-0000-0000-0000-000000000001');
++SET ROLE service_role;
++SET request.jwt.claim.role = 'service_role';
++SELECT count(*) FROM public.claim_push_deliveries(100);
++INSERT INTO public.t_results SELECT 'p1: block placed after enqueue suppresses every pending delivery',
++  count(*) > 0 AND bool_and(d.status = 'suppressed'), count(*)::text || ' suppressed'
++FROM public.notification_deliveries d JOIN public.notification_outbox o ON o.id = d.notification_id
++WHERE o.recipient_id = '56565656-0000-0000-0000-000000000002';
++RESET ROLE;
++
++-- ---- Source row removed (unmatched) before dispatch: match/message pushes are suppressed, not sent ----
++INSERT INTO public.matches (user_a, user_b)
++VALUES ('56565656-0000-0000-0000-000000000001', '56565656-0000-0000-0000-000000000003');
++INSERT INTO public.messages(match_id, sender, body)
++SELECT id, '56565656-0000-0000-0000-000000000001', 'will be unmatched'
++FROM public.matches WHERE user_a = '56565656-0000-0000-0000-000000000001' AND user_b = '56565656-0000-0000-0000-000000000003';
++SET ROLE service_role;
++SET request.jwt.claim.role = 'service_role';
++SELECT public.materialize_push_deliveries(100);
++RESET ROLE;
++DELETE FROM public.matches WHERE user_a = '56565656-0000-0000-0000-000000000001' AND user_b = '56565656-0000-0000-0000-000000000003';
++SET ROLE service_role;
++SET request.jwt.claim.role = 'service_role';
++INSERT INTO public.t_results SELECT 'p1: nothing is claimed for an unmatched conversation',
++  count(*) = 0, count(*)::text FROM public.claim_push_deliveries(100) c
++  WHERE c.device_id IN (SELECT id FROM public.push_devices WHERE user_id = '56565656-0000-0000-0000-000000000003');
++INSERT INTO public.t_results SELECT 'p1: unmatched deliveries are suppressed as SourceGone',
++  count(*) >= 1 AND bool_and(d.status = 'suppressed' AND d.last_error = 'SourceGone'), count(*)::text
++FROM public.notification_deliveries d JOIN public.notification_outbox o ON o.id = d.notification_id
++WHERE o.recipient_id = '56565656-0000-0000-0000-000000000003';
++RESET ROLE;
+diff --git a/supabase/tests/run.sh b/supabase/tests/run.sh
+index 40b8b82..91b58a1 100644
+--- a/supabase/tests/run.sh
++++ b/supabase/tests/run.sh
+@@ -116,7 +116,7 @@ setup_db() {
+ # 10. Functional / RLS / Storage / Deletion Suite (Fail-Fast)
+ echo "== functional / RLS / storage / deletion =="
+ setup_db "$FUNC_DB" || exit 1
+-for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 29_phase789_lifecycle.sql 35_uniform_quota.sql 36_purchase_verification.sql 37_profile_media.sql 38_push_notifications.sql 39_location_discovery.sql 40_video_calls.sql 41_google_play_verification.sql 42_call_tokens.sql 43_coin_billing.sql 44_voice_messages.sql 47_chat_media_paths.sql 48_location_privacy.sql 49_call_lifecycle.sql 50_call_daily_allowance.sql 51_legal_acceptances.sql 52_optional_consents.sql 53_account_deletion.sql 54_deletion_security.sql 55_storage_chat_ownership.sql 90_assert.sql; do
++for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 29_phase789_lifecycle.sql 35_uniform_quota.sql 36_purchase_verification.sql 37_profile_media.sql 38_push_notifications.sql 39_location_discovery.sql 40_video_calls.sql 41_google_play_verification.sql 42_call_tokens.sql 43_coin_billing.sql 44_voice_messages.sql 47_chat_media_paths.sql 48_location_privacy.sql 49_call_lifecycle.sql 50_call_daily_allowance.sql 51_legal_acceptances.sql 52_optional_consents.sql 53_account_deletion.sql 54_deletion_security.sql 55_storage_chat_ownership.sql 56_push_phase1.sql 90_assert.sql; do
+   out_file="/tmp/${RUN_ID}_test_${f}.out"
+   psql_test "$FUNC_DB" -f "$f" > "$out_file" 2>&1
+   rc=$?

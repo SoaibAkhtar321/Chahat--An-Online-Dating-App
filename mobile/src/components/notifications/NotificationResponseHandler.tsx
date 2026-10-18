@@ -1,18 +1,20 @@
 import { useEffect, useRef } from "react";
 import { Alert } from "../../utils/alert";
 import * as Notifications from "expo-notifications";
-import { useRouter } from "expo-router";
+import { useRootNavigationState, useRouter } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../services/supabase";
 import { resolveNotificationDestination } from "../../services/notificationPolicy";
 
 export function NotificationResponseHandler() {
   const router = useRouter();
+  // A cold-start tap can arrive before the root navigator has mounted; navigating then throws.
+  const navigationReady = Boolean(useRootNavigationState()?.key);
   const { user } = useAuth();
   const handled = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !navigationReady) return;
     let active = true;
 
     const openDestination = async (response: Notifications.NotificationResponse) => {
@@ -64,7 +66,7 @@ export function NotificationResponseHandler() {
       active = false;
       subscription.remove();
     };
-  }, [router, user]);
+  }, [router, user, navigationReady]);
 
   return null;
 }

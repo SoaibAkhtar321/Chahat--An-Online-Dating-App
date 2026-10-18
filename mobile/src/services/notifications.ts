@@ -8,6 +8,8 @@ import { Platform } from "react-native";
 import { isServiceConfigured } from "../config/appConfig";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { hasConsent } from "./consent";
+import { getActiveConversation } from "./activeConversation";
+import { shouldPresentInForeground } from "./notificationPolicy";
 
 export interface NoticeItem {
   id: string;
@@ -24,10 +26,14 @@ export interface NoticeItem {
   };
 }
 
+export type LockScreenDetails = "none" | "name" | "preview";
+
 export interface NotificationPreferences {
   matches: boolean;
   messages: boolean;
   likes: boolean;
+  /** What a lock screen may show for matches/messages: nothing, the sender's first name, or a preview. */
+  lockScreenDetails: LockScreenDetails;
 }
 
 export type PushRegistrationResult =
@@ -46,7 +52,10 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
   matches: true,
   messages: true,
   likes: true,
+  lockScreenDetails: "name",
 };
+
+const LOCK_SCREEN_DETAILS: readonly LockScreenDetails[] = ["none", "name", "preview"];
 
 const LEGACY_STORAGE_KEY_NOTICES = "milo_notifications_inbox";
 const LEGACY_STORAGE_KEY_PREFS = "milo_notification_prefs";
@@ -77,23 +86,40 @@ export async function getNotificationPreferences(userId: string): Promise<Notifi
   await requireAuthenticatedUser(userId);
   const { data, error } = await supabase
     .from("notification_preferences")
-    .select("matches, messages, likes")
+    .select("matches, messages, likes, lock_screen_details")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(`Could not load notification preferences: ${error.message}`);
-  return { ...DEFAULT_PREFERENCES, ...(data ?? {}) };
+  const row = data as {
+    matches?: boolean;
+    messages?: boolean;
+    likes?: boolean;
+    lock_screen_details?: string;
+  } | null;
+  return {
+    matches: row?.matches ?? DEFAULT_PREFERENCES.matches,
+    messages: row?.messages ?? DEFAULT_PREFERENCES.messages,
+    likes: row?.likes ?? DEFAULT_PREFERENCES.likes,
+    lockScreenDetails: LOCK_SCREEN_DETAILS.includes(row?.lock_screen_details as LockScreenDetails)
+      ? (row?.lock_screen_details as LockScreenDetails)
+      : DEFAULT_PREFERENCES.lockScreenDetails,
+  };
 }
 
 export async function saveNotificationPreferences(
   userId: string,
-  prefs: NotificationPreferences,
+  // lockScreenDetails is optional so a partial update (e.g. a single toggle) never overwrites it.
+  prefs: Omit<NotificationPreferences, "lockScreenDetails"> & {
+    lockScreenDetails?: LockScreenDetails;
+  },
 ): Promise<{ success: boolean; error?: string }> {
   if (
     typeof prefs.matches !== "boolean" ||
     typeof prefs.messages !== "boolean" ||
-    typeof prefs.likes !== "boolean"
+    typeof prefs.likes !== "boolean" ||
+    (prefs.lockScreenDetails !== undefined && !LOCK_SCREEN_DETAILS.includes(prefs.lockScreenDetails))
   ) {
-    return { success: false, error: "Notification preferences must be boolean values." };
+    return { success: false, error: "Notification preferences are invalid." };
   }
   try {
     await requireAuthenticatedUser(userId);
@@ -102,6 +128,9 @@ export async function saveNotificationPreferences(
       matches: prefs.matches,
       messages: prefs.messages,
       likes: prefs.likes,
+      ...(prefs.lockScreenDetails !== undefined
+        ? { lock_screen_details: prefs.lockScreenDetails }
+        : {}),
       updated_at: new Date().toISOString(),
     });
     if (error) return { success: false, error: error.message };
@@ -329,9 +358,11 @@ export async function openNotificationSettings(): Promise<void> {
 }
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const present = shouldPresentInForeground(
+      notification.request.content.data,
+      getActiveConversation(),
+    );
+    return { shouldShowAlert: present, shouldPlaySound: present, shouldSetBadge: false };
+  },
 });

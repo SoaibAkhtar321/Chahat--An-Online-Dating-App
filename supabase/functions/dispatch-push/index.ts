@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { buildPushPayload, isRetryableProviderStatus } from "./policy.ts";
+import { buildPushPayload, isRetryableProviderStatus, type PushDisplayContext } from "./policy.ts";
 import { safeErrorSummary } from "../_shared/safeLog.ts";
 
 const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
@@ -58,12 +58,30 @@ async function completeReceipt(
 
 async function processReceipts(admin: ReturnType<typeof createClient>) {
   const receiptCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  // Expo only keeps receipts for 24 hours. Anything older can never be confirmed, so close it out
+  // instead of re-querying it forever (and starving fresher rows of the 1000-row window).
+  const expiryCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: stale, error: staleError } = await admin
+    .from("notification_deliveries")
+    .select("id")
+    .eq("status", "submitted")
+    .is("receipt_checked_at", null)
+    .lt("submitted_at", expiryCutoff)
+    .order("submitted_at", { ascending: true })
+    .limit(200);
+  if (staleError) throw new Error(`Receipt expiry query failed: ${staleError.message}`);
+  for (const row of (stale ?? []) as Array<{ id: string }>) {
+    await completeReceipt(admin, row.id, false, "ReceiptExpired");
+  }
+
   const { data, error } = await admin
     .from("notification_deliveries")
     .select("id, device_id, provider_ticket")
     .eq("status", "submitted")
     .is("receipt_checked_at", null)
     .lte("submitted_at", receiptCutoff)
+    .gte("submitted_at", expiryCutoff)
+    .order("submitted_at", { ascending: true })
     .limit(1000);
   if (error) throw new Error(`Receipt query failed: ${error.message}`);
 
@@ -106,6 +124,33 @@ async function processReceipts(admin: ReturnType<typeof createClient>) {
   }
 }
 
+async function loadDisplayContexts(
+  admin: ReturnType<typeof createClient>,
+  notificationIds: string[],
+): Promise<Map<string, PushDisplayContext>> {
+  const contexts = new Map<string, PushDisplayContext>();
+  const unique = [...new Set(notificationIds)];
+  for (let offset = 0; offset < unique.length; offset += 100) {
+    const { data, error } = await admin.rpc("get_push_display_context", {
+      _notification_ids: unique.slice(offset, offset + 100),
+    });
+    // Lock-screen details are optional: on any failure fall back to the generic copy rather than
+    // failing or delaying the notification.
+    if (error) {
+      console.error("Push display context unavailable; using generic copy.");
+      continue;
+    }
+    for (const row of (data ?? []) as Array<{
+      notification_id: string;
+      sender_name: string | null;
+      preview: string | null;
+    }>) {
+      contexts.set(row.notification_id, { senderName: row.sender_name, preview: row.preview });
+    }
+  }
+  return contexts;
+}
+
 async function processDeliveries(admin: ReturnType<typeof createClient>) {
   const { error: materializeError } = await admin.rpc("materialize_push_deliveries", {
     _limit: 100,
@@ -124,6 +169,11 @@ async function processDeliveries(admin: ReturnType<typeof createClient>) {
     route_data: Record<string, unknown>;
   }>;
 
+  const displayContexts = await loadDisplayContexts(
+    admin,
+    jobs.filter((job) => job.category === "message" || job.category === "match").map((job) => job.notification_id),
+  );
+
   for (let offset = 0; offset < jobs.length; offset += 100) {
     const batch = jobs.slice(offset, offset + 100);
     let response: Response;
@@ -138,6 +188,7 @@ async function processDeliveries(admin: ReturnType<typeof createClient>) {
               job.notification_id,
               job.category,
               job.route_data ?? {},
+              displayContexts.get(job.notification_id),
             ),
           ),
         ),

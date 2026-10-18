@@ -16,11 +16,34 @@ export interface PushPayload {
   ttl: number;
 }
 
+/**
+ * Lock-screen details the database already authorised for this recipient
+ * (get_push_display_context honours notification_preferences.lock_screen_details).
+ * Never taken from route_data, and ignored for likes and calls so a sender can never be identified.
+ */
+export interface PushDisplayContext {
+  senderName?: string | null;
+  preview?: string | null;
+}
+
+const MAX_NAME = 20;
+const MAX_PREVIEW = 80;
+
+function cleanText(value: unknown, max: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // eslint-disable-next-line no-control-regex
+  const text = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) return undefined;
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : text;
+}
+
 export function buildPushPayload(
   token: string,
   notificationId: string,
   category: NotificationCategory,
   routeData: Record<string, unknown>,
+  display: PushDisplayContext = {},
 ): PushPayload {
   const copy = {
     like: { title: "Someone likes you", body: "Open Chahat to see who." },
@@ -28,6 +51,15 @@ export function buildPushPayload(
     message: { title: "New message", body: "You received a new message." },
     call: { title: "Incoming call", body: "Someone is calling you on Chahat." },
   }[category];
+  const name =
+    category === "match" || category === "message" ? cleanText(display.senderName, MAX_NAME) : undefined;
+  if (category === "match" && name) {
+    copy.body = `You and ${name} matched on Chahat.`;
+  }
+  if (category === "message" && name) {
+    copy.title = name;
+    copy.body = cleanText(display.preview, MAX_PREVIEW) ?? "Sent you a message";
+  }
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const callId =
     category === "call" && typeof routeData.callId === "string" && UUID.test(routeData.callId)

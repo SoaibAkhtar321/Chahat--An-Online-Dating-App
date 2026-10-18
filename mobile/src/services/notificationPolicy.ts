@@ -21,3 +21,20 @@ export function resolveNotificationDestination(
   }
   return { kind: "chat", matchId };
 }
+
+/**
+ * Foreground presentation: stay quiet when the push is about the conversation that is already open
+ * (the message or match is visible on screen). Everything else is presented normally.
+ */
+export function shouldPresentInForeground(data: unknown, activeMatchId: string | null): boolean {
+  if (!activeMatchId || !data || typeof data !== "object") return true;
+  const { category, matchId } = data as { category?: unknown; matchId?: unknown };
+  if (
+    (category === "message" || category === "match") &&
+    typeof matchId === "string" &&
+    matchId.toLowerCase() === activeMatchId.toLowerCase()
+  ) {
+    return false;
+  }
+  return true;
+}
