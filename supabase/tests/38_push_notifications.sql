@@ -4,6 +4,10 @@
 INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-0000000000f1', 'push-a@x'),
   ('00000000-0000-0000-0000-0000000000f2', 'push-b@x');
+-- Step 3: activating a push token requires the user's push consent (see 52_optional_consents.sql for the consent tests).
+INSERT INTO public.consent_records (user_id, purpose, notice_version, decision, method)
+SELECT id, 'push_notifications', '2026-10-18', 'granted', 'in_app_notice'
+FROM auth.users WHERE id IN ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f2');
 
 -- Notification triggers only fire for active, onboarded, non-demo profiles.
 CALL public.test_complete_profile('00000000-0000-0000-0000-0000000000f1', 'Push A', '1995-01-01', 'man', 'woman');

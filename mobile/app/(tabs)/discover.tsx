@@ -22,10 +22,10 @@ import { useMilo } from "../../src/context/MiloContext";
 import { hasEntitlement } from "../../src/services/subscription";
 import {
   describeLocationResult,
-  disableLocationSharing,
   enableLocationSharing,
   isLocationSharingEnabled,
 } from "../../src/services/location";
+import { ensureConsent, setConsent } from "../../src/services/consent";
 import type { Filters } from "../../src/types";
 
 export default function DiscoverScreen() {
@@ -71,16 +71,14 @@ export default function DiscoverScreen() {
             text: "Turn off",
             style: "destructive",
             onPress: async () => {
-              try {
-                await disableLocationSharing();
-                setLocationSharing(false);
-                await refreshDeck();
-              } catch (error) {
-                Alert.alert(
-                  "Could not update location",
-                  error instanceof Error ? error.message : "Please try again.",
-                );
+              // Withdrawing the location choice also deletes the stored location on the server.
+              const result = await setConsent("location_discovery", "withdrawn");
+              if (!result.success) {
+                Alert.alert("Could not update location", result.error ?? "Please try again.");
+                return;
               }
+              setLocationSharing(false);
+              await refreshDeck();
             },
           },
         ],
@@ -88,39 +86,29 @@ export default function DiscoverScreen() {
       return;
     }
 
-    Alert.alert(
-      "Use your location?",
-      "With your permission, Chahat reads your location while the app is open and stores only a rounded area (about 1 km) privately. Other members only see an approximate distance. You can turn this off any time.",
-      [
-        { text: "Not now", style: "cancel" },
-        {
-          text: "Continue",
-          onPress: async () => {
-            const result = await enableLocationSharing();
-            if (result.status === "enabled") {
-              setLocationSharing(true);
-              await refreshDeck();
-            } else if (result.status === "permission_denied") {
-              Alert.alert(
-                "Location permission unavailable",
-                "Enable foreground location permission in your device settings to use nearby discovery.",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Open Settings", onPress: () => void Linking.openSettings() },
-                ],
-              );
-            } else if (result.status !== "unsupported") {
-              Alert.alert(
-                result.status === "services_disabled"
-                  ? "Location services are off"
-                  : "Location unavailable",
-                describeLocationResult(result),
-              );
-            }
-          },
-        },
-      ],
-    );
+    void (async () => {
+      // Purpose-specific notice and consent first; the OS permission prompt only follows an explicit agree.
+      if (!(await ensureConsent("location_discovery"))) return;
+      const result = await enableLocationSharing();
+      if (result.status === "enabled") {
+        setLocationSharing(true);
+        await refreshDeck();
+      } else if (result.status === "permission_denied") {
+        Alert.alert(
+          "Location permission unavailable",
+          "Enable foreground location permission in your device settings to use nearby discovery.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => void Linking.openSettings() },
+          ],
+        );
+      } else if (result.status !== "unsupported") {
+        Alert.alert(
+          result.status === "services_disabled" ? "Location services are off" : "Location unavailable",
+          describeLocationResult(result),
+        );
+      }
+    })();
   };
 
   const handleSwipe = async (dir: "like" | "pass" | "priority") => {

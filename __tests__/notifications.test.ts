@@ -8,6 +8,7 @@ const mockSecureGet = jest.fn();
 const mockSecureSet = jest.fn();
 const mockSecureDelete = jest.fn();
 let mockPushConfigured = true;
+let mockHasConsent = true;
 
 // Expo inlines EXPO_PUBLIC_* at compile time (also under jest), so the flag is mocked here.
 jest.mock("../mobile/src/config/appConfig", () => ({
@@ -76,6 +77,11 @@ jest.mock(
   { virtual: true },
 );
 
+// Purpose-specific push consent (Step 3) is exercised in consent.test.ts; here it is a controllable gate.
+jest.mock("../mobile/src/services/consent", () => ({
+  hasConsent: async () => mockHasConsent,
+}));
+
 jest.mock("../mobile/src/services/supabase", () => ({
   isSupabaseConfigured: jest.fn().mockReturnValue(true),
   supabase: {
@@ -94,6 +100,7 @@ import {
 describe("real Expo push registration", () => {
   beforeEach(() => {
     mockPushConfigured = true;
+    mockHasConsent = true;
     jest.clearAllMocks();
     mockGetUser.mockResolvedValue({
       data: { user: { id: "user-1" } },
@@ -127,6 +134,18 @@ describe("real Expo push registration", () => {
     });
     expect(mockRequestPermissions).not.toHaveBeenCalled();
     expect(mockGetPermissions).not.toHaveBeenCalled();
+    expect(mockGetExpoPushToken).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockSecureSet).not.toHaveBeenCalled();
+  });
+
+  it("does not prompt, create a token or call the server until push consent is granted", async () => {
+    mockHasConsent = false;
+    await expect(registerPushNotificationToken("user-1")).resolves.toEqual({
+      status: "consent_required",
+    });
+    expect(mockGetPermissions).not.toHaveBeenCalled();
+    expect(mockRequestPermissions).not.toHaveBeenCalled();
     expect(mockGetExpoPushToken).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockSecureSet).not.toHaveBeenCalled();

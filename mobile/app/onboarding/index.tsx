@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { enableLocationSharing, describeLocationResult } from "../../src/services/location";
+import { ensureConsent } from "../../src/services/consent";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plus, MapPin, Compass } from "lucide-react-native";
@@ -73,6 +74,8 @@ export default function OnboardingScreen() {
   }, [profile?.onboarded, router]);
 
   const handleRequestCurrentLocation = async () => {
+    // Optional purpose-specific consent first; declining simply leaves the city choice below as the way forward.
+    if (!(await ensureConsent("location_discovery"))) return;
     setLocStatus("requesting");
     setLocMessage("Detecting your location…");
     // Real device location via the location service: permission prompt, GPS fix, then server-side storage.

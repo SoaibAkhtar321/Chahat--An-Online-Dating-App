@@ -10,6 +10,11 @@ INSERT INTO auth.users(id,email) VALUES
  ('90000000-0000-0000-0000-000000000007','p7@x'),('90000000-0000-0000-0000-000000000008','p8@x'),
  ('90000000-0000-0000-0000-000000000009','p9@x');
 
+-- Step 3: storing a discovery location requires the user's location consent (see 52_optional_consents.sql).
+INSERT INTO public.consent_records (user_id, purpose, notice_version, decision, method)
+SELECT id, 'location_discovery', '2026-10-18', 'granted', 'in_app_notice'
+FROM auth.users WHERE id::text LIKE '90000000%';
+
 INSERT INTO storage.objects (bucket_id, name, owner)
 SELECT 'photos', id || '/location.jpg', id::uuid FROM public.profiles WHERE id LIKE '90000000%';
 

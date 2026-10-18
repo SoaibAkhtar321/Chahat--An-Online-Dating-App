@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { hasConsent } from "./consent";
 import {
   isValidCoordinates,
   isFreshLocation,
@@ -15,6 +16,7 @@ const LOCATION_TIMEOUT_MS = 12_000;
 
 export type LocationEnableResult =
   | { status: "enabled" }
+  | { status: "consent_required" }
   | { status: "permission_denied" }
   | { status: "services_disabled" }
   | { status: "unsupported" }
@@ -44,6 +46,10 @@ export async function enableLocationSharing(): Promise<LocationEnableResult> {
   if (!isSupabaseConfigured()) {
     return { status: "error", message: "Location discovery requires a configured backend." };
   }
+
+  // Purpose-specific consent comes first: no OS permission prompt and no location read until the user has agreed to
+  // the in-app notice (the server also refuses to store a location without it).
+  if (!(await hasConsent("location_discovery"))) return { status: "consent_required" };
 
   try {
     let permission = await Location.getForegroundPermissionsAsync();
@@ -154,6 +160,8 @@ export function describeLocationResult(result: LocationEnableResult): string {
   switch (result.status) {
     case "enabled":
       return "Location updated.";
+    case "consent_required":
+      return "Location sharing is switched off. Turn it on in Settings > Discovery & Privacy to see people near you.";
     case "permission_denied":
       return "Location permission was not granted. Enable it in system settings to see people near you.";
     case "services_disabled":

@@ -3,6 +3,7 @@ import * as path from "path";
 
 const mockRpc = jest.fn();
 let mockConfigured = true;
+let mockHasConsent = true;
 
 jest.mock("expo-location", () => ({
   Accuracy: { Balanced: 3 },
@@ -15,6 +16,10 @@ jest.mock("expo-location", () => ({
 jest.mock("expo-secure-store", () => ({
   getItemAsync: jest.fn().mockResolvedValue(null),
   setItemAsync: jest.fn().mockResolvedValue(undefined),
+}));
+// Purpose-specific location consent (Step 3) is exercised in consent.test.ts; here it is a controllable gate.
+jest.mock("../mobile/src/services/consent", () => ({
+  hasConsent: async () => mockHasConsent,
 }));
 jest.mock("../mobile/src/services/supabase", () => ({
   isSupabaseConfigured: () => mockConfigured,
@@ -48,6 +53,7 @@ function fix(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockConfigured = true;
+  mockHasConsent = true;
   loc.getForegroundPermissionsAsync.mockResolvedValue({ status: "granted", canAskAgain: true });
   loc.hasServicesEnabledAsync.mockResolvedValue(true);
   loc.getCurrentPositionAsync.mockResolvedValue(fix());
@@ -88,6 +94,15 @@ describe("classifyServerError", () => {
 });
 
 describe("enableLocationSharing", () => {
+  it("does not prompt for permission or read the location until location consent is granted", async () => {
+    mockHasConsent = false;
+    expect(await enableLocationSharing()).toEqual({ status: "consent_required" });
+    expect(loc.getForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(loc.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   it("sends the real device fix and its rounded accuracy to the server", async () => {
     expect(await enableLocationSharing()).toEqual({ status: "enabled" });
     expect(mockRpc).toHaveBeenCalledTimes(1);

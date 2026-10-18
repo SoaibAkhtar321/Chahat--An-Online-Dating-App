@@ -21,6 +21,8 @@ INSERT INTO public.matches(id, user_a, user_b) VALUES
   ('dddddddd-0000-0000-0000-0000000000e1', '91000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000002'),
   ('dddddddd-0000-0000-0000-0000000000e2', '91000000-0000-0000-0000-000000000001', '91000000-0000-0000-0000-000000000003'),
   ('dddddddd-0000-0000-0000-0000000000e3', '91000000-0000-0000-0000-000000000002', '91000000-0000-0000-0000-000000000004');
+INSERT INTO public.consent_records (user_id, purpose, notice_version, decision, method) VALUES
+  ('91000000-0000-0000-0000-000000000002', 'push_notifications', '2026-10-18', 'granted', 'in_app_notice');
 INSERT INTO public.push_devices(user_id, token, platform) VALUES
   ('91000000-0000-0000-0000-000000000002', 'ExponentPushToken[lifecycle-device-b-0001]', 'android');
 

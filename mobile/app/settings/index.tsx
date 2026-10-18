@@ -1,5 +1,5 @@
 import React, { useRef, useState, useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -16,16 +16,17 @@ import { deleteUserAccount } from "../../src/services/auth";
 import { runAccountDeletion } from "../../src/utils/deletionFlow";
 import {
   describeLocationResult,
-  disableLocationSharing,
   enableLocationSharing,
   getMyLocationStatus,
   setDistanceSharing,
 } from "../../src/services/location";
+import { ensureConsent, fetchMyConsents, setConsent } from "../../src/services/consent";
 import {
   getNotificationPreferences,
   openNotificationSettings,
   registerPushNotificationToken,
   saveNotificationPreferences,
+  unregisterPushNotificationToken,
   type NotificationPreferences,
 } from "../../src/services/notifications";
 
@@ -43,6 +44,10 @@ export default function SettingsScreen() {
   const [locSummary, setLocSummary] = useState("");
   const [showOnline, setShowOnline] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
+
+  // Optional-processing choices (purpose-specific consent, recorded server-side)
+  const [locationConsent, setLocationConsent] = useState(false);
+  const [pushConsent, setPushConsent] = useState(false);
 
   // Notifications state
   const [notifMatches, setNotifMatches] = useState(true);
@@ -79,24 +84,80 @@ export default function SettingsScreen() {
     void refreshLocationStatus();
   };
 
-  const handleClearLocation = () => {
+  const refreshConsents = React.useCallback(async () => {
+    try {
+      const consents = await fetchMyConsents();
+      setLocationConsent(consents.location_discovery.decision === "granted");
+      setPushConsent(consents.push_notifications.decision === "granted");
+    } catch {
+      // Leave the switches as they are; the next change re-checks with the server.
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshConsents();
+  }, [refreshConsents]);
+
+  const handleToggleLocationConsent = async (val: boolean) => {
+    if (locBusy) return;
+    if (val) {
+      if (!(await ensureConsent("location_discovery"))) return;
+      setLocationConsent(true);
+      await handleUpdateLocation();
+      return;
+    }
     Alert.alert(
-      "Remove my location?",
-      "You'll stop appearing in distance-based results until you set a location again.",
+      "Turn off location?",
+      "Your stored location will be deleted and you'll stop appearing in distance-based results. You can still discover people by city.",
       [
-        { text: "Cancel", style: "cancel" },
+        { text: "Keep on", style: "cancel" },
         {
-          text: "Remove",
+          text: "Turn off",
           style: "destructive",
           onPress: async () => {
-            try {
-              await disableLocationSharing();
-            } catch {
-              Alert.alert("Couldn't remove", "Please try again.");
+            const result = await setConsent("location_discovery", "withdrawn");
+            if (!result.success) {
+              Alert.alert("Couldn't turn off", result.error ?? "Please try again.");
+              return;
             }
+            setLocationConsent(false);
             void refreshLocationStatus();
+            Alert.alert(
+              "Location turned off",
+              "Chahat no longer stores your location. To also remove the location permission, open your device settings.",
+              [
+                { text: "OK", style: "cancel" },
+                { text: "Open settings", onPress: () => void Linking.openSettings() },
+              ],
+            );
           },
         },
+      ],
+    );
+  };
+
+  const handleTogglePushConsent = async (val: boolean) => {
+    if (!user) return;
+    if (val) {
+      if (!(await ensureConsent("push_notifications"))) return;
+      setPushConsent(true);
+      await registerAfterEnable(true);
+      return;
+    }
+    const result = await setConsent("push_notifications", "withdrawn");
+    if (!result.success) {
+      Alert.alert("Couldn't turn off", result.error ?? "Please try again.");
+      return;
+    }
+    setPushConsent(false);
+    // The server has already removed this account's device tokens; also drop the locally stored copy.
+    await unregisterPushNotificationToken(user.id);
+    Alert.alert(
+      "Notifications turned off",
+      "Chahat no longer stores your device token or sends you alerts. To also remove the notification permission, open your device settings.",
+      [
+        { text: "OK", style: "cancel" },
+        { text: "Open settings", onPress: () => void openNotificationSettings() },
       ],
     );
   };
@@ -296,19 +357,23 @@ export default function SettingsScreen() {
               value={showDistance}
               onValueChange={handleToggleShowDistance}
             />
-            <TouchableOpacity
-              style={styles.navRow}
-              onPress={handleUpdateLocation}
-              activeOpacity={0.7}
-              disabled={locBusy}
-            >
-              <Text style={styles.rowLabel}>{locBusy ? "Updating location…" : "Update my location"}</Text>
-              <Text style={styles.rowValue}>{locSummary}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.navRow} onPress={handleClearLocation} activeOpacity={0.7}>
-              <Text style={styles.rowLabel}>Remove my location</Text>
-              <ChevronRight size={18} color={Colors.mutedForeground} />
-            </TouchableOpacity>
+            <Toggle
+              label="Use my location"
+              hint="Optional. Shows people near you; only a rounded area is stored. Turning off deletes it."
+              value={locationConsent}
+              onValueChange={handleToggleLocationConsent}
+            />
+            {locationConsent ? (
+              <TouchableOpacity
+                style={styles.navRow}
+                onPress={handleUpdateLocation}
+                activeOpacity={0.7}
+                disabled={locBusy}
+              >
+                <Text style={styles.rowLabel}>{locBusy ? "Updating location…" : "Update my location"}</Text>
+                <Text style={styles.rowValue}>{locSummary}</Text>
+              </TouchableOpacity>
+            ) : null}
             <Toggle
               label="Show online status"
               hint="Others won't see when you were last active."
@@ -329,20 +394,30 @@ export default function SettingsScreen() {
           <Text style={styles.sectionHeader}>NOTIFICATIONS</Text>
           <View style={styles.card}>
             <Toggle
-              label="New matches"
-              value={notifMatches}
-              onValueChange={handleToggleNotifMatches}
+              label="Push notifications"
+              hint="Optional. Lets Chahat alert you about matches, messages, likes and calls on this device."
+              value={pushConsent}
+              onValueChange={handleTogglePushConsent}
             />
-            <Toggle
-              label="New messages"
-              value={notifMessages}
-              onValueChange={handleToggleNotifMessages}
-            />
-            <Toggle
-              label="Likes received"
-              value={notifLikes}
-              onValueChange={handleToggleNotifLikes}
-            />
+            {pushConsent ? (
+              <>
+                <Toggle
+                  label="New matches"
+                  value={notifMatches}
+                  onValueChange={handleToggleNotifMatches}
+                />
+                <Toggle
+                  label="New messages"
+                  value={notifMessages}
+                  onValueChange={handleToggleNotifMessages}
+                />
+                <Toggle
+                  label="Likes received"
+                  value={notifLikes}
+                  onValueChange={handleToggleNotifLikes}
+                />
+              </>
+            ) : null}
             <TouchableOpacity
               style={styles.navRow}
               onPress={() => openNotificationSettings()}

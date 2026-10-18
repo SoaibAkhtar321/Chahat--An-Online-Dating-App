@@ -7,6 +7,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { isServiceConfigured } from "../config/appConfig";
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { hasConsent } from "./consent";
 
 export interface NoticeItem {
   id: string;
@@ -34,6 +35,7 @@ export type PushRegistrationResult =
       status:
         | "registered"
         | "disabled"
+        | "consent_required"
         | "permission_denied"
         | "unsupported"
         | "not_configured";
@@ -217,6 +219,9 @@ export async function registerPushNotificationToken(
     }
 
     await requireAuthenticatedUser(userId);
+    // Purpose-specific consent comes first: no OS permission prompt and no token until the user has agreed to the
+    // in-app notice (the server also refuses to activate a push token without it).
+    if (!(await hasConsent("push_notifications"))) return { status: "consent_required" };
     const preferences = await getNotificationPreferences(userId);
     if (!preferences.matches && !preferences.messages && !preferences.likes) {
       return { status: "disabled" };

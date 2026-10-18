@@ -39,12 +39,14 @@ export type ServerLocationError =
   | "location_too_imprecise"
   | "invalid_coordinates"
   | "profile_required"
+  | "consent_required"
   | "authentication_required"
   | "unknown";
 
 /** Maps a server error message from the location RPCs to a typed code (never echoes coordinates). */
 export function classifyServerError(message: string | undefined | null): ServerLocationError {
   const m = (message ?? "").toLowerCase();
+  if (m.includes("consent_required")) return "consent_required";
   if (m.includes("rate_limited")) return "rate_limited";
   if (m.includes("implausible_movement")) return "implausible_movement";
   if (m.includes("location_too_imprecise")) return "location_too_imprecise";
@@ -64,6 +66,8 @@ export function describeServerError(code: ServerLocationError): string {
       return "Your device's location is too imprecise right now. Try again with a better signal.";
     case "invalid_coordinates":
       return "Your device returned an invalid location. Please try again.";
+    case "consent_required":
+      return "Location sharing is switched off. Turn it on in Settings > Discovery & Privacy to use it.";
     case "profile_required":
       return "Finish setting up your profile before sharing your location.";
     case "authentication_required":
