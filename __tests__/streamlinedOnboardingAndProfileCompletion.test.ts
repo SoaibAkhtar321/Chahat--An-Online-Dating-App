@@ -210,5 +210,14 @@ describe("Onboarding and Complete Profile Architecture & Navigation", () => {
     expect(profileSrc).toMatch(/supabase\.rpc\("get_my_dob"\)/);
     expect(profileSrc).not.toMatch(/\.from\("profiles"\)\s*\.select\("dob"\)/);
   });
+
+  test("migration 20260101002800 has matching grant signature for get_discovery_feed_page", () => {
+    const mig = read(
+      "supabase/migrations/20260101002800_entitlements_calling_view_once.sql",
+    );
+    expect(mig).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.get_discovery_feed_page\(integer, integer, integer, integer, text\[\], text\[\], text\[\], integer, text, integer\) TO authenticated;/,
+    );
+  });
 });
 

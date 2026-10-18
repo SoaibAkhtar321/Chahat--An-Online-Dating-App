@@ -958,8 +958,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.get_discovery_feed_page(integer, integer, integer, integer, text[], text[], text[], integer, text[], integer) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.get_discovery_feed_page(integer, integer, integer, integer, text[], text[], text[], integer, text[], integer) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.get_discovery_feed_page(integer, integer, integer, integer, text[], text[], text[], integer, text, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_discovery_feed_page(integer, integer, integer, integer, text[], text[], text[], integer, text, integer) TO authenticated;
 
 -- ---------- 7. Google Play Product Mapping for New Packages ----------
 CREATE OR REPLACE FUNCTION public.record_verified_google_purchase(
