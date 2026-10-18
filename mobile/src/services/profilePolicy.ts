@@ -79,6 +79,8 @@ export function validateProfileDraft(
   }
   if (
     profile.prompt !== undefined &&
+    profile.prompt.a &&
+    profile.prompt.a.trim().length > 0 &&
     (!PROMPTS.includes(profile.prompt.q) || profile.prompt.a.length > 500)
   ) {
     return {
@@ -119,12 +121,21 @@ export function validateProfileDraft(
     return { valid: false, error: "Distance must be between 1 and 500 km." };
   }
 
+  // Required fields for onboarding: Name, DOB (18+), Gender, Seeking, City, and 1+ Photo.
+  // Optional profile details (bio, prompts, intents, interests, work, education, languages, lifestyle)
+  // are moved to the "Complete Profile" section and can be completed or updated at any time.
   if (profile.onboarded === true) {
     if (!inRange(profile.name, 2, 40)) {
       return { valid: false, error: "Enter a name between 2 and 40 characters." };
     }
-    if (!profile.dob || !validateDob(profile.dob).valid) {
-      return { valid: false, error: "Enter a valid birth date to complete your profile." };
+    const dobCheck = profile.dob
+      ? validateDob(profile.dob)
+      : { valid: false, error: "Enter a valid birth date to complete your profile." };
+    if (!dobCheck.valid) {
+      return {
+        valid: false,
+        error: dobCheck.error || "Enter a valid birth date to complete your profile.",
+      };
     }
     if (!profile.gender || !profile.seeking) {
       return { valid: false, error: "Choose your gender and profile preference." };
@@ -132,16 +143,46 @@ export function validateProfileDraft(
     if (!inRange(profile.city, 1, 80)) {
       return { valid: false, error: "Choose a city to complete your profile." };
     }
-    if (!profile.bio || profile.bio.trim().length < 15) {
-      return { valid: false, error: "Write at least 15 characters about yourself." };
-    }
-    if (!profile.intents?.length || !profile.interests || profile.interests.length < 3) {
-      return { valid: false, error: "Choose an intention and at least 3 interests." };
-    }
     if (!profile.photos?.length) {
       return { valid: false, error: "Add at least one uploaded photo to complete your profile." };
     }
   }
 
   return { valid: true };
+}
+
+export interface ProfileCompleteness {
+  percentage: number;
+  completedChecks: number;
+  totalChecks: number;
+  missingItems: Array<{ key: string; label: string }>;
+}
+
+export function calculateProfileCompleteness(
+  profile: Partial<MeProfile> | null | undefined,
+): ProfileCompleteness {
+  if (!profile) {
+    return { percentage: 0, completedChecks: 0, totalChecks: 8, missingItems: [] };
+  }
+  const items = [
+    { key: "basic", label: "Basic details (Name, Age, City)", done: !!profile.name && !!profile.dob && !!profile.city },
+    { key: "photo", label: "Primary photo", done: (profile.photos?.length || 0) >= 1 },
+    { key: "bio", label: "About me bio", done: !!profile.bio && profile.bio.trim().length >= 10 },
+    { key: "intents", label: "Relationship intent", done: (profile.intents?.length || 0) >= 1 },
+    { key: "interests", label: "At least 3 interests", done: (profile.interests?.length || 0) >= 3 },
+    { key: "morePhotos", label: "3+ photos", done: (profile.photos?.length || 0) >= 3 },
+    { key: "workEdu", label: "Work or education", done: !!profile.work || !!profile.education },
+    { key: "lifestyle", label: "Lifestyle habits", done: Object.keys(profile.lifestyle || {}).length >= 2 },
+  ];
+
+  const completed = items.filter((i) => i.done).length;
+  const percentage = Math.round((completed / items.length) * 100);
+  const missingItems = items.filter((i) => !i.done).map((i) => ({ key: i.key, label: i.label }));
+
+  return {
+    percentage,
+    completedChecks: completed,
+    totalChecks: items.length,
+    missingItems,
+  };
 }

@@ -1,6 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
-  Linking,
   View,
   Text,
   StyleSheet,
@@ -13,39 +12,33 @@ import { Alert } from "../../src/utils/alert";
 import { enableLocationSharing, describeLocationResult } from "../../src/services/location";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Plus, X, MapPin, Navigation, Compass } from "lucide-react-native";
+import { ArrowLeft, Plus, MapPin, Compass } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { DatePicker } from "../../src/components/ui/DatePicker";
-import { Slider, RangeSlider } from "../../src/components/ui/Slider";
 import { Button } from "../../src/components/ui/Button";
 import { Chip } from "../../src/components/ui/Chip";
 import { PhotoUploader } from "../../src/components/profile/PhotoUploader";
 import { useAuth } from "../../src/context/AuthContext";
 import {
   validateDob,
-  calculateAge,
   saveProfile,
   removeUnreferencedProfilePhotos,
   uploadProfilePhoto,
   requestPhotoModeration,
 } from "../../src/services/profile";
-import { INTERESTS, CITIES, PROMPTS, LANGUAGES, LIFESTYLE, PhotoItem } from "../../src/types";
+import { CITIES, PhotoItem } from "../../src/types";
 
+// Streamlined essential onboarding: Name, DOB (18+), Gender/Seeking, Location, and Primary Photo.
+// Optional details (Bio, Prompts, Interests, Work, Education, Languages, Lifestyle) are moved to
+// the dedicated "Complete Profile" section accessible post-onboarding.
 const STEPS = [
   "name",
   "dob",
   "gender",
-  "intents",
   "location",
-  "work",
-  "languages",
-  "bio",
-  "interests",
-  "lifestyle",
   "photos",
-  "prefs",
 ] as const;
 
 export default function OnboardingScreen() {
@@ -57,51 +50,27 @@ export default function OnboardingScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Form states
+  // Form states for essential onboarding
   const [name, setName] = useState(profile?.name || "");
   const [dob, setDob] = useState(profile?.dob || ""); // YYYY-MM-DD
   const [gender, setGender] = useState<"man" | "woman" | "">(profile?.gender || "");
   const [seeking, setSeeking] = useState<"man" | "woman" | "">(profile?.seeking || "");
-  const [intents, setIntents] = useState<string[]>(profile?.intents || []);
   const [city, setCity] = useState(profile?.city || "Mumbai");
   const [customCity, setCustomCity] = useState("");
   const [locStatus, setLocStatus] = useState<"idle" | "requesting" | "granted" | "denied" | "blocked" | "error">("idle");
   const [locMessage, setLocMessage] = useState("");
-  const [work, setWork] = useState(profile?.work || "");
-  const [education, setEducation] = useState(profile?.education || "");
-  const [languages, setLanguages] = useState<string[]>(profile?.languages || ["English", "Hindi"]);
-  const [bio, setBio] = useState(profile?.bio || "");
-  const [promptQ, setPromptQ] = useState(profile?.prompt?.q || PROMPTS[0]!);
-  const [promptA, setPromptA] = useState(profile?.prompt?.a || "");
-  const [selectedInterests, setSelectedInterests] = useState<string[]>(
-    profile?.interests || ["Travel", "Coffee", "Music"],
-  );
-  const [customInterest, setCustomInterest] = useState("");
-  const [lifestyle, setLifestyle] = useState<Record<string, string>>(profile?.lifestyle || {});
   const [photos, setPhotos] = useState<PhotoItem[]>(profile?.photos || []);
   const uploadedPhotoCache = useRef(new Map<string, PhotoItem>());
-  const [ageMin, setAgeMin] = useState(profile?.ageMin || 21);
-  const [ageMax, setAgeMax] = useState(profile?.ageMax || 35);
-  const [distance, setDistance] = useState(profile?.distance || 50);
 
   const totalSteps = STEPS.length;
   const currentKey = STEPS[step];
 
-  const toggleArrayItem = (list: string[], item: string) => {
-    return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
-  };
-
-  const handleAddCustomInterest = () => {
-    const val = customInterest.trim();
-    if (!val) return;
-    if (selectedInterests.includes(val)) {
-      setError("Already added");
-      return;
+  // If already onboarded, redirect smoothly to the Complete Profile screen
+  useEffect(() => {
+    if (profile?.onboarded) {
+      router.replace("/profile/complete");
     }
-    setSelectedInterests([...selectedInterests, val]);
-    setCustomInterest("");
-    setError("");
-  };
+  }, [profile?.onboarded, router]);
 
   const handleRequestCurrentLocation = async () => {
     setLocStatus("requesting");
@@ -152,27 +121,9 @@ export default function OnboardingScreen() {
           return false;
         }
         return true;
-      case "intents":
-        if (intents.length === 0) {
-          setError("Please pick at least one intention");
-          return false;
-        }
-        return true;
       case "location":
-        if (!city) {
+        if (!city || city.trim().length < 1) {
           setError("Please choose your city");
-          return false;
-        }
-        return true;
-      case "bio":
-        if (bio.trim().length < 15) {
-          setError("Write at least 15 characters about yourself");
-          return false;
-        }
-        return true;
-      case "interests":
-        if (selectedInterests.length < 3) {
-          setError("Pick at least 3 interests");
           return false;
         }
         return true;
@@ -189,7 +140,7 @@ export default function OnboardingScreen() {
 
   const handleNext = () => {
     if (!validateStep()) return;
-    if (step < totalSteps) {
+    if (step < totalSteps - 1) {
       setStep(step + 1);
     }
   };
@@ -202,6 +153,7 @@ export default function OnboardingScreen() {
   };
 
   const handleFinish = async () => {
+    if (!validateStep()) return;
     if (!user) {
       Alert.alert("Not signed in", "Please log in again to finish setting up your profile.");
       return;
@@ -211,7 +163,13 @@ export default function OnboardingScreen() {
       // Process and upload any new/local photos through the sanitized upload service
       const processedPhotos: PhotoItem[] = [];
       for (const p of photos) {
-        if (p.uri && (p.uri.startsWith("file:") || p.uri.startsWith("blob:") || p.uri.startsWith("data:") || p.uri.startsWith("ph:"))) {
+        if (
+          p.uri &&
+          (p.uri.startsWith("file:") ||
+            p.uri.startsWith("blob:") ||
+            p.uri.startsWith("data:") ||
+            p.uri.startsWith("ph:"))
+        ) {
           try {
             const cacheKey = `${p.id}:${p.uri}`;
             const cached = uploadedPhotoCache.current.get(cacheKey);
@@ -243,23 +201,12 @@ export default function OnboardingScreen() {
 
       const res = await saveProfile(
         {
-          name,
+          name: name.trim(),
           dob,
           gender,
-          seeking,
-          intents,
-          city,
-          work,
-          education,
-          languages,
-          bio,
-          prompt: { q: promptQ, a: promptA },
-          interests: selectedInterests,
-          lifestyle,
+          seeking: seeking || (gender === "man" ? "woman" : "man"),
+          city: city.trim(),
           photos: processedPhotos,
-          ageMin,
-          ageMax,
-          distance,
           onboarded: true,
         },
         user.id,
@@ -288,22 +235,21 @@ export default function OnboardingScreen() {
       }
       uploadedPhotoCache.current.clear();
 
-      // Ask the server to check the new photos (best effort; they stay hidden until approved).
+      // Ask the server to check the new photos
       await Promise.race([
         requestPhotoModeration(),
         new Promise((resolve) => setTimeout(resolve, 15000)),
       ]);
 
-      console.log("handleFinish: profile saved, refreshing");
-      // Never let a slow/failed refresh trap the user on this screen: the profile is already saved.
       try {
         await Promise.race([
           refreshProfile(),
-          new Promise((resolve) => setTimeout(resolve, 8000))]);
+          new Promise((resolve) => setTimeout(resolve, 8000)),
+        ]);
       } catch (refreshErr) {
         console.warn("handleFinish: refreshProfile failed", refreshErr);
       }
-      console.log("handleFinish: navigating to discover");
+
       router.replace("/(tabs)/discover");
     } catch (err: any) {
       console.error("handleFinish failed", err);
@@ -367,7 +313,7 @@ export default function OnboardingScreen() {
                 active={gender === "man"}
                 onPress={() => {
                   setGender("man");
-                  setSeeking("woman");
+                  if (!seeking) setSeeking("woman");
                 }}
               />
               <Chip
@@ -375,10 +321,25 @@ export default function OnboardingScreen() {
                 active={gender === "woman"}
                 onPress={() => {
                   setGender("woman");
-                  setSeeking("man");
+                  if (!seeking) setSeeking("man");
                 }}
               />
             </View>
+
+            <Text style={[styles.stepTitle, { fontSize: 16, marginTop: 24 }]}>Looking to meet…</Text>
+            <View style={styles.chipRow}>
+              <Chip
+                label="Women"
+                active={seeking === "woman"}
+                onPress={() => setSeeking("woman")}
+              />
+              <Chip
+                label="Men"
+                active={seeking === "man"}
+                onPress={() => setSeeking("man")}
+              />
+            </View>
+
             {seeking ? (
               <View style={styles.seekingBox}>
                 <Text style={styles.seekingText}>
@@ -390,32 +351,6 @@ export default function OnboardingScreen() {
                 </Text>
               </View>
             ) : null}
-          </View>
-        );
-
-      case "intents":
-        return (
-          <View>
-            <Text style={styles.stepTitle}>What are you looking for?</Text>
-            <Text style={styles.stepSubtitle}>
-              People with matching intentions are prioritized in your discovery.
-            </Text>
-            <View style={styles.chipWrap}>
-              {[
-                "Serious relationship",
-                "Long-term relationship",
-                "Marriage-oriented",
-                "Casual dating",
-                "Don't know yet",
-              ].map((intent) => (
-                <Chip
-                  key={intent}
-                  label={intent}
-                  active={intents.includes(intent)}
-                  onPress={() => setIntents(toggleArrayItem(intents, intent))}
-                />
-              ))}
-            </View>
           </View>
         );
 
@@ -449,25 +384,15 @@ export default function OnboardingScreen() {
               disabled={locStatus === "requesting"}
               activeOpacity={0.8}
             >
-              <Navigation size={18} color={Colors.primaryForeground} style={{ marginRight: 8 }} />
+              <MapPin size={18} color={Colors.primaryForeground} style={{ marginRight: 8 }} />
               <Text style={styles.locDetectBtnText}>
                 {locStatus === "requesting"
                   ? "Detecting location…"
                   : locStatus === "granted"
-                  ? "Update Current Location"
-                  : "Allow Current Location"}
+                    ? "Update Location"
+                    : "Enable Location"}
               </Text>
             </TouchableOpacity>
-
-            {locStatus === "blocked" ? (
-              <TouchableOpacity
-                style={[styles.locDetectBtn, { marginTop: 8 }]}
-                onPress={() => Linking.openSettings().catch(() => undefined)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.locDetectBtnText}>Open system settings</Text>
-              </TouchableOpacity>
-            ) : null}
 
             {locMessage ? (
               <View
@@ -527,256 +452,36 @@ export default function OnboardingScreen() {
           </View>
         );
 
-      case "work":
-        return (
-          <View>
-            <Text style={styles.stepTitle}>Work & Education</Text>
-            <Text style={styles.stepSubtitle}>
-              Optional. Skip anything you prefer not to share.
-            </Text>
-            <Input
-              label="Job title / Profession"
-              placeholder="e.g. Architect, Software Engineer"
-              value={work}
-              onChangeText={setWork}
-              maxLength={60}
-            />
-            <Input
-              label="College / Education"
-              placeholder="e.g. Delhi University, IIT Bombay"
-              value={education}
-              onChangeText={setEducation}
-              maxLength={60}
-            />
-          </View>
-        );
-
-      case "languages":
-        return (
-          <View>
-            <Text style={styles.stepTitle}>Languages you speak</Text>
-            <Text style={styles.stepSubtitle}>
-              Shown on your profile so matches can find common ground.
-            </Text>
-            <View style={styles.chipWrap}>
-              {LANGUAGES.map((l) => (
-                <Chip
-                  key={l}
-                  label={l}
-                  active={languages.includes(l)}
-                  onPress={() => setLanguages(toggleArrayItem(languages, l))}
-                />
-              ))}
-            </View>
-          </View>
-        );
-
-      case "bio":
-        return (
-          <View>
-            <Text style={styles.stepTitle}>About you</Text>
-            <Text style={styles.stepSubtitle}>
-              A short bio and one prompt to start conversations.
-            </Text>
-            <Input
-              placeholder="Weekend chai, treks in Sahyadris, laughing at bad jokes…"
-              multiline
-              numberOfLines={4}
-              style={styles.bioInput}
-              value={bio}
-              onChangeText={setBio}
-              maxLength={300}
-            />
-            <Text style={styles.charCount}>{bio.length}/300</Text>
-
-            <Text style={styles.promptHeader}>Choose a prompt</Text>
-            <View style={styles.chipWrap}>
-              {PROMPTS.map((p) => (
-                <Chip key={p} label={p} active={promptQ === p} onPress={() => setPromptQ(p)} />
-              ))}
-            </View>
-            <Input
-              placeholder="Your answer"
-              value={promptA}
-              onChangeText={setPromptA}
-              maxLength={120}
-              style={{ marginTop: 8 }}
-            />
-          </View>
-        );
-
-      case "interests":
-        return (
-          <View>
-            <Text style={styles.stepTitle}>Your interests</Text>
-            <Text style={styles.stepSubtitle}>Pick at least 3, or add a custom hobby.</Text>
-            <View style={styles.chipWrap}>
-              {INTERESTS.map((item) => (
-                <Chip
-                  key={item}
-                  label={item}
-                  active={selectedInterests.includes(item)}
-                  onPress={() => setSelectedInterests(toggleArrayItem(selectedInterests, item))}
-                />
-              ))}
-            </View>
-
-            <Text style={styles.customHobbyHeader}>Add custom hobby</Text>
-            <View style={styles.customRow}>
-              <Input
-                placeholder="e.g. Kathak, Chess, Gardening"
-                value={customInterest}
-                onChangeText={setCustomInterest}
-                containerStyle={{ flex: 1, marginBottom: 0 }}
-              />
-              <TouchableOpacity onPress={handleAddCustomInterest} style={styles.addBtn}>
-                <Plus size={20} color={Colors.primaryForeground} />
-              </TouchableOpacity>
-            </View>
-
-            {selectedInterests.filter((i) => !INTERESTS.includes(i)).length > 0 && (
-              <View style={styles.customChipsWrap}>
-                {selectedInterests
-                  .filter((i) => !INTERESTS.includes(i))
-                  .map((custom) => (
-                    <View key={custom} style={styles.customBadge}>
-                      <Text style={styles.customBadgeText}>{custom}</Text>
-                      <TouchableOpacity
-                        onPress={() =>
-                          setSelectedInterests(selectedInterests.filter((x) => x !== custom))
-                        }
-                      >
-                        <X size={14} color={Colors.highlightForeground} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-              </View>
-            )}
-          </View>
-        );
-
-      case "lifestyle":
-        return (
-          <View>
-            <Text style={styles.stepTitle}>Lifestyle habits</Text>
-            <Text style={styles.stepSubtitle}>Optional details about your day-to-day.</Text>
-            {Object.entries(LIFESTYLE).map(([key, options]) => (
-              <View key={key} style={styles.lifestyleGroup}>
-                <Text style={styles.lifestyleLabel}>{key}</Text>
-                <View style={styles.chipWrap}>
-                  {options.map((opt) => (
-                    <Chip
-                      key={opt}
-                      label={opt}
-                      active={lifestyle[key] === opt}
-                      onPress={() => {
-                        setLifestyle((prev) => {
-                          const copy = { ...prev };
-                          if (copy[key] === opt) delete copy[key];
-                          else copy[key] = opt;
-                          return copy;
-                        });
-                      }}
-                    />
-                  ))}
-                </View>
-              </View>
-            ))}
-          </View>
-        );
-
       case "photos":
         return (
           <View>
-            <Text style={styles.stepTitle}>Add your photos</Text>
+            <Text style={styles.stepTitle}>Add your profile photo</Text>
             <Text style={styles.stepSubtitle}>
-              1 to 4 photos. Clear, recent photos work best. The star photo is your main one.
+              Profiles with genuine photos receive far more responses. You can add more photos anytime in Complete Profile.
             </Text>
-            <PhotoUploader photos={photos} onChange={setPhotos} />
-          </View>
-        );
-
-      case "prefs":
-        return (
-          <View>
-            <Text style={styles.stepTitle}>Discovery preferences</Text>
-            <Text style={styles.stepSubtitle}>
-              Adjust your preferred age and maximum distance filters using the sliders below.
-            </Text>
-
-            {/* Age Range Slider */}
-            <View style={styles.sliderCard}>
-              <RangeSlider
-                label="Age Range"
-                minVal={ageMin}
-                maxVal={ageMax}
-                min={18}
-                max={60}
-                unit="years"
-                onChange={(newMin, newMax) => {
-                  setAgeMin(newMin);
-                  setAgeMax(newMax);
-                }}
-              />
-            </View>
-
-            {/* Distance Slider */}
-            <View style={styles.sliderCard}>
-              <Slider
-                label="Maximum Distance"
-                value={distance}
-                min={5}
-                max={150}
-                step={5}
-                unit="km"
-                prefix="Up to "
-                onChange={(newDistance) => {
-                  setDistance(newDistance);
-                }}
-              />
-            </View>
+            <PhotoUploader photos={photos} onChange={setPhotos} maxPhotos={6} />
           </View>
         );
 
       default:
-        return (
-          <View>
-            <Text style={styles.stepTitle}>Looking good, {name}!</Text>
-            <Text style={styles.stepSubtitle}>Your Chahat profile is ready.</Text>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryName}>
-                {name}, {calculateAge(dob)}
-              </Text>
-              <Text style={styles.summaryLocation}>
-                {city} · {intents.join(", ")}
-              </Text>
-              {bio ? <Text style={styles.summaryBio}>{bio}</Text> : null}
-              {promptA ? (
-                <View style={styles.promptSummary}>
-                  <Text style={styles.promptQText}>{promptQ}</Text>
-                  <Text style={styles.promptAText}>{promptA}</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-        );
+        return null;
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={handleBack}
-            disabled={step === 0}
-            style={[styles.backBtn, step === 0 && { opacity: 0.3 }]}
-          >
-            <ArrowLeft size={20} color={Colors.foreground} />
-          </TouchableOpacity>
+          {step > 0 ? (
+            <TouchableOpacity onPress={handleBack} style={styles.backBtn} accessibilityLabel="Back">
+              <ArrowLeft size={20} color={Colors.foreground} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 38 }} />
+          )}
 
           <View style={styles.progressBar}>
             <View
@@ -788,7 +493,7 @@ export default function OnboardingScreen() {
           </View>
 
           <Text style={styles.stepCounter}>
-            {step < totalSteps ? `${step + 1}/${totalSteps}` : "Done"}
+            {`${step + 1}/${totalSteps}`}
           </Text>
         </View>
 
@@ -799,20 +504,15 @@ export default function OnboardingScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {step < totalSteps ? (
-            <Button title="Continue" onPress={handleNext} />
+          {step < totalSteps - 1 ? (
+            <Button title="Continue" onPress={handleNext} size="lg" />
           ) : (
             <Button
-              title={saving ? "Saving…" : "Start discovering"}
+              title={saving ? "Saving…" : "Finish & Start Exploring"}
               onPress={handleFinish}
               loading={saving}
+              size="lg"
             />
-          )}
-
-          {["work", "languages", "lifestyle"].includes(currentKey) && step < totalSteps && (
-            <TouchableOpacity onPress={() => setStep(step + 1)} style={styles.skipBtn}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -820,338 +520,212 @@ export default function OnboardingScreen() {
   );
 }
 
-const createStyles = (Colors: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  header: {
-    height: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  progressBar: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.muted,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: Colors.primary,
-  },
-  stepCounter: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.mutedForeground,
-  },
-  content: {
-    padding: 24,
-    flexGrow: 1,
-  },
-  stepTitle: {
-    fontSize: Typography.sizes.title,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    fontFamily: Typography.fontDisplay,
-    marginBottom: 8,
-  },
-  stepSubtitle: {
-    fontSize: Typography.sizes.base,
-    color: Colors.mutedForeground,
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  chipRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  seekingBox: {
-    backgroundColor: Colors.secondary,
-    padding: 16,
-    borderRadius: Radii.lg,
-    marginTop: 16,
-  },
-  seekingText: {
-    fontSize: Typography.sizes.base,
-    color: Colors.secondaryForeground,
-  },
-  ageBadge: {
-    backgroundColor: Colors.secondary,
-    padding: 12,
-    borderRadius: Radii.md,
-    marginTop: 8,
-  },
-  ageBadgeText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.foreground,
-  },
-  bioInput: {
-    height: 100,
-    paddingTop: 12,
-    textAlignVertical: "top",
-  },
-  charCount: {
-    textAlign: "right",
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  promptHeader: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginBottom: 8,
-  },
-  customHobbyHeader: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  customRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  addBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: Radii.md,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  customChipsWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 12,
-  },
-  customBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.highlight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: Radii.full,
-    gap: 6,
-  },
-  customBadgeText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.highlightForeground,
-    fontWeight: Typography.weights.medium,
-  },
-  lifestyleGroup: {
-    marginBottom: 16,
-  },
-  lifestyleLabel: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginBottom: 6,
-  },
-  prefLabel: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-    marginBottom: 8,
-  },
-  sliderCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radii.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 16,
-  },
-  locationPermissionCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.card,
-    padding: 16,
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 12,
-    gap: 12,
-  },
-  locationIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.secondary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  locationCardTitle: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  locationCardDesc: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  locDetectBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: Radii.md,
-    marginBottom: 12,
-  },
-  locDetectBtnDisabled: {
-    opacity: 0.6,
-  },
-  locDetectBtnText: {
-    color: Colors.primaryForeground,
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-  },
-  locMessageBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    borderRadius: Radii.md,
-    marginBottom: 12,
-  },
-  locMessageBadgeSuccess: {
-    backgroundColor: Colors.primary + "1A",
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  locMessageBadgeWarn: {
-    backgroundColor: Colors.secondary,
-  },
-  locMessageText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.mutedForeground,
-    flex: 1,
-  },
-  selectedCityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Colors.card,
-    padding: 12,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 16,
-  },
-  selectedCityLabel: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-  },
-  selectedCityBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radii.full,
-  },
-  selectedCityText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
-    color: Colors.foreground,
-  },
-  locationSubheading: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.foreground,
-    marginBottom: 8,
-  },
-  summaryCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radii.xl,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginTop: 12,
-  },
-  summaryName: {
-    fontSize: Typography.sizes.xxl,
-    fontWeight: Typography.weights.bold,
-    fontFamily: Typography.fontDisplay,
-    color: Colors.foreground,
-  },
-  summaryLocation: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.mutedForeground,
-    marginTop: 4,
-  },
-  summaryBio: {
-    fontSize: Typography.sizes.base,
-    color: Colors.foreground,
-    marginTop: 12,
-    lineHeight: 22,
-  },
-  promptSummary: {
-    backgroundColor: Colors.secondary,
-    padding: 12,
-    borderRadius: Radii.md,
-    marginTop: 12,
-  },
-  promptQText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
-  },
-  promptAText: {
-    fontSize: Typography.sizes.base,
-    fontFamily: Typography.fontDisplay,
-    color: Colors.foreground,
-    marginTop: 4,
-  },
-  errorText: {
-    color: Colors.destructive,
-    fontSize: Typography.sizes.sm,
-    marginTop: 12,
-    textAlign: "center",
-    fontWeight: Typography.weights.medium,
-  },
-  footer: {
-    padding: 24,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    backgroundColor: Colors.card,
-  },
-  skipBtn: {
-    alignItems: "center",
-    marginTop: 12,
-  },
-  skipText: {
-    fontSize: Typography.sizes.base,
-    color: Colors.mutedForeground,
-    fontWeight: Typography.weights.semibold,
-  },
-});
+const createStyles = (Colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    keyboardView: {
+      flex: 1,
+    },
+    header: {
+      height: 56,
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      gap: 12,
+    },
+    backBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.card,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    progressBar: {
+      flex: 1,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: Colors.muted,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: "100%",
+      backgroundColor: Colors.primary,
+    },
+    stepCounter: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.semibold,
+      color: Colors.mutedForeground,
+      width: 36,
+      textAlign: "right",
+    },
+    content: {
+      padding: 24,
+      paddingBottom: 40,
+    },
+    stepTitle: {
+      fontSize: Typography.sizes.xxl,
+      fontWeight: Typography.weights.bold,
+      fontFamily: Typography.fontDisplay,
+      color: Colors.foreground,
+      marginBottom: 8,
+    },
+    stepSubtitle: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+      marginBottom: 24,
+      lineHeight: 20,
+    },
+    chipRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    chipWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    seekingBox: {
+      backgroundColor: Colors.secondary,
+      padding: 14,
+      borderRadius: Radii.md,
+      marginTop: 20,
+    },
+    seekingText: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.foreground,
+    },
+    locationPermissionCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: Colors.card,
+      padding: 16,
+      borderRadius: Radii.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginBottom: 12,
+      gap: 12,
+    },
+    locationIconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: Colors.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    locationCardTitle: {
+      fontSize: Typography.sizes.base,
+      fontWeight: Typography.weights.bold,
+      color: Colors.foreground,
+    },
+    locationCardDesc: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.mutedForeground,
+      marginTop: 2,
+      lineHeight: 16,
+    },
+    locDetectBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: Colors.primary,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: Radii.md,
+      marginBottom: 12,
+    },
+    locDetectBtnDisabled: {
+      opacity: 0.6,
+    },
+    locDetectBtnText: {
+      color: Colors.primaryForeground,
+      fontSize: Typography.sizes.base,
+      fontWeight: Typography.weights.semibold,
+    },
+    locMessageBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 10,
+      borderRadius: Radii.md,
+      marginBottom: 12,
+    },
+    locMessageBadgeSuccess: {
+      backgroundColor: Colors.primary + "1A",
+      borderWidth: 1,
+      borderColor: Colors.primary,
+    },
+    locMessageBadgeWarn: {
+      backgroundColor: Colors.secondary,
+    },
+    locMessageText: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.mutedForeground,
+      flex: 1,
+    },
+    selectedCityRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: Colors.card,
+      padding: 12,
+      borderRadius: Radii.md,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginBottom: 16,
+    },
+    selectedCityLabel: {
+      fontSize: Typography.sizes.sm,
+      color: Colors.mutedForeground,
+    },
+    selectedCityBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: Colors.secondary,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: Radii.full,
+    },
+    selectedCityText: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.bold,
+      color: Colors.foreground,
+    },
+    locationSubheading: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.semibold,
+      color: Colors.foreground,
+      marginBottom: 8,
+    },
+    customRow: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+    },
+    addBtn: {
+      width: 50,
+      height: 50,
+      borderRadius: Radii.md,
+      backgroundColor: Colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    errorText: {
+      color: Colors.destructive,
+      fontSize: Typography.sizes.sm,
+      marginTop: 12,
+      textAlign: "center",
+      fontWeight: Typography.weights.medium,
+    },
+    footer: {
+      padding: 24,
+      borderTopWidth: 1,
+      borderTopColor: Colors.border,
+      backgroundColor: Colors.card,
+    },
+  });

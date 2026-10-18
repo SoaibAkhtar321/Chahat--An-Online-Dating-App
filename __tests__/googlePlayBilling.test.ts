@@ -104,6 +104,9 @@ describe("Phase 6: Google Play Billing and Subscriptions", () => {
 
       expect(clientProductIds).toEqual(serverProductIds);
       expect(serverProductIds).toEqual([
+        "chahat_pkg_149_7d",
+        "chahat_pkg_299_15d",
+        "chahat_pkg_499_1m",
         "chahat_plus_1m",
         "chahat_premium_12m",
         "chahat_premium_1m",
@@ -114,6 +117,24 @@ describe("Phase 6: Google Play Billing and Subscriptions", () => {
     });
 
     test("product tiers, durations, and Indian Rupee prices are strictly defined", () => {
+      expect(GOOGLE_PLAY_PRODUCTS.chahat_pkg_149_7d).toEqual({
+        tier: "premium",
+        durationMonths: 0.25,
+        durationDays: 7,
+        amountInr: 149,
+      });
+      expect(GOOGLE_PLAY_PRODUCTS.chahat_pkg_299_15d).toEqual({
+        tier: "plus",
+        durationMonths: 0.5,
+        durationDays: 15,
+        amountInr: 299,
+      });
+      expect(GOOGLE_PLAY_PRODUCTS.chahat_pkg_499_1m).toEqual({
+        tier: "vip",
+        durationMonths: 1,
+        durationDays: 30,
+        amountInr: 499,
+      });
       expect(GOOGLE_PLAY_PRODUCTS.chahat_premium_1m).toEqual({
         tier: "premium",
         durationMonths: 1,

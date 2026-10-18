@@ -159,7 +159,14 @@ export async function fetchMessagesForMatch(
       ...rows.map((m: any) => m.audio_path),
     ].filter(Boolean) as string[];
 
-    const signed = await getSignedUrls("chat", mediaPaths);
+    const signed = await getSignedUrls(
+      "chat",
+      mediaPaths.filter((path) => {
+        // Do not pre-sign unviewed View Once images for recipient; require explicit openViewOnceMessage
+        const msg = rows.find((r) => r.image_path === path);
+        return !(msg?.is_view_once && msg?.sender !== currentUserId && !msg?.viewed_at);
+      }),
+    );
     return rows.map((m: any) => ({
       id: m.id,
       matchId: m.match_id,
@@ -173,6 +180,8 @@ export async function fetchMessagesForMatch(
       audioDurationSec: m.audio_duration_sec,
       messageType:
         m.message_type || (m.audio_path ? "voice" : m.image_path ? "image" : "text"),
+      isViewOnce: !!m.is_view_once,
+      viewedAt: m.viewed_at ?? null,
     }));
   } catch {
     return [];
@@ -184,6 +193,7 @@ export async function sendChatMessage(
   senderId: string,
   text: string,
   imageUri?: string,
+  isViewOnce = false,
 ): Promise<{ success: boolean; message?: Message; error?: string }> {
   try {
     if (!matchId || !senderId) {
@@ -203,6 +213,7 @@ export async function sendChatMessage(
           image: imageUri,
           at: Date.now(),
           status: "sent",
+          isViewOnce,
         };
         return { success: true, message: demoMsg };
       }
@@ -229,6 +240,9 @@ export async function sendChatMessage(
       sender: senderId,
       body: text.slice(0, 1000),
       image_path: imagePath,
+      message_type: imagePath ? "image" : "text",
+      is_view_once: isViewOnce,
+      expires_at: isViewOnce ? new Date(Date.now() + 14 * 86400 * 1000).toISOString() : null,
       created_at: new Date().toISOString(),
     });
 
@@ -244,6 +258,8 @@ export async function sendChatMessage(
       text,
       image: imagePath ? ((await getSignedUrl("chat", imagePath)) ?? imageUri) : imageUri,
       messageType: imagePath ? "image" : "text",
+      isViewOnce,
+      viewedAt: null,
       at: Date.now(),
       status: "sent",
     };
@@ -251,6 +267,51 @@ export async function sendChatMessage(
     return { success: true, message: newMsg };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to send message" };
+  }
+}
+
+/**
+ * Server-authorized single-use opening of a View Once photo.
+ * Enforces atomic consumption and single-view access on the backend.
+ */
+export async function openViewOnceMessage(
+  messageId: string,
+): Promise<{ success: boolean; imageUri?: string; error?: string }> {
+  try {
+    if (!messageId || !isValidUUID(messageId)) {
+      return { success: false, error: "Invalid message reference." };
+    }
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: "Backend is not configured." };
+    }
+
+    const { data, error } = await supabase.rpc("open_view_once_message", {
+      _message_id: messageId,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    if (!data?.success) {
+      return {
+        success: false,
+        error: data?.error === "already_viewed" ? "already_viewed" : data?.error || "Could not open photo",
+      };
+    }
+
+    const imagePath = data.image_path as string | undefined;
+    if (!imagePath) {
+      return { success: false, error: "Media path not found." };
+    }
+
+    const signedUrl = await getSignedUrl("chat", imagePath);
+    if (!signedUrl) {
+      return { success: false, error: "Failed to generate media access." };
+    }
+
+    return { success: true, imageUri: signedUrl };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to open View Once media." };
   }
 }
 

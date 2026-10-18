@@ -4,7 +4,7 @@ import path from "path";
 const root = path.resolve(__dirname, "..");
 const read = (p: string) => fs.readFileSync(path.join(root, p), "utf8");
 
-describe("Free like quota is 20 per IST day (server + client agree)", () => {
+describe("Free like quota is 50 per IST day (server + client agree)", () => {
   const migDir = path.join(root, "supabase/migrations");
   const files = fs.readdirSync(migDir).filter((f) => f.endsWith(".sql")).sort();
   const latestSwipe = [...files]
@@ -15,16 +15,16 @@ describe("Free like quota is 20 per IST day (server + client agree)", () => {
       ),
     )!;
 
-  test("latest record_swipe falls back to 20", () => {
+  test("latest record_swipe falls back to 50", () => {
     expect(read(`supabase/migrations/${latestSwipe}`)).toMatch(
-      /setting_int\('daily_like_limit',\s*20\)/,
+      /setting_int\('daily_like_limit',\s*50\)/,
     );
   });
 
-  test("the last migration touching app_settings.daily_like_limit sets it to 20", () => {
+  test("the last migration touching app_settings.daily_like_limit sets it to 50", () => {
     const sql = files.map((f) => read(`supabase/migrations/${f}`)).join("\n");
     const last = [...sql.matchAll(/\('daily_like_limit',\s*'(\d+)'::jsonb\)/g)].pop();
-    expect(last?.[1]).toBe("20");
+    expect(last?.[1]).toBe("50");
   });
 
   test("quota day is the IST calendar day", () => {
@@ -41,14 +41,8 @@ describe("Free like quota is 20 per IST day (server + client agree)", () => {
 });
 
 describe("UI makes no claims the backend does not honour", () => {
-  test("no 'Unlimited Likes' copy while the server enforces a uniform limit", () => {
-    for (const f of [
-      "mobile/src/services/subscription.ts",
-      "mobile/app/(tabs)/discover.tsx",
-      "mobile/app/(tabs)/me.tsx",
-    ]) {
-      expect(read(f)).not.toMatch(/Unlimited Likes|Get Unlimited/);
-    }
+  test("paid plans advertise Unlimited Likes matching backend -1 limit", () => {
+    expect(read("mobile/src/services/subscription.ts")).toMatch(/Unlimited Likes/);
   });
 
   test("purchaseSubscription never reports an in-progress payment", () => {

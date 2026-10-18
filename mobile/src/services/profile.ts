@@ -95,26 +95,29 @@ export async function saveProfile(
     if (profile.name !== undefined) updateData.name = profile.name.trim();
 
     // If dob is provided, check existing profile before sending it to avoid triggering the
-    // database immutability guard: "Date of birth cannot be changed once saved"
+    // database immutability guard: "Date of birth cannot be changed once saved".
+    // Note: dob column is revoked from direct SELECT for authenticated users; use get_my_dob RPC.
     if (profile.dob !== undefined && profile.dob) {
-      const { data: existingRow, error } = await supabase
-        .from("profiles")
-        .select("dob")
-        .eq("id", authenticatedUserId)
-        .maybeSingle();
-      if (error) throw new Error(`birth date check failed: ${error.message}`);
-
-      if (!existingRow?.dob) {
+      let existingDob: string | null = null;
+      if (typeof supabase.rpc === "function") {
+        try {
+          const { data, error } = await supabase.rpc("get_my_dob");
+          if (!error && data) existingDob = data as string;
+        } catch {
+          // fallback if RPC is unavailable in isolated test environments
+        }
+      }
+      if (!existingDob) {
         // Not set yet in database, safe to set
         updateData.dob = profile.dob;
-      } else if (existingRow.dob !== profile.dob) {
+      } else if (existingDob !== profile.dob) {
         // Already set and different: log and do not send to prevent blocking other updates
         console.warn(
           "saveProfile: DOB is immutable once set in database. Keeping existing DOB:",
-          existingRow.dob
+          existingDob,
         );
       }
-      // If existingRow.dob === profile.dob, omitting it from updateData prevents the trigger from firing
+      // If existingDob === profile.dob, omitting it from updateData prevents the trigger from firing
     }
     if (profile.gender !== undefined) updateData.gender = profile.gender;
     if (profile.seeking !== undefined) updateData.seeking = profile.seeking;

@@ -95,6 +95,8 @@ export const DEMO_PROFILES: Profile[] = [
   },
 ];
 
+export const PROGRESSIVE_RADIUS_BANDS = [3, 5, 10, 25, 50, 100] as const;
+
 export async function fetchDiscoveryDeck(
   currentUserId: string,
   userCity: string,
@@ -104,8 +106,38 @@ export async function fetchDiscoveryDeck(
   void currentUserId;
   void userCity;
   void seekingGender;
-  const result = await fetchDiscoveryPage(filters);
-  return result.profiles;
+
+  if (!isSupabaseConfigured()) {
+    return filterDemoProfiles(filters);
+  }
+
+  // Progressive radius expansion: 3 km -> 5 km -> 10 km -> farther bands
+  const targetMaxRadius = filters?.distance ?? 50;
+  const bands = PROGRESSIVE_RADIUS_BANDS.filter((b) => b <= Math.max(targetMaxRadius, 3));
+  if (bands.length === 0 || bands[bands.length - 1] < targetMaxRadius) {
+    bands.push(targetMaxRadius as any);
+  }
+
+  const allProfiles: Profile[] = [];
+  const seenIds = new Set<string>();
+
+  let minBandKm = 0;
+  for (const maxBandKm of bands) {
+    const page = await fetchDiscoveryPage(filters, null, minBandKm, maxBandKm);
+    for (const p of page.profiles) {
+      if (!seenIds.has(p.id)) {
+        seenIds.add(p.id);
+        allProfiles.push(p);
+      }
+    }
+    // If nearer band returned profiles, present them first without mixing farther profiles
+    if (allProfiles.length >= 10) {
+      break;
+    }
+    minBandKm = maxBandKm;
+  }
+
+  return allProfiles;
 }
 
 export interface DiscoveryCursor {
@@ -121,6 +153,8 @@ export interface DiscoveryPage {
 export async function fetchDiscoveryPage(
   filters?: import("../types").Filters,
   cursor?: DiscoveryCursor | null,
+  minRadiusKm = 0,
+  maxRadiusKm?: number,
 ): Promise<DiscoveryPage> {
   if (!isSupabaseConfigured()) {
     return { profiles: filterDemoProfiles(filters), nextCursor: null };
@@ -135,16 +169,18 @@ export async function fetchDiscoveryPage(
       interests: [],
       languages: [],
     };
+    const effectiveRadius = maxRadiusKm ?? safeFilters.distance ?? 50;
     const { data, error } = await supabase.rpc("get_discovery_feed_page", {
       _limit: 30,
       _age_min: safeFilters.ageMin,
       _age_max: safeFilters.ageMax,
-      _radius_km: safeFilters.distance,
+      _radius_km: effectiveRadius,
       _intents: safeFilters.intents,
       _interests: safeFilters.interests,
       _languages: safeFilters.languages,
       _after_distance_m: cursor?.distanceMeters ?? null,
       _after_id: cursor?.profileId ?? null,
+      _min_radius_km: minRadiusKm,
     });
     if (error) throw new Error(error.message);
     if (!Array.isArray(data)) throw new Error("Discovery returned an invalid response.");

@@ -81,6 +81,8 @@ export interface Message {
   audio?: string;
   audioDurationSec?: number;
   messageType?: "text" | "image" | "voice" | "system";
+  isViewOnce?: boolean;
+  viewedAt?: string | null;
   at: number;
   status: "sent" | "read" | "failed";
 }

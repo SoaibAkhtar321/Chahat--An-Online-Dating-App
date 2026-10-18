@@ -73,7 +73,8 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlyPrice: 0,
     features: [
       "Profile बनाना (Create Profile)",
-      "Daily likes (server-configured limit per IST day)",
+      "50 likes per day (server-configured daily limit - प्रति दिन 50 लाइक्स - IST रीसेट)",
+      "15s complimentary video call per allowance (24 घंटे में नवीनीकरण)",
       "Limited Matching & Discover Deck",
       "Basic Chat — Match होने के बाद",
       "Free Selfie/Profile Verification Badge",
@@ -82,13 +83,16 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
   },
   premium: {
     id: "premium",
-    name: "CHAHAT Premium",
-    hindiName: "चाहत प्रीमियम",
-    tagline: "प्यार और दोस्ती की शुरुआत",
+    name: "₹149 Plan (7 Days)",
+    hindiName: "₹149 प्लान (7 दिन)",
+    tagline: "Unlimited Likes & 5 Min/Day Video Calling",
     monthlyPrice: 99,
     popular: true,
-    badge: "Most Popular",
+    badge: "7 Days",
     features: [
+      "Unlimited Likes (असीमित लाइक्स)",
+      "5 minutes/day video calling (5 मिनट/दिन वीडियो कॉलिंग)",
+      "7 days validity (7 दिनों की वैधता)",
       "किसने Like किया देखें (See Who Liked You)",
       "Undo Last Swipe (Rewind Pass)",
       "Smart Icebreakers (Hindi, English, Hinglish)",
@@ -97,11 +101,15 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
   },
   plus: {
     id: "plus",
-    name: "CHAHAT Plus",
-    hindiName: "चाहत प्लस",
-    tagline: "अधिक विजिबिलिटी और तेज़ी से मैच",
+    name: "₹299 Plan (15 Days)",
+    hindiName: "₹299 प्लान (15 दिन)",
+    tagline: "Popular Value · 15 Days Validity",
     monthlyPrice: 199,
+    badge: "15 Days",
     features: [
+      "Unlimited Likes (असीमित लाइक्स)",
+      "5 minutes/day video calling (5 मिनट/दिन वीडियो कॉलिंग)",
+      "15 days validity (15 दिनों की वैधता)",
       "Premium के सभी Features",
       "Read Receipts Control (प्लस और वीआईपी केवल)",
       "Priority Profile Visibility",
@@ -110,12 +118,15 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
   },
   vip: {
     id: "vip",
-    name: "CHAHAT VIP",
-    hindiName: "चाहत वीआईपी",
-    tagline: "सर्वश्रेष्ठ अनुभव और विशेष प्राइवेसी",
+    name: "₹499 Plan (1 Month)",
+    hindiName: "₹499 प्लान (1 महीना)",
+    tagline: "Full Month VIP Experience",
     monthlyPrice: 399,
-    badge: "Exclusive VIP",
+    badge: "1 Month VIP",
     features: [
+      "Unlimited Likes (असीमित लाइक्स)",
+      "5 minutes/day video calling (5 मिनट/दिन वीडियो कॉलिंग)",
+      "1 month validity (1 महीने की वैधता)",
       "Plus के सभी Features",
       "Incognito Mode (पूर्ण गोपनीयता)",
       "Exclusive VIP Badge",
@@ -136,6 +147,7 @@ export interface DailyLikeQuota {
   dailyLimit: number;
   likesRemaining: number;
   resetAtIst: string;
+  unlimited?: boolean;
 }
 
 export async function getDailyLikeQuota(): Promise<DailyLikeQuota> {
@@ -151,22 +163,102 @@ export async function getDailyLikeQuota(): Promise<DailyLikeQuota> {
   }
 
   const value = data as Record<string, unknown>;
-  const dailyLimit = value.daily_limit;
-  const likesRemaining = value.likes_remaining;
-  const resetAtIst = value.reset_at_ist;
+  const isUnlimited =
+    value.unlimited === true ||
+    (typeof value.daily_limit === "number" && value.daily_limit < 0);
+  const rawDailyLimit = value.daily_limit;
+  const rawLikesRemaining = value.likes_remaining;
+  const resetAtIst = typeof value.reset_at_ist === "string" ? value.reset_at_ist : "";
+
   if (
-    typeof dailyLimit !== "number" ||
-    !Number.isInteger(dailyLimit) ||
-    dailyLimit < 0 ||
-    typeof likesRemaining !== "number" ||
-    !Number.isInteger(likesRemaining) ||
-    likesRemaining < 0 ||
-    likesRemaining > dailyLimit ||
-    typeof resetAtIst !== "string"
+    typeof rawDailyLimit !== "number" ||
+    typeof rawLikesRemaining !== "number" ||
+    typeof value.reset_at_ist !== "string"
   ) {
     throw new Error("The server returned an invalid daily-like quota.");
   }
-  return { dailyLimit, likesRemaining, resetAtIst };
+
+  if (
+    !isUnlimited &&
+    (!Number.isInteger(rawDailyLimit) ||
+      rawDailyLimit < 0 ||
+      !Number.isInteger(rawLikesRemaining) ||
+      rawLikesRemaining < 0 ||
+      rawLikesRemaining > rawDailyLimit)
+  ) {
+    throw new Error("The server returned an invalid daily-like quota.");
+  }
+  const quotaResult: DailyLikeQuota = {
+    dailyLimit: isUnlimited ? -1 : rawDailyLimit,
+    likesRemaining: isUnlimited ? -1 : rawLikesRemaining,
+    resetAtIst,
+  };
+  if (isUnlimited) {
+    quotaResult.unlimited = true;
+  }
+  return quotaResult;
+}
+
+export interface VideoCallAllowance {
+  valid: boolean;
+  tier: PlanTier;
+  isFree: boolean;
+  dailyLimitSeconds: number;
+  secondsRemaining: number;
+  status: "available" | "exhausted";
+  nextRenewalAt: string | null;
+  activeCallId: string | null;
+}
+
+export async function getUserVideoCallAllowance(): Promise<VideoCallAllowance> {
+  if (!isSupabaseConfigured()) {
+    return {
+      valid: true,
+      tier: "free",
+      isFree: true,
+      dailyLimitSeconds: 15,
+      secondsRemaining: 15,
+      status: "available",
+      nextRenewalAt: null,
+      activeCallId: null,
+    };
+  }
+  try {
+    const { data, error } = await supabase.rpc("get_my_video_call_allowance");
+    if (error || !data) {
+      return {
+        valid: false,
+        tier: "free",
+        isFree: true,
+        dailyLimitSeconds: 15,
+        secondsRemaining: 0,
+        status: "exhausted",
+        nextRenewalAt: null,
+        activeCallId: null,
+      };
+    }
+    return {
+      valid: data.valid !== false,
+      tier: (data.tier as PlanTier) || "free",
+      isFree: data.is_free !== false,
+      dailyLimitSeconds: data.daily_limit_seconds || (data.is_free ? 15 : 300),
+      secondsRemaining: data.seconds_remaining ?? (data.is_free ? 15 : 300),
+      status: data.status || "available",
+      nextRenewalAt: data.next_renewal_at ?? null,
+      activeCallId: data.active_call_id ?? null,
+    };
+  } catch {
+    return {
+      valid: false,
+      tier: "free",
+      isFree: true,
+      dailyLimitSeconds: 15,
+      secondsRemaining: 0,
+      status: "exhausted",
+      nextRenewalAt: null,
+      activeCallId: null,
+    };
+  }
 }
 
 /**
@@ -255,13 +347,20 @@ export function hasEntitlement(
 // Google Play subscription product IDs (must match Play Console; unverified until configured).
 export const PLAY_PRODUCT_IDS = {
   premium: {
+    "7d": "chahat_pkg_149_7d",
     "1m": "chahat_premium_1m",
     "3m": "chahat_premium_3m",
     "6m": "chahat_premium_6m",
     "12m": "chahat_premium_12m",
   },
-  plus: { "1m": "chahat_plus_1m" },
-  vip: { "1m": "chahat_vip_1m" },
+  plus: {
+    "15d": "chahat_pkg_299_15d",
+    "1m": "chahat_plus_1m",
+  },
+  vip: {
+    "1m_pkg": "chahat_pkg_499_1m",
+    "1m": "chahat_vip_1m",
+  },
 } as const;
 
 export interface PlayBillingProduct {

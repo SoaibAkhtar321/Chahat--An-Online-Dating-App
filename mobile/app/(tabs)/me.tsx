@@ -21,6 +21,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
 import { calculateAge } from "../../src/services/profile";
+import { calculateProfileCompleteness } from "../../src/services/profilePolicy";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Alert } from "../../src/utils/alert";
@@ -40,24 +41,16 @@ export default function MeScreen() {
   const isVerified = profile?.verificationStatus === "approved";
   const planTier = subscription?.tier || "free";
 
-  // Completeness check
-  const checks = [
-    !!profile?.name,
-    !!profile?.dob,
-    !!profile?.bio,
-    !!profile?.city,
-    !!profile?.prompt?.a,
-    !!profile?.work || !!profile?.education,
-    (profile?.photos?.length || 0) >= 3,
-    (profile?.interests?.length || 0) >= 3,
-  ];
-  const pct = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  // Authoritative completeness computation
+  const completeness = useMemo(() => calculateProfileCompleteness(profile), [profile]);
+  const pct = completeness.percentage;
 
   const menuItems = [
     {
       icon: Pencil,
       label: "Edit profile & photos",
-      onPress: () => router.push("/onboarding"),
+      onPress: () => router.push("/profile/complete"),
+      badge: pct < 100 ? `${pct}%` : "100%",
     },
     {
       icon: Crown,
@@ -156,6 +149,34 @@ export default function MeScreen() {
             {profile?.city ? `${profile.city} · ` : ""}Profile {pct}% complete
           </Text>
         </View>
+
+        {/* Complete Profile Callout Banner */}
+        {pct < 100 && (
+          <TouchableOpacity
+            style={styles.completeProfileCard}
+            onPress={() => router.push("/profile/complete")}
+            activeOpacity={0.85}
+          >
+            <View style={styles.completeProfileLeft}>
+              <View style={styles.completeIconWrap}>
+                <Sparkles size={20} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.completeTitle}>Complete Your Profile ({pct}%)</Text>
+                <Text style={styles.completeSubtitle}>
+                  Add your bio, interests & lifestyle to get 3x more matches!
+                </Text>
+                <View style={styles.completeProgressTrack}>
+                  <View style={[styles.completeProgressFill, { width: `${pct}%` }]} />
+                </View>
+              </View>
+            </View>
+            <View style={styles.completeActionBtn}>
+              <Text style={styles.completeActionText}>Continue</Text>
+              <ChevronRight size={14} color={Colors.primaryForeground} />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Subscription / Plan Tier Status Card */}
         <TouchableOpacity
@@ -339,6 +360,69 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.xs,
       color: Colors.mutedForeground,
       marginTop: 6,
+    },
+    completeProfileCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: Colors.card,
+      borderRadius: Radii.xl,
+      padding: 16,
+      borderWidth: 1.5,
+      borderColor: Colors.accent,
+      ...Shadows.card,
+    },
+    completeProfileLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginRight: 8,
+    },
+    completeIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: Radii.full,
+      backgroundColor: Colors.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    completeTitle: {
+      fontSize: Typography.sizes.sm,
+      fontWeight: Typography.weights.bold,
+      color: Colors.foreground,
+    },
+    completeSubtitle: {
+      fontSize: 11,
+      color: Colors.mutedForeground,
+      marginTop: 2,
+      lineHeight: 15,
+    },
+    completeProgressTrack: {
+      height: 4,
+      backgroundColor: Colors.secondary,
+      borderRadius: 2,
+      overflow: "hidden",
+      marginTop: 6,
+      width: "90%",
+    },
+    completeProgressFill: {
+      height: "100%",
+      backgroundColor: Colors.primary,
+    },
+    completeActionBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: Colors.primary,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: Radii.full,
+    },
+    completeActionText: {
+      fontSize: Typography.sizes.xs,
+      fontWeight: Typography.weights.bold,
+      color: Colors.primaryForeground,
     },
     planCard: {
       backgroundColor: Colors.card,

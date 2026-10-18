@@ -235,7 +235,7 @@ export default function SettingsScreen() {
 
             <TouchableOpacity
               style={styles.navRow}
-              onPress={() => router.push("/onboarding")}
+              onPress={() => router.push("/profile/complete")}
               activeOpacity={0.7}
             >
               <Text style={styles.rowLabel}>Edit Profile & Photos</Text>
