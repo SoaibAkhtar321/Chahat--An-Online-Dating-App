@@ -97,6 +97,16 @@ describe("deleteUserAccount (delete-account Edge Function)", () => {
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 
+  it("explains that a 401 on retry may mean the deletion already finished", async () => {
+    mockInvoke.mockResolvedValue({
+      data: null,
+      error: httpError(401, { success: false, code: "invalid_session", error: "Invalid or expired session" }),
+    });
+    const res = await deleteUserAccount();
+    expect(res.error).toMatch(/may already be complete/i);
+    expect(res.error).toMatch(/login fails, the deletion finished/i);
+  });
+
   it("reports the function as unavailable when it is not deployed (404)", async () => {
     mockInvoke.mockResolvedValue({
       data: null,

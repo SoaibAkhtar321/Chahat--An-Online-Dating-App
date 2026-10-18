@@ -17,6 +17,8 @@ function fakeAdmin(opts: {
   matches?: string[];
   storage?: Record<string, Array<{ id: string | null; name: string }>>;
   authError?: string;
+  messagePaths?: string[];
+  chatRemoveFails?: boolean;
 } = {}) {
   const calls: Calls = [];
   const storage = opts.storage ?? {};
@@ -35,6 +37,7 @@ function fakeAdmin(opts: {
         remove: async (paths) => {
           calls.push(`remove:${bucket}:${paths.join(",")}`);
           if (opts.fail === "remove") return { error: { message: "remove boom" } };
+          if (opts.chatRemoveFails && bucket === "chat") return { error: { message: "chat remove boom" } };
           for (const key of Object.keys(storage)) {
             storage[key] = storage[key].filter((e) => !paths.includes(`${key.split("/").slice(1).join("/")}/${e.name}`));
           }
@@ -47,6 +50,7 @@ function fakeAdmin(opts: {
       }),
     },
     from: (table: string) => {
+      let served = false;
       const builder: any = {
         select: () => builder,
         or: (filter: string) => {
@@ -55,7 +59,13 @@ function fakeAdmin(opts: {
         },
         eq: () => builder,
         not: () => builder,
-        range: () => Promise.resolve({ data: [], error: null }),
+        range: () => {
+          if (table === "messages" && !served && opts.messagePaths?.length) {
+            served = true;
+            return Promise.resolve({ data: opts.messagePaths.map((image_path) => ({ image_path })), error: null });
+          }
+          return Promise.resolve({ data: [], error: null });
+        },
       };
       return builder;
     },
@@ -225,5 +235,46 @@ describe("delete-account: storage cleanup", () => {
     await executeAccountDeletion(admin, UID);
     expect(calls).toContain("remove:chat:m1/v.m4a");
     expect(calls).toContain("remove:chat:m2/i.jpg");
+  });
+});
+
+describe("delete-account: Phase 3 edge cases", () => {
+  it("empties a folder with more than one page of files (pagination)", async () => {
+    const files = Array.from({ length: 250 }, (_, i) => ({ id: `f${i}`, name: `p${i}.jpg` }));
+    const { admin, calls } = fakeAdmin({ storage: { [`photos/${UID}`]: files } });
+    await removeFolder(admin, "photos", UID);
+    expect(calls.filter((c) => c.startsWith("remove:photos")).length).toBe(3);
+  });
+
+  it("also removes chat objects referenced by messages this user sent", async () => {
+    const { admin, calls } = fakeAdmin({ messagePaths: ["orphan-folder/a.jpg", "orphan-folder/b.m4a"] });
+    expect(await executeAccountDeletion(admin, UID)).toEqual({ ok: true });
+    expect(calls).toContain("remove:chat:orphan-folder/a.jpg,orphan-folder/b.m4a");
+  });
+
+  it("stops before the database purge and Auth deletion when chat storage cleanup fails", async () => {
+    const { admin, calls } = fakeAdmin({ messagePaths: ["x/a.jpg"], chatRemoveFails: true });
+    const result = await executeAccountDeletion(admin, UID);
+    expect(result).toMatchObject({ ok: false });
+    expect(calls).not.toContain("rpc:purge_user_data");
+    expect(calls.some((c) => c.startsWith("auth.deleteUser"))).toBe(false);
+  });
+
+  it("two simultaneous requests for the same user both finish safely", async () => {
+    let deleteCalls = 0;
+    const { admin } = fakeAdmin();
+    admin.auth.admin.deleteUser = async () => {
+      deleteCalls++;
+      return { error: deleteCalls > 1 ? { message: "User not found" } : null };
+    };
+    const results = await Promise.all([executeAccountDeletion(admin, UID), executeAccountDeletion(admin, UID)]);
+    expect(results).toEqual([{ ok: true }, { ok: true }]);
+  });
+
+  it("does not leak internals to the client on failure", async () => {
+    const { admin } = fakeAdmin({ fail: "purge_user_data" });
+    const res = await handleDeleteAccount(post({ confirm: true }), deps({ admin }));
+    const text = JSON.stringify(await res.json());
+    expect(text).not.toMatch(/boom|service|secret|key/i);
   });
 });
