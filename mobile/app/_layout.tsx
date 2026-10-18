@@ -4,17 +4,31 @@ import React, { useEffect } from "react";
 if (typeof window === "undefined") {
   React.useLayoutEffect = React.useEffect;
 }
-import { Stack } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { AuthProvider } from "../src/context/AuthContext";
+import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { legalGateRedirect } from "../src/utils/legalGate";
 import { NotificationResponseHandler } from "../src/components/notifications/NotificationResponseHandler";
 import { MiloProvider } from "../src/context/MiloContext";
 import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 
 // Show a visible error screen (with retry) instead of a blank screen when a route throws
 export { ErrorBoundary } from "expo-router";
+
+// Safety net: while the current Terms/Privacy are not accepted, every screen except the documents and the acceptance
+// screen redirects to /legal/accept (covers deep links and screens reached without passing through the index route).
+function LegalGate() {
+  const { isLoggedIn, legalStatus } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const target = legalGateRedirect({ isLoggedIn, legalStatus, pathname });
+  useEffect(() => {
+    if (target) router.replace(target as never);
+  }, [target, router]);
+  return null;
+}
 
 function RootNavigation() {
   const { isDark, colors } = useTheme();
@@ -31,6 +45,7 @@ function RootNavigation() {
         style={isDark ? "light" : "dark"}
         backgroundColor={colors.background}
       />
+      <LegalGate />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -61,6 +76,7 @@ function RootNavigation() {
         <Stack.Screen name="explore/index" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="legal/terms" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="legal/privacy" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="legal/accept" options={{ animation: "fade", gestureEnabled: false }} />
       </Stack>
     </>
   );

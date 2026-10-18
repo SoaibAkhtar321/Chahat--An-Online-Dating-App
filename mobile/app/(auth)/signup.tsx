@@ -16,6 +16,9 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { signUpUser } from "../../src/services/auth";
+import { LegalAcceptanceCheckbox } from "../../src/components/legal/LegalAcceptanceCheckbox";
+import { currentLegalAcceptanceClaim } from "../../src/constants/legalVersions";
+import { validateLegalAcceptance } from "../../src/utils/legalGate";
 
 export default function SignupScreen() {
   const { colors: Colors } = useTheme();
@@ -24,10 +27,11 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [legalAccepted, setLegalAccepted] = useState(false); // never preselected
+  const [errors, setErrors] = useState<{ email?: string; password?: string; legal?: string }>({});
 
   const validate = () => {
-    const err: { email?: string; password?: string } = {};
+    const err: { email?: string; password?: string; legal?: string } = {};
 
     if (!email.trim() || !/^\S+@\S+\.\S+$/.test(email)) {
       err.email = "Enter a valid email address";
@@ -41,6 +45,9 @@ export default function SignupScreen() {
       err.password = "Use 64 characters or fewer";
     }
 
+    const legalError = validateLegalAcceptance(legalAccepted);
+    if (legalError) err.legal = legalError;
+
     setErrors(err);
     return Object.keys(err).length === 0;
   };
@@ -49,7 +56,7 @@ export default function SignupScreen() {
     if (!validate()) return;
 
     setLoading(true);
-    const res = await signUpUser(email, password);
+    const res = await signUpUser(email, password, currentLegalAcceptanceClaim());
     setLoading(false);
 
     if (!res.success) {
@@ -112,6 +119,15 @@ export default function SignupScreen() {
                 • One profile per individual with authentic photos
               </Text>
             </View>
+
+            <LegalAcceptanceCheckbox
+              checked={legalAccepted}
+              onChange={(next) => {
+                setLegalAccepted(next);
+                setErrors((prev) => ({ ...prev, legal: undefined }));
+              }}
+              error={errors.legal}
+            />
 
             <Button
               title={loading ? "Creating…" : "Sign up"}

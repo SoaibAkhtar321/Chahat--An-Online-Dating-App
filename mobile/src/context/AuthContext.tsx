@@ -8,6 +8,8 @@ import {
   registerPushNotificationToken,
   unregisterPushNotificationToken,
 } from "../services/notifications";
+import { fetchLegalStatus } from "../services/legalAcceptance";
+import type { LegalGateStatus } from "../utils/legalGate";
 import type { MeProfile } from "../types";
 
 interface AuthContextType {
@@ -18,6 +20,8 @@ interface AuthContextType {
   profileError: boolean;
   isLoggedIn: boolean;
   isOnboarded: boolean;
+  legalStatus: LegalGateStatus;
+  refreshLegalStatus: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -30,6 +34,8 @@ const AuthContext = createContext<AuthContextType>({
   profileError: false,
   isLoggedIn: false,
   isOnboarded: false,
+  legalStatus: "unknown",
+  refreshLegalStatus: async () => {},
   refreshProfile: async () => {},
   signOut: async () => {},
 });
@@ -40,9 +46,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState(false);
+  const [legalStatus, setLegalStatus] = useState<LegalGateStatus>("unknown");
   const activeUserId = useRef<string | null>(null);
   const profileRequest = useRef(0);
   const authEventVersion = useRef(0);
+
+  // Has the user accepted the CURRENT Terms/Privacy versions? Unknown until checked; a failed check is "error", never a guess.
+  const loadLegalStatus = useCallback(async (userId: string, request: number) => {
+    try {
+      const status = await fetchLegalStatus(userId);
+      if (profileRequest.current === request && activeUserId.current === userId) setLegalStatus(status);
+    } catch (error) {
+      console.error("Failed to load legal acceptance status", error);
+      if (profileRequest.current === request && activeUserId.current === userId) setLegalStatus("error");
+    }
+  }, []);
 
   const loadUserProfile = useCallback(async (currentUser: User, request: number) => {
     try {
@@ -50,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profileRequest.current !== request || activeUserId.current !== currentUser.id) return;
       setProfile(currentProfile);
       setProfileError(false);
+      void loadLegalStatus(currentUser.id, request);
       void registerPushNotificationToken(currentUser.id).then((result) => {
         if (result.status === "error") console.warn("Push registration failed:", result.error);
       });
@@ -63,7 +82,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     }
-  }, []);
+  }, [loadLegalStatus]);
+
+  const refreshLegalStatus = useCallback(async () => {
+    const userId = activeUserId.current;
+    if (!userId) return;
+    setLegalStatus("unknown");
+    await loadLegalStatus(userId, profileRequest.current);
+  }, [loadLegalStatus]);
 
   const refreshProfile = useCallback(async () => {
     const eventVersion = authEventVersion.current;
@@ -79,6 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setProfile(null);
       setProfileError(false);
+      setLegalStatus("unknown");
       setLoading(false);
       return;
     }
@@ -89,6 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(currentUser);
     setProfile(null);
     setProfileError(false);
+    setLegalStatus("unknown");
     setLoading(true);
     await loadUserProfile(currentUser, request);
   }, [loadUserProfile]);
@@ -149,6 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!nextUser) {
         setProfile(null);
         setProfileError(false);
+        setLegalStatus("unknown");
         setLoading(false);
         return;
       }
@@ -157,6 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setProfile(null);
       setProfileError(false);
+      setLegalStatus("unknown");
       setLoading(true);
       setTimeout(() => {
         if (mounted) void loadUserProfile(nextUser, request);
@@ -218,6 +248,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profileError,
         isLoggedIn: !!user,
         isOnboarded,
+        legalStatus,
+        refreshLegalStatus,
         refreshProfile,
         signOut,
       }}

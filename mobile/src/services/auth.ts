@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured, getConfigStatus } from "./supabase";
 import * as Linking from "expo-linking";
 import { clearNotificationState, unregisterPushNotificationToken } from "./notifications";
+import { LEGAL_ACCEPTANCE_METADATA_KEY, type LegalAcceptanceClaim } from "../constants/legalVersions";
 
 export interface AuthResult {
   success: boolean;
@@ -11,7 +12,13 @@ export interface AuthResult {
 const CONFIG_ERROR =
   "Backend connection not configured: Please provide EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in mobile/.env.";
 
-export async function signUpUser(email: string, password: string): Promise<AuthResult> {
+// `legalAcceptance` must only be passed after the user explicitly ticked the Terms/Privacy checkbox. It travels as signup
+// metadata and is recorded server-side only after e-mail confirmation (see the legal_acceptances migration).
+export async function signUpUser(
+  email: string,
+  password: string,
+  legalAcceptance?: LegalAcceptanceClaim,
+): Promise<AuthResult> {
   if (!isSupabaseConfigured()) {
     const { missing } = getConfigStatus();
     return {
@@ -25,7 +32,10 @@ export async function signUpUser(email: string, password: string): Promise<AuthR
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password,
-      options: { emailRedirectTo: Linking.createURL("callback") },
+      options: {
+        emailRedirectTo: Linking.createURL("callback"),
+        ...(legalAcceptance ? { data: { [LEGAL_ACCEPTANCE_METADATA_KEY]: legalAcceptance } } : {}),
+      },
     });
 
     if (error) {

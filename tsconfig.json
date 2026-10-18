@@ -2,9 +2,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "eslint.config.js",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "eslint.config.js"
   ],
   "compilerOptions": {
     "target": "ES2022",

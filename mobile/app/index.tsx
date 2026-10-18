@@ -10,8 +10,17 @@ export default function Index() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
-  const { isLoggedIn, isOnboarded, loading, profile, profileError, refreshProfile, signOut } =
-    useAuth();
+  const {
+    isLoggedIn,
+    isOnboarded,
+    loading,
+    profile,
+    profileError,
+    legalStatus,
+    refreshLegalStatus,
+    refreshProfile,
+    signOut,
+  } = useAuth();
 
   useEffect(() => {
     if (loading) return;
@@ -19,12 +28,16 @@ export default function Index() {
 
     if (!isLoggedIn) {
       router.replace("/(auth)/welcome");
+    } else if (legalStatus === "unknown" || legalStatus === "error") {
+      return; // wait for (or retry) the acceptance check; never guess
+    } else if (legalStatus === "required") {
+      router.replace("/legal/accept");
     } else if (!isOnboarded) {
       router.replace("/onboarding");
     } else {
       router.replace("/(tabs)/discover");
     }
-  }, [loading, isLoggedIn, isOnboarded, profile, router]);
+  }, [loading, isLoggedIn, isOnboarded, profile, legalStatus, router]);
 
   if (!loading && isLoggedIn && !profile && profileError) {
     return (
@@ -47,6 +60,20 @@ export default function Index() {
             }
           }}
         >
+          <Text>Sign out</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!loading && isLoggedIn && profile && legalStatus === "error") {
+    return (
+      <View style={styles.container}>
+        <Text style={{ marginBottom: 16 }}>Could not check your Terms and Privacy acceptance.</Text>
+        <TouchableOpacity onPress={() => refreshLegalStatus()}>
+          <Text style={{ color: Colors.primary, marginBottom: 16 }}>Try again</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => signOut().catch(() => {})}>
           <Text>Sign out</Text>
         </TouchableOpacity>
       </View>
