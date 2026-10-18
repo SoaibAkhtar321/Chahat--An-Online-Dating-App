@@ -43,7 +43,7 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
-    FROM unnest(NEW.intents || NEW.interests || NEW.languages) AS value
+    FROM unnest(coalesce(NEW.intents, '{}') || coalesce(NEW.interests, '{}') || coalesce(NEW.languages, '{}')) AS value
     WHERE value IS NULL OR char_length(btrim(value)) = 0 OR char_length(value) > 80
   ) THEN
     RAISE EXCEPTION 'Profile lists contain an invalid value';

@@ -219,5 +219,23 @@ describe("Onboarding and Complete Profile Architecture & Navigation", () => {
       /GRANT EXECUTE ON FUNCTION public\.get_discovery_feed_page\(integer, integer, integer, integer, text\[\], text\[\], text\[\], integer, text, integer\) TO authenticated;/,
     );
   });
+
+  test("migration 20260101002800 drops obsolete 2-argument setting_int overload to prevent function ambiguity", () => {
+    const mig = read(
+      "supabase/migrations/20260101002800_entitlements_calling_view_once.sql",
+    );
+    expect(mig).toMatch(
+      /DROP FUNCTION IF EXISTS public\.setting_int\(text, integer\);/,
+    );
+  });
+
+  test("migration 20260101002900 safely coalesces array values before unnest", () => {
+    const mig = read(
+      "supabase/migrations/20260101002900_streamlined_onboarding_and_profile_completion.sql",
+    );
+    expect(mig).toMatch(
+      /unnest\(coalesce\(NEW\.intents, '{}'\) \|\| coalesce\(NEW\.interests, '{}'\) \|\| coalesce\(NEW\.languages, '{}'\)\)/,
+    );
+  });
 });
 

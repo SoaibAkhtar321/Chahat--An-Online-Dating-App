@@ -15,6 +15,7 @@ INSERT INTO public.app_settings (key, value) VALUES
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 -- Helper to safely read int app settings with fallback and bounds
+DROP FUNCTION IF EXISTS public.setting_int(text, integer);
 CREATE OR REPLACE FUNCTION public.setting_int(_key text, _default integer, _min integer DEFAULT NULL, _max integer DEFAULT NULL)
 RETURNS integer
 LANGUAGE sql
