@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { buildPushPayload, isRetryableProviderStatus } from "./policy.ts";
+import { safeErrorSummary } from "../_shared/safeLog.ts";
 
 const EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send";
 const EXPO_RECEIPTS_ENDPOINT = "https://exp.host/--/api/v2/push/getReceipts";
@@ -226,7 +227,7 @@ Deno.serve(async (request) => {
   } catch (error) {
     console.error(
       "Push dispatcher run failed:",
-      error instanceof Error ? error.message : "Unknown internal error",
+      safeErrorSummary(error),
     );
     return json(500, { error: "Push dispatch run failed; queued work remains retryable" });
   }

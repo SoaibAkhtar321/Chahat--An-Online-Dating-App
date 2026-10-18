@@ -10,6 +10,7 @@
 // Required secret: GOOGLE_VISION_API_KEY (supabase secrets set GOOGLE_VISION_API_KEY=...).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { decide, type SafeSearchAnnotation } from "./policy.ts";
+import { safeErrorSummary } from "../_shared/safeLog.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -96,7 +97,8 @@ Deno.serve(async (req) => {
       });
       return rpcErr ? "pending" : decision.status;
     } catch (e) {
-      console.error("moderate-photo: failed for one photo:", e instanceof Error ? e.message : "unknown error");
+      // Storage/Vision errors can embed the object path (which contains the owner id): log a redacted summary.
+      console.error("moderate-photo: failed for one photo:", safeErrorSummary(e));
       return "pending";
     }
   };

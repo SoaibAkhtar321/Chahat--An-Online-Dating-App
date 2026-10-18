@@ -1,5 +1,7 @@
 // Pure, dependency-injected core of the delete-account Edge Function (no Deno globals, no URL imports),
 // so the same code runs under Deno in production and under jest in __tests__/deleteAccountFunction.test.ts.
+import { isSafeChatMediaPath, safeErrorSummary } from "../_shared/safeLog.ts";
+
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -70,12 +72,23 @@ export async function removeFolder(admin: AdminLike, bucket: string, folder: str
   }
 }
 
+/** Minimal logger shape so tests can capture output. Defaults to the console. */
+export interface LogLike {
+  warn(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
 export type DeletionResult = { ok: true } | { ok: false; step: string; message: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Deletes everything for `uid` in a fixed order. The Auth user is deleted last so any earlier failure is retryable. */
-export async function executeAccountDeletion(admin: AdminLike, uid: string): Promise<DeletionResult> {
+export async function executeAccountDeletion(
+  admin: AdminLike,
+  uid: string,
+  opts: { log?: LogLike } = {},
+): Promise<DeletionResult> {
+  const log: LogLike = opts.log ?? console;
   let current = "start";
   try {
     // uid comes from the verified JWT; this check also makes the later PostgREST .or() filter injection-proof.
@@ -96,31 +109,55 @@ export async function executeAccountDeletion(admin: AdminLike, uid: string): Pro
       .select("id")
       .or(`user_a.eq.${uid},user_b.eq.${uid}`);
     if (matchErr) throw new Error(matchErr.message);
+    const userMatchIds = new Set<string>();
     for (const m of (userMatches ?? []) as Array<{ id: string }>) {
+      userMatchIds.add(m.id);
       await removeFolder(admin, "chat", m.id);
     }
 
-    // Also remove chat objects referenced by messages this user sent (covers paths outside the match folders).
+    // Also remove chat objects referenced by messages this user sent. The admin client bypasses RLS and Storage
+    // policies, so a path is removed ONLY if it is exactly "<match id>/<safe file name>" for a match this user
+    // belongs to (same rule as the SQL constraint). Legacy rows written before that constraint existed may hold
+    // arbitrary paths, possibly pointing at another user's files: those are skipped and only counted, never logged.
+    let skippedUnsafe = 0;
     let page = 0;
     const pageSize = 500;
     for (;;) {
       const { data: msgs, error: msgErr } = await admin
         .from("messages")
-        .select("image_path")
+        .select("match_id, image_path, audio_path")
         .eq("sender", uid)
-        .not("image_path", "is", null)
+        .or("image_path.not.is.null,audio_path.not.is.null")
+        .order("id", { ascending: true })
         .range(page * pageSize, (page + 1) * pageSize - 1);
       if (msgErr) throw new Error(msgErr.message);
       if (!msgs || msgs.length === 0) break;
-      const paths = (msgs as Array<{ image_path: string | null }>)
-        .map((m) => m.image_path as string)
-        .filter(Boolean);
+
+      const safePaths = new Set<string>();
+      for (const row of msgs as Array<{
+        match_id: string | null;
+        image_path?: string | null;
+        audio_path?: string | null;
+      }>) {
+        for (const candidate of [row.image_path, row.audio_path]) {
+          if (candidate === null || candidate === undefined) continue;
+          if (row.match_id && userMatchIds.has(row.match_id) && isSafeChatMediaPath(candidate, row.match_id)) {
+            safePaths.add(candidate);
+          } else {
+            skippedUnsafe++;
+          }
+        }
+      }
+      const paths = [...safePaths];
       for (let i = 0; i < paths.length; i += 100) {
         const { error: rmErr } = await admin.storage.from("chat").remove(paths.slice(i, i + 100));
         if (rmErr) throw new Error(rmErr.message);
       }
       if (msgs.length < pageSize) break;
       page++;
+    }
+    if (skippedUnsafe > 0) {
+      log.warn(`delete-account: skipped ${skippedUnsafe} unsafe or foreign chat media path(s) at storage:chat`);
     }
 
     current = "database";
@@ -133,8 +170,10 @@ export async function executeAccountDeletion(admin: AdminLike, uid: string): Pro
 
     return { ok: true };
   } catch (e: any) {
-    console.error(`delete-account failed at ${current}:`, e?.message || e);
-    return { ok: false, step: current, message: String(e?.message || e) };
+    // Raw DB/Storage errors can embed user ids, e-mails or object paths: log a redacted summary only.
+    const summary = safeErrorSummary(e);
+    log.error(`delete-account failed at ${current}: ${summary}`);
+    return { ok: false, step: current, message: summary };
   }
 }
 

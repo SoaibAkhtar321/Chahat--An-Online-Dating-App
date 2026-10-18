@@ -8,6 +8,11 @@ import {
 
 const UID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
+const MATCH_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"; // a match UID belongs to
+const MATCH_B = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"; // another match UID belongs to
+const FOREIGN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"; // a match UID is NOT in (someone else's files)
+
+type MessageRow = { match_id: string | null; image_path?: unknown; audio_path?: unknown };
 
 type Calls = string[];
 
@@ -17,7 +22,7 @@ function fakeAdmin(opts: {
   matches?: string[];
   storage?: Record<string, Array<{ id: string | null; name: string }>>;
   authError?: string;
-  messagePaths?: string[];
+  messageRows?: MessageRow[];
   chatRemoveFails?: boolean;
 } = {}) {
   const calls: Calls = [];
@@ -54,15 +59,17 @@ function fakeAdmin(opts: {
       const builder: any = {
         select: () => builder,
         or: (filter: string) => {
+          if (table !== "matches") return builder; // messages: media-column filter, chained further
           calls.push(`matches.or:${filter}`);
           return Promise.resolve({ data: (opts.matches ?? []).map((id) => ({ id })), error: null });
         },
         eq: () => builder,
         not: () => builder,
+        order: () => builder,
         range: () => {
-          if (table === "messages" && !served && opts.messagePaths?.length) {
+          if (table === "messages" && !served && opts.messageRows?.length) {
             served = true;
-            return Promise.resolve({ data: opts.messagePaths.map((image_path) => ({ image_path })), error: null });
+            return Promise.resolve({ data: opts.messageRows, error: null });
           }
           return Promise.resolve({ data: [], error: null });
         },
@@ -246,14 +253,24 @@ describe("delete-account: Phase 3 edge cases", () => {
     expect(calls.filter((c) => c.startsWith("remove:photos")).length).toBe(3);
   });
 
-  it("also removes chat objects referenced by messages this user sent", async () => {
-    const { admin, calls } = fakeAdmin({ messagePaths: ["orphan-folder/a.jpg", "orphan-folder/b.m4a"] });
+  it("also removes chat objects (image and voice) referenced by messages this user sent in their own matches", async () => {
+    const { admin, calls } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [
+        { match_id: MATCH_A, image_path: `${MATCH_A}/a.jpg`, audio_path: null },
+        { match_id: MATCH_A, image_path: null, audio_path: `${MATCH_A}/voice_b.m4a` },
+      ],
+    });
     expect(await executeAccountDeletion(admin, UID)).toEqual({ ok: true });
-    expect(calls).toContain("remove:chat:orphan-folder/a.jpg,orphan-folder/b.m4a");
+    expect(calls).toContain(`remove:chat:${MATCH_A}/a.jpg,${MATCH_A}/voice_b.m4a`);
   });
 
   it("stops before the database purge and Auth deletion when chat storage cleanup fails", async () => {
-    const { admin, calls } = fakeAdmin({ messagePaths: ["x/a.jpg"], chatRemoveFails: true });
+    const { admin, calls } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [{ match_id: MATCH_A, image_path: `${MATCH_A}/a.jpg` }],
+      chatRemoveFails: true,
+    });
     const result = await executeAccountDeletion(admin, UID);
     expect(result).toMatchObject({ ok: false });
     expect(calls).not.toContain("rpc:purge_user_data");
@@ -276,5 +293,146 @@ describe("delete-account: Phase 3 edge cases", () => {
     const res = await handleDeleteAccount(post({ confirm: true }), deps({ admin }));
     const text = JSON.stringify(await res.json());
     expect(text).not.toMatch(/boom|service|secret|key/i);
+  });
+});
+
+describe("delete-account: chat media path safety (never delete another user's files)", () => {
+  const warnLog = () => ({ warn: jest.fn(), error: jest.fn() });
+  const chatRemovals = (calls: Calls) => calls.filter((c) => c.startsWith("remove:chat:"));
+
+  it("skips legacy paths that point into another match's folder, even if the row's own match is the user's", async () => {
+    const log = warnLog();
+    const { admin, calls } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [{ match_id: MATCH_A, image_path: `${FOREIGN}/victim.jpg` }],
+    });
+    expect(await executeAccountDeletion(admin, UID, { log })).toEqual({ ok: true });
+    expect(chatRemovals(calls)).toEqual([]);
+  });
+
+  it("skips rows whose match is not one of the user's matches, even with a self-consistent path", async () => {
+    const { admin, calls } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [{ match_id: FOREIGN, image_path: `${FOREIGN}/victim.jpg` }],
+    });
+    expect(await executeAccountDeletion(admin, UID, { log: warnLog() })).toEqual({ ok: true });
+    expect(chatRemovals(calls)).toEqual([]);
+  });
+
+  it.each([
+    ["parent traversal", `${MATCH_A}/../${FOREIGN}/x.jpg`],
+    ["double dots in the name", `${MATCH_A}/a..b.jpg`],
+    ["nested folder", `${MATCH_A}/sub/x.jpg`],
+    ["leading slash", `/${MATCH_A}/x.jpg`],
+    ["backslash", `${MATCH_A}\\x.jpg`],
+    ["empty file name", `${MATCH_A}/`],
+    ["name starting with a dot", `${MATCH_A}/.hidden`],
+    ["name over 200 characters", `${MATCH_A}/${"a".repeat(201)}`],
+    ["bucket-relative absolute-looking path", "photos/" + UID + "/x.jpg"],
+    ["non-string value", 12345],
+  ])("skips an unsafe path (%s)", async (_label, bad) => {
+    const { admin, calls } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [{ match_id: MATCH_A, image_path: bad }],
+    });
+    expect(await executeAccountDeletion(admin, UID, { log: warnLog() })).toEqual({ ok: true });
+    expect(chatRemovals(calls)).toEqual([]);
+  });
+
+  it("removes only the safe paths from a mixed batch, deduplicated, across several of the user's matches", async () => {
+    const { admin, calls } = fakeAdmin({
+      matches: [MATCH_A, MATCH_B],
+      messageRows: [
+        { match_id: MATCH_A, image_path: `${MATCH_A}/ok1.jpg` },
+        { match_id: MATCH_A, image_path: `${MATCH_A}/ok1.jpg` }, // duplicate
+        { match_id: MATCH_B, audio_path: `${MATCH_B}/voice_ok2.m4a` },
+        { match_id: MATCH_A, image_path: `${FOREIGN}/stolen.jpg` },
+        { match_id: MATCH_B, image_path: `${MATCH_B}/../${MATCH_A}/x.jpg` },
+      ],
+    });
+    expect(await executeAccountDeletion(admin, UID, { log: warnLog() })).toEqual({ ok: true });
+    expect(chatRemovals(calls)).toEqual([`remove:chat:${MATCH_A}/ok1.jpg,${MATCH_B}/voice_ok2.m4a`]);
+  });
+
+  it("still completes the purge and Auth deletion when every path is unsafe", async () => {
+    const { admin, calls } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [{ match_id: MATCH_A, image_path: `${FOREIGN}/v.jpg` }],
+    });
+    expect(await executeAccountDeletion(admin, UID, { log: warnLog() })).toEqual({ ok: true });
+    expect(calls).toContain("rpc:purge_user_data");
+    expect(calls).toContain(`auth.deleteUser:${UID}`);
+  });
+
+  it("logs only a sanitized count: no paths, no user id, no match ids", async () => {
+    const log = warnLog();
+    const { admin } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [
+        { match_id: MATCH_A, image_path: `${FOREIGN}/victim-secret-name.jpg` },
+        { match_id: FOREIGN, audio_path: `${FOREIGN}/voice.m4a` },
+      ],
+    });
+    await executeAccountDeletion(admin, UID, { log });
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    const text = JSON.stringify(log.warn.mock.calls);
+    expect(text).toMatch(/skipped 2 unsafe/);
+    for (const secret of [UID, MATCH_A, FOREIGN, "victim-secret-name", "voice.m4a"]) {
+      expect(text).not.toContain(secret);
+    }
+  });
+
+  it("does not warn when there is nothing to skip", async () => {
+    const log = warnLog();
+    const { admin } = fakeAdmin({
+      matches: [MATCH_A],
+      messageRows: [{ match_id: MATCH_A, image_path: `${MATCH_A}/ok.jpg` }],
+    });
+    await executeAccountDeletion(admin, UID, { log });
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("delete-account: failure logging is redacted", () => {
+  it("never logs the user id, e-mail addresses or object paths from a raw backend error", async () => {
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const { admin } = fakeAdmin();
+    admin.rpc = async () => ({
+      error: {
+        message: `duplicate key: Key (user_id)=(${UID}) for ${OTHER} jane.doe@example.com photos/${UID}/selfie.jpg`,
+      },
+    });
+    const result = await executeAccountDeletion(admin, UID, { log });
+    expect(result).toMatchObject({ ok: false, step: "database:deletion_pending" });
+    const logged = JSON.stringify(log.error.mock.calls);
+    expect(logged).toContain("delete-account failed at database:deletion_pending");
+    for (const secret of [UID, OTHER, "jane.doe@example.com"]) expect(logged).not.toContain(secret);
+    // The returned (internal) message is redacted as well.
+    expect(JSON.stringify(result)).not.toContain(UID);
+  });
+
+  it("logs a placeholder, not the object, when a non-Error value is thrown", async () => {
+    const log = { warn: jest.fn(), error: jest.fn() };
+    const { admin } = fakeAdmin();
+    admin.rpc = (() => {
+      throw { secretBody: "password=hunter2", uid: UID };
+    }) as any;
+    await executeAccountDeletion(admin, UID, { log });
+    const logged = JSON.stringify(log.error.mock.calls);
+    expect(logged).not.toContain("hunter2");
+    expect(logged).not.toContain(UID);
+  });
+
+  it("uses the console by default and still keeps it clean", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { admin } = fakeAdmin();
+      admin.rpc = async () => ({ error: { message: `boom for ${UID}` } });
+      await executeAccountDeletion(admin, UID);
+      expect(spy).toHaveBeenCalled();
+      expect(JSON.stringify(spy.mock.calls)).not.toContain(UID);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
