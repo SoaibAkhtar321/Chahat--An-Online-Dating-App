@@ -1,0 +1,1163 @@
+diff --git a/__tests__/accountDeletionRetention.test.ts b/__tests__/accountDeletionRetention.test.ts
+new file mode 100644
+index 0000000..0c945a7
+--- /dev/null
++++ b/__tests__/accountDeletionRetention.test.ts
+@@ -0,0 +1,93 @@
++import * as fs from "fs";
++import * as path from "path";
++
++const root = path.resolve(__dirname, "..");
++const read = (rel: string) => fs.readFileSync(path.join(root, rel), "utf8");
++
++describe("Step 5: deletion migration (static checks)", () => {
++  const sql = read("supabase/migrations/20260101003500_account_deletion_hardening.sql");
++
++  it("keeps the deletion functions service-role only", () => {
++    expect(sql).toMatch(/REVOKE EXECUTE ON FUNCTION public\.purge_user_data\(uuid\) FROM PUBLIC, anon, authenticated/);
++    expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.purge_user_data\(uuid\) TO service_role/);
++    expect(sql).toMatch(/REVOKE EXECUTE ON FUNCTION public\.find_orphaned_chat_folders\(\) FROM PUBLIC, anon, authenticated/);
++    expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.find_orphaned_chat_folders\(\) TO service_role/);
++  });
++
++  it("pins search_path on every SECURITY DEFINER function", () => {
++    const defs = sql.match(/SECURITY DEFINER[\s\S]*?AS \$\$/g) ?? [];
++    expect(defs.length).toBeGreaterThanOrEqual(2);
++    for (const d of defs) expect(d).toMatch(/SET search_path = /);
++  });
++
++  it("makes the audit event idempotent and does not touch retained-data decisions", () => {
++    expect(sql).toMatch(/IF NOT EXISTS \([\s\S]*account_self_deleted/);
++    expect(sql).not.toMatch(/DROP TABLE|TRUNCATE|ALTER TABLE public\.(coin_|legal_|consent_)/i);
++  });
++
++  it("orphan finder is read-only", () => {
++    const finder = sql.slice(sql.indexOf("find_orphaned_chat_folders()\nRETURNS"));
++    expect(finder).not.toMatch(/\b(DELETE|UPDATE|INSERT)\b/i);
++  });
++});
++
++describe("Step 5: Edge Function wiring", () => {
++  const index = read("supabase/functions/delete-account/index.ts");
++  const logic = read("supabase/functions/delete-account/deletion.ts");
++
++  it("is a thin wrapper around the tested logic and never reads a user id from the request body", () => {
++    expect(index).toMatch(/from "\.\/deletion\.ts"/);
++    expect(logic).toMatch(/userData\.user\.id/);
++    expect(logic).not.toMatch(/body\.(uid|user_id|userId|_uid)/);
++  });
++
++  it("stays JWT-verified in config", () => {
++    expect(read("supabase/config.toml")).toMatch(/\[functions\.delete-account\]\s*\nverify_jwt = true/);
++  });
++});
++
++describe("Step 5: documentation does not invent retention", () => {
++  const doc = read("docs/ACCOUNT_DELETION.md");
++  const table = doc.slice(doc.indexOf("## What is deleted"), doc.indexOf("## Processing status"));
++
++  it("covers every retained category and marks periods as needing a legal decision", () => {
++    for (const k of ["subscription_orders", "reports", "admin_audit", "legal_acceptances", "consent_records", "coin_transactions"]) {
++      expect(table).toContain(k);
++    }
++    expect(table).toMatch(/Needs legal decision/i);
++  });
++
++  it("states no retention period in numbers", () => {
++    expect(table).not.toMatch(/\b\d+\s*(days?|weeks?|months?|years?)\b/i);
++  });
++
++  it("keeps the retention period in the app a visible placeholder until legal confirms it", () => {
++    const op = read("mobile/src/constants/operatorDetails.ts");
++    expect(op).toMatch(/dataRetentionPeriods: "\[/);
++  });
++});
++
++describe("Step 5: in-app deletion route and consequences", () => {
++  const settings = read("mobile/app/settings/index.tsx");
++
++  it("tells the user what is deleted, what is kept, the Play subscription and retry before confirming", () => {
++    expect(settings).toMatch(/verification selfie/);
++    expect(settings).toMatch(/Kept without a link to you/);
++    expect(settings).toMatch(/cancel it in Google Play first/);
++    expect(settings).toMatch(/retry from Settings/);
++    expect(settings).toMatch(/Type DELETE to confirm/);
++  });
++
++  it("still links to Legal & Privacy and uses the guarded flow (Steps 1-4 not regressed)", () => {
++    expect(settings).toMatch(/router\.push\("\/legal"\)/);
++    expect(settings).toMatch(/runAccountDeletion\(/);
++    for (const f of [
++      "supabase/migrations/20260101003300_legal_acceptances.sql",
++      "supabase/migrations/20260101003400_optional_processing_consents.sql",
++      "mobile/app/legal/index.tsx",
++      "mobile/src/constants/legalVersions.ts",
++    ]) {
++      expect(fs.existsSync(path.join(root, f))).toBe(true);
++    }
++  });
++});
+diff --git a/__tests__/deleteAccountFunction.test.ts b/__tests__/deleteAccountFunction.test.ts
+new file mode 100644
+index 0000000..51efd5a
+--- /dev/null
++++ b/__tests__/deleteAccountFunction.test.ts
+@@ -0,0 +1,229 @@
++import {
++  executeAccountDeletion,
++  handleDeleteAccount,
++  removeFolder,
++  type AdminLike,
++  type HandlerDeps,
++} from "../supabase/functions/delete-account/deletion";
++
++const UID = "11111111-1111-4111-8111-111111111111";
++const OTHER = "22222222-2222-4222-8222-222222222222";
++
++type Calls = string[];
++
++/** In-memory fake of the admin client; `fail` makes the named step return an error. */
++function fakeAdmin(opts: {
++  fail?: string;
++  matches?: string[];
++  storage?: Record<string, Array<{ id: string | null; name: string }>>;
++  authError?: string;
++} = {}) {
++  const calls: Calls = [];
++  const storage = opts.storage ?? {};
++  const admin: AdminLike = {
++    rpc: async (name) => {
++      calls.push(`rpc:${name}`);
++      return { error: opts.fail === name ? { message: `${name} boom` } : null };
++    },
++    storage: {
++      from: (bucket) => ({
++        list: async (folder) => {
++          calls.push(`list:${bucket}/${folder}`);
++          const entries = storage[`${bucket}/${folder}`] ?? [];
++          return { data: entries.slice(0, 100), error: null };
++        },
++        remove: async (paths) => {
++          calls.push(`remove:${bucket}:${paths.join(",")}`);
++          if (opts.fail === "remove") return { error: { message: "remove boom" } };
++          for (const key of Object.keys(storage)) {
++            storage[key] = storage[key].filter((e) => !paths.includes(`${key.split("/").slice(1).join("/")}/${e.name}`));
++          }
++          // Like real Storage, a folder entry disappears once it has no objects left.
++          for (const key of Object.keys(storage)) {
++            storage[key] = storage[key].filter((e) => e.id !== null || (storage[`${key}/${e.name}`] ?? []).length > 0);
++          }
++          return { error: null };
++        },
++      }),
++    },
++    from: (table: string) => {
++      const builder: any = {
++        select: () => builder,
++        or: (filter: string) => {
++          calls.push(`matches.or:${filter}`);
++          return Promise.resolve({ data: (opts.matches ?? []).map((id) => ({ id })), error: null });
++        },
++        eq: () => builder,
++        not: () => builder,
++        range: () => Promise.resolve({ data: [], error: null }),
++      };
++      return builder;
++    },
++    auth: {
++      admin: {
++        deleteUser: async (id) => {
++          calls.push(`auth.deleteUser:${id}`);
++          return { error: opts.authError ? { message: opts.authError } : null };
++        },
++      },
++    },
++  };
++  return { admin, calls };
++}
++
++function deps(over: Partial<HandlerDeps> & { userId?: string | null; admin?: AdminLike } = {}): HandlerDeps & {
++  adminCalls: Calls;
++} {
++  const { admin, calls } = over.admin ? { admin: over.admin, calls: [] as Calls } : fakeAdmin();
++  return {
++    env: over.env ?? { url: "http://x", anon: "anon", serviceKey: "service" },
++    makeUserClient: over.makeUserClient ??
++      (() => ({
++        auth: {
++          getUser: async () =>
++            over.userId === null
++              ? { data: { user: null }, error: { message: "bad jwt" } }
++              : { data: { user: { id: over.userId ?? UID } }, error: null },
++        },
++      })),
++    makeAdminClient: over.makeAdminClient ?? (() => admin),
++    adminCalls: calls,
++  };
++}
++
++const post = (body: unknown, headers: Record<string, string> = { Authorization: "Bearer jwt" }) =>
++  new Request("http://localhost/delete-account", {
++    method: "POST",
++    headers,
++    body: typeof body === "string" ? body : JSON.stringify(body),
++  });
++
++describe("delete-account: authentication and authorization", () => {
++  it("rejects non-POST methods", async () => {
++    const res = await handleDeleteAccount(new Request("http://x", { method: "GET" }), deps());
++    expect(res.status).toBe(405);
++  });
++
++  it("rejects a request with no bearer token and touches nothing", async () => {
++    const { admin, calls } = fakeAdmin();
++    const res = await handleDeleteAccount(post({ confirm: true }, {}), deps({ admin }));
++    expect(res.status).toBe(401);
++    expect((await res.json()).success).toBe(false);
++    expect(calls).toEqual([]);
++  });
++
++  it("rejects an invalid JWT with the invalid_session code and touches nothing", async () => {
++    const { admin, calls } = fakeAdmin();
++    const res = await handleDeleteAccount(post({ confirm: true }), deps({ admin, userId: null }));
++    expect(res.status).toBe(401);
++    expect((await res.json()).code).toBe("invalid_session");
++    expect(calls).toEqual([]);
++  });
++
++  it("requires explicit confirmation", async () => {
++    const { admin, calls } = fakeAdmin();
++    for (const body of [{}, { confirm: "true" }, { confirm: false }, "not json"]) {
++      const res = await handleDeleteAccount(post(body), deps({ admin }));
++      expect(res.status).toBe(400);
++    }
++    expect(calls).toEqual([]);
++  });
++
++  it("fails closed when server secrets are missing", async () => {
++    const res = await handleDeleteAccount(post({ confirm: true }), deps({ env: { url: "u", anon: "a" } }));
++    expect(res.status).toBe(500);
++  });
++
++  it("deletes only the JWT's user and ignores any user id in the body (cross-user protection)", async () => {
++    const { admin, calls } = fakeAdmin();
++    const res = await handleDeleteAccount(post({ confirm: true, uid: OTHER, user_id: OTHER, _uid: OTHER }), deps({ admin }));
++    expect(res.status).toBe(200);
++    expect(calls.join("\n")).not.toContain(OTHER);
++    expect(calls).toContain(`auth.deleteUser:${UID}`);
++  });
++});
++
++describe("delete-account: ordering, idempotency and partial failure", () => {
++  it("runs steps in order with the Auth user last", async () => {
++    const { admin, calls } = fakeAdmin({ matches: ["m1"] });
++    expect(await executeAccountDeletion(admin, UID)).toEqual({ ok: true });
++    const idx = (s: string) => calls.findIndex((c) => c.startsWith(s));
++    expect(idx("rpc:begin_account_deletion")).toBeLessThan(idx("rpc:clear_profile_photos_for_deletion"));
++    expect(idx("rpc:clear_profile_photos_for_deletion")).toBeLessThan(idx("list:photos/"));
++    expect(idx("list:photos/")).toBeLessThan(idx("list:chat/m1"));
++    expect(idx("list:chat/m1")).toBeLessThan(idx("rpc:purge_user_data"));
++    expect(idx("rpc:purge_user_data")).toBeLessThan(idx("auth.deleteUser"));
++  });
++
++  it.each(["begin_account_deletion", "clear_profile_photos_for_deletion", "purge_user_data"])(
++    "does not delete the Auth user or report success when %s fails",
++    async (failing) => {
++      const { admin, calls } = fakeAdmin({ fail: failing });
++      const result = await executeAccountDeletion(admin, UID);
++      expect(result.ok).toBe(false);
++      expect(calls.some((c) => c.startsWith("auth.deleteUser"))).toBe(false);
++    },
++  );
++
++  it("returns 500 retryable with the failed step, never success, when the database purge fails", async () => {
++    const { admin } = fakeAdmin({ fail: "purge_user_data" });
++    const res = await handleDeleteAccount(post({ confirm: true }), deps({ admin }));
++    const body = await res.json();
++    expect(res.status).toBe(500);
++    expect(body).toMatchObject({ success: false, retryable: true, code: "deletion_incomplete", failedStep: "database" });
++  });
++
++  it("is idempotent: a repeat run after full success still succeeds when the Auth user is already gone", async () => {
++    const { admin } = fakeAdmin({ authError: "User not found" });
++    expect(await executeAccountDeletion(admin, UID)).toEqual({ ok: true });
++    expect(await executeAccountDeletion(admin, UID)).toEqual({ ok: true });
++  });
++
++  it("fails (and keeps the account retryable) on a real Auth deletion error", async () => {
++    const { admin } = fakeAdmin({ authError: "database error deleting user" });
++    const result = await executeAccountDeletion(admin, UID);
++    expect(result).toMatchObject({ ok: false, step: "auth" });
++  });
++
++  it("refuses a malformed user id before any database or storage call", async () => {
++    const { admin, calls } = fakeAdmin();
++    const result = await executeAccountDeletion(admin, `${UID},user_b.neq.x`);
++    expect(result.ok).toBe(false);
++    expect(calls).toEqual([]);
++  });
++});
++
++describe("delete-account: storage cleanup", () => {
++  it("removes nested folders such as photos/<uid>/verification/ and the files inside", async () => {
++    const { admin, calls } = fakeAdmin({
++      storage: {
++        [`photos/${UID}`]: [
++          { id: "f1", name: "p1.jpg" },
++          { id: null, name: "verification" },
++        ],
++        [`photos/${UID}/verification`]: [{ id: "f2", name: "selfie-1.jpg" }],
++      },
++    });
++    await removeFolder(admin, "photos", UID);
++    expect(calls).toContain(`remove:photos:${UID}/verification/selfie-1.jpg`);
++    expect(calls).toContain(`remove:photos:${UID}/p1.jpg`);
++  });
++
++  it("throws instead of silently leaving objects when a storage removal fails", async () => {
++    const { admin } = fakeAdmin({
++      fail: "remove",
++      storage: { [`photos/${UID}`]: [{ id: "f1", name: "p1.jpg" }] },
++    });
++    await expect(removeFolder(admin, "photos", UID)).rejects.toThrow(/remove photos/);
++  });
++
++  it("removes the chat folder of every match the user belongs to", async () => {
++    const { admin, calls } = fakeAdmin({
++      matches: ["m1", "m2"],
++      storage: { "chat/m1": [{ id: "a", name: "v.m4a" }], "chat/m2": [{ id: "b", name: "i.jpg" }] },
++    });
++    await executeAccountDeletion(admin, UID);
++    expect(calls).toContain("remove:chat:m1/v.m4a");
++    expect(calls).toContain("remove:chat:m2/i.jpg");
++  });
++});
+diff --git a/docs/ACCOUNT_DELETION.md b/docs/ACCOUNT_DELETION.md
+index 9de4e6f..36f6bfb 100644
+--- a/docs/ACCOUNT_DELETION.md
++++ b/docs/ACCOUNT_DELETION.md
+@@ -1,6 +1,6 @@
+ # Account deletion: current design and status
+ 
+-Status: **Server Edge Function (`delete-account`) now marks deletion pending, recursively removes nested media, and performs the database purge before deleting Auth (NOT DEPLOYED yet).**
++Status: **Edge Function (`delete-account`) marks deletion pending, removes media, purges the database, then deletes Auth (NOT DEPLOYED yet). Step 5 changes (migration `20260101003500_account_deletion_hardening.sql`, function refactor, tests) are STAGED LOCALLY: not committed, not applied to any live database.**
+ 
+ ## Flow
+ 
+@@ -16,7 +16,7 @@ in `mobile/src/services/auth.ts` > `supabase.functions.invoke("delete-account",
+   non-2xx -> the function's own message and `retryable` flag when present; network failure -> retryable.
+ - There is no client-side fallback (no RPC, no direct table deletes).
+ 
+-## Server contract (`supabase/functions/delete-account/index.ts`, `verify_jwt = true`)
++## Server contract (`supabase/functions/delete-account/` : `index.ts` wiring, `deletion.ts` logic, `verify_jwt = true`)
+ 
+ 1. Identify caller from Authorization header (`auth.getUser()`); body is never trusted for the id.
+ 2. Call service-role-only `begin_account_deletion(_uid)` to suspend the profile and record a pending
+@@ -26,19 +26,56 @@ in `mobile/src/services/auth.ts` > `supabase.functions.invoke("delete-account",
+ 5. `purge_user_data(_uid)` (granted to `service_role` only; revoked from PUBLIC, anon, authenticated).
+ 6. `auth.admin.deleteUser(uid)` last ("not found" is treated as success), so a failure earlier leaves a
+    suspended, still-authenticated account that can retry.
+-7. Returns `{ success: true }`, or HTTP 500 with `{ success: false, retryable: true, error }`; partial
+-   completion is explicit so a retry can finish remaining work.
++7. Returns `{ success: true }`, or HTTP 500 with `{ success: false, retryable: true, code: "deletion_incomplete", failedStep, error }`; partial
++   completion is explicit so a retry can finish remaining work. A missing/invalid JWT gets 401 (`unauthenticated` / `invalid_session`) and nothing is touched.
++8. If the Auth user was already deleted but the success response was lost, the retry gets 401 (the JWT no longer
++   resolves). The app tells the user to try logging in: login failing means the deletion finished.
+ 
+ The old `delete_user_account()` RPC is dropped by `supabase/migrations/20260101000300_mobile_security_hardening.sql`.
+ 
+-## Retained data (by design in `purge_user_data`)
++## What is deleted, what is kept (per category)
+ 
+-- Reports are kept as moderation records, with reporter/target IDs replaced by deterministic deleted-user
+-  references. Report notes remain and require a retention/privacy-policy decision.
+-- Provider transaction rows are retained with `subscription_orders.user_id` set to `NULL`; the Auth user
+-  can be deleted without losing store references, token hashes, or amounts. Active entitlement rows are removed.
+-- An anonymized `admin_audit` row (`account_self_deleted`) is written per call; retries can add duplicate
+-  events. Audit retention and report-note retention still require a privacy-policy/legal decision.
++Retention PERIODS are not set anywhere in the repo. Every period below is **"needs legal decision"**; none has been invented.
++Access for retained rows = service role / database admins only (clients cannot read them: reports and `admin_audit` are
++admin-only, `subscription_orders` rows with `user_id = NULL` match no user's RLS policy).
++
++| Category | Where | On deletion | Purpose if kept | Retention period |
++|---|---|---|---|---|
++| Profile, account state, quotas, subscriptions (entitlements) | `profiles`, `account_state`, `user_daily_quotas`, `user_subscriptions` | Deleted | n/a | n/a |
++| Profile photos, verification selfies | storage `photos/<uid>/` (incl. `verification/`), `photo_reviews` | Deleted | n/a | n/a |
++| Matches, likes, blocks, messages, chat images and voice | `matches`, `swipes`, `blocks`, `messages` (cascade), storage `chat/<matchId>/` | Deleted for current matches. Messages vanish for the other person too | n/a | n/a |
++| Location | `discovery_locations`, `discovery_location_settings` | Deleted | n/a | n/a |
++| Push tokens, notification preferences and queue | `push_devices`, `notification_*` | Deleted (tokens already removed when deletion starts) | n/a | n/a |
++| Call records and rate limits | `video_calls`, `call_events`, `call_token_rate_limits` | Deleted (also removes the other party's history of those calls) | n/a | n/a |
++| Terms/Privacy acceptance evidence | `legal_acceptances` | **Deleted** (FK cascade). Open decision: erasing evidence of acceptance may be a risk in a dispute | Would be: proof of acceptance | **Needs legal decision** |
++| Optional-consent evidence | `consent_records` | **Deleted** (FK cascade). Same open decision | Would be: proof of consent/withdrawal | **Needs legal decision** |
++| Coin wallet and ledger | `coin_wallets`, `coin_transactions` | **Deleted** (FK cascade; the append-only trigger permits only this cascade). Unspent coins are lost. Open decision: `subscription_orders` is retained but this payment-related ledger is not | Would be: payment/accounting records | **Needs legal decision** |
++| Subscription payment records | `subscription_orders` | **Kept**, `user_id` set to NULL (store order id, token hash, amount, dates remain) | Payment/refund reconciliation | **Needs legal decision** |
++| Reports about/by the user | `reports` | **Kept**, reporter/target replaced by `deleted:<md5>`; free-text notes remain (may contain personal data) | Moderation, safety | **Needs legal decision** (also whether notes must be scrubbed) |
++| Deletion audit event | `admin_audit` | **Kept**, anonymised; exactly one `account_self_deleted` row per account (retries no longer add duplicates) | Proof that deletion happened | **Needs legal decision** |
++| Third-party processing | Google Cloud Vision SafeSearch (photo moderation), Agora (calls), Google Play (billing) | Not controlled by this repo | n/a | Provider terms not reviewed here; list belongs in `serviceProviderConfirmation` |
++
++Not deleted by this app: a Google Play subscription (the user must cancel it in Google Play; the delete dialog and the
++Legal & Privacy screen both say so).
++
++## Processing status and delay
++
++Deletion runs synchronously in one request; there is no background queue. If it stops part-way the account stays
++suspended and the app says it can be retried from Settings. There is no "pending deletion" screen and no
++scheduled retry job. Requests that cannot be done in the app go through the privacy contact on the Legal & Privacy screen
++(its address and response time are still placeholders in `operatorDetails.ts`).
++
++## Known gap: orphaned chat media (unmatch / block)
++
++Unmatching or blocking deletes the `matches` row (messages cascade) but not the files under `chat/<matchId>/`. Those
++objects become unreachable and `delete-account` cannot find them via `matches`. `find_orphaned_chat_folders()`
++(service role, read-only) measures it. No cleanup is implemented: it needs a product decision on whether unmatch/block
++should delete media.
++
++## Migration order
++
++Apply every file in `supabase/migrations/` in lexical (timestamp) order. Do not hand-maintain a list here; the previous
++list went stale. `20260101003500_account_deletion_hardening.sql` is the newest and is not applied anywhere yet.
+ 
+ ## Recent security hardening (Resolved)
+ 
+@@ -63,23 +100,6 @@ The old `delete_user_account()` RPC is dropped by `supabase/migrations/202601010
+ - Signed URLs (1 hour) cannot be revoked on block, suspension, or deletion until they expire naturally on the storage CDN.
+ - Reports and anonymized audit events are retained after account deletion (including report notes; DPDP compliance check needed).
+ - All database test runs so far ran with stand-ins and unit test harnesses; execution against real Supabase / PostgreSQL 16 container required per deployment runbook.
+-
+-## Migration order
+-
+-1. `supabase/migrations/20260101000000_core_schema.sql`
+-2. `supabase/migrations/20260101000100_storage.sql`
+-3. `supabase/migrations/20260101000200_admin_moderation.sql`
+-4. `supabase/migrations/20260101000300_mobile_security_hardening.sql`
+-5. `supabase/migrations/20260101000400_security_followups.sql`
+-6. `supabase/migrations/20260101000500_privacy_and_rate_limits.sql`
+-7. `supabase/migrations/20260101000600_trigger_function_hardening.sql`
+-8. `supabase/migrations/20260101000700_subscription_entitlements_and_like_security.sql`
+-9. `supabase/migrations/20260101000800_photo_visibility_stopgap.sql`
+-10. `supabase/migrations/20260101000900_photo_reviews.sql`
+-11. `supabase/migrations/20260101001000_photo_visibility_approved_only.sql`
+-12. `supabase/migrations/20260101001100_uniform_like_quota.sql`
+-13. `supabase/migrations/20260101001200_daily_like_limit_20.sql`
+-14. `supabase/migrations/20260101001300_critical_security_foundations.sql`
+-15. `supabase/migrations/20260101001400_harden_verification_metadata_guard.sql`
+-16. `supabase/migrations/20260101001500_subscription_orders_and_replay_protection.sql`
+-17. `supabase/migrations/20260101002200_lifecycle_entitlements_release.sql`
++- Legal decisions still open (see the retention table): evidence of Terms/consent acceptance and the coin ledger are erased with the account; reports (with free-text notes), payment orders and the anonymised audit event are kept with no defined period. These need qualified legal review before release.
++- Orphaned chat media after unmatch/block is measured by `find_orphaned_chat_folders()` but not cleaned up.
++- The Step 5 migration and the refactored function have been run only against a disposable local PostgreSQL 16 with Supabase stand-ins and jest fakes, never against a real Supabase project.
+diff --git a/mobile/app/settings/index.tsx b/mobile/app/settings/index.tsx
+index 3affc0c..04032d3 100644
+--- a/mobile/app/settings/index.tsx
++++ b/mobile/app/settings/index.tsx
+@@ -264,11 +264,15 @@ export default function SettingsScreen() {
+         setDeleteConfirmationText("");
+         Alert.alert(
+           "Account deleted",
+-          "Your account and data have been removed." + (res.warning ? `\n\n${res.warning}` : ""),
++          "Your account and data have been removed, except the records described in Legal & Privacy." + (res.warning ? `\n\n${res.warning}` : ""),
+         );
+         router.replace("/(auth)/welcome");
+       },
+-      onFailure: (message) => Alert.alert("Could not delete account", message),
++      onFailure: (message) =>
++        Alert.alert(
++          "Could not delete account",
++          `${message}\n\nYour account stays suspended until deletion finishes. You can retry from Settings; for help use Legal & Privacy.`,
++        ),
+     });
+ 
+   return (
+@@ -506,7 +510,7 @@ export default function SettingsScreen() {
+       <Dialog
+         visible={deleteStep === 1}
+         title="Delete your account?"
+-        body="Your profile, photos, matches and messages will be permanently deleted, along with your sign-in. Some moderation records may be retained. This action cannot be reversed."
++        body={"This permanently deletes your profile, photos (including any verification selfie), matches, chat messages and media (also from the people you chatted with), location, notification settings, coin balance and your Terms and consent records, along with your sign-in. It cannot be undone.\n\nKept without a link to you: reports about members and anonymous deletion and payment records. Deleting does not cancel a Google Play subscription, so cancel it in Google Play first. If it fails part-way, some data may already be gone; retry from Settings to finish. See Legal & Privacy for details."}
+         confirmText="Continue"
+         danger
+         onConfirm={() => setDeleteStep(2)}
+diff --git a/mobile/src/services/auth.ts b/mobile/src/services/auth.ts
+index 1557f33..1bf145e 100644
+--- a/mobile/src/services/auth.ts
++++ b/mobile/src/services/auth.ts
+@@ -283,7 +283,7 @@ export interface DeleteAccountResult {
+ }
+ 
+ const SESSION_EXPIRED_MESSAGE =
+-  "Your session has expired. Please log in again, then retry deleting your account.";
++  "Your session is no longer valid. If you were in the middle of deleting your account it may already be complete. Try logging in again: if login fails, the deletion finished; if it works, retry deleting your account.";
+ const UNAVAILABLE_MESSAGE =
+   "Account deletion isn't available right now. Please try again later or contact support.";
+ const NETWORK_MESSAGE = "Could not reach the server. Check your connection and try again.";
+diff --git a/supabase/functions/delete-account/deletion.ts b/supabase/functions/delete-account/deletion.ts
+new file mode 100644
+index 0000000..a68af05
+--- /dev/null
++++ b/supabase/functions/delete-account/deletion.ts
+@@ -0,0 +1,176 @@
++// Pure, dependency-injected core of the delete-account Edge Function (no Deno globals, no URL imports),
++// so the same code runs under Deno in production and under jest in __tests__/deleteAccountFunction.test.ts.
++export const CORS = {
++  "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
++};
++
++export const json = (status: number, body: Record<string, unknown>) =>
++  new Response(JSON.stringify(body), {
++    status,
++    headers: { ...CORS, "Content-Type": "application/json" },
++  });
++
++// Minimal shapes of the supabase-js client that this function uses (keeps the module testable).
++export interface StorageEntry {
++  id: string | null;
++  name: string;
++}
++export interface AdminLike {
++  rpc(name: string, args: Record<string, unknown>): PromiseLike<{ error: { message: string } | null }>;
++  storage: {
++    from(bucket: string): {
++      list(
++        folder: string,
++        opts: { limit: number },
++      ): PromiseLike<{ data: StorageEntry[] | null; error: { message: string } | null }>;
++      remove(paths: string[]): PromiseLike<{ error: { message: string } | null }>;
++    };
++  };
++  from(table: string): any;
++  auth: { admin: { deleteUser(id: string): PromiseLike<{ error: { message: string } | null }> } };
++}
++export interface UserClientLike {
++  auth: {
++    getUser(): PromiseLike<{ data: { user: { id: string } | null }; error: unknown }>;
++  };
++}
++export interface HandlerDeps {
++  env: { url?: string; anon?: string; serviceKey?: string };
++  makeUserClient: (authHeader: string) => UserClientLike;
++  makeAdminClient: () => AdminLike;
++}
++
++export async function removeFolder(admin: AdminLike, bucket: string, folder: string, depth = 0): Promise<void> {
++  if (depth > 20) throw new Error(`removeFolder nesting limit reached in ${bucket}/${folder}`);
++  // list() is paginated; loop until the folder is completely emptied.
++  for (let guard = 0; guard < 50; guard++) {
++    const { data, error } = await admin.storage.from(bucket).list(folder, { limit: 100 });
++    if (error) throw new Error(`list ${bucket}/${folder}: ${error.message}`);
++    if (!data || data.length === 0) return;
++
++    const files = data.filter((entry) => entry.id !== null);
++    const directories = data.filter((entry) => entry.id === null);
++    for (const directory of directories) {
++      await removeFolder(admin, bucket, `${folder}/${directory.name}`, depth + 1);
++    }
++    if (files.length > 0) {
++      const { error: rmErr } = await admin.storage
++        .from(bucket)
++        .remove(files.map((file) => `${folder}/${file.name}`));
++      if (rmErr) throw new Error(`remove ${bucket}/${folder}: ${rmErr.message}`);
++    } else if (directories.length === 0) {
++      throw new Error(`removeFolder could not classify entries in ${bucket}/${folder}`);
++    }
++  }
++  const { data: finalCheck, error: finalError } = await admin.storage.from(bucket).list(folder, { limit: 1 });
++  if (finalError) throw new Error(`verify ${bucket}/${folder}: ${finalError.message}`);
++  if (finalCheck && finalCheck.length > 0) {
++    throw new Error(`removeFolder guard limit reached: files still remain in ${bucket}/${folder}`);
++  }
++}
++
++export type DeletionResult = { ok: true } | { ok: false; step: string; message: string };
++
++const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++/** Deletes everything for `uid` in a fixed order. The Auth user is deleted last so any earlier failure is retryable. */
++export async function executeAccountDeletion(admin: AdminLike, uid: string): Promise<DeletionResult> {
++  let current = "start";
++  try {
++    // uid comes from the verified JWT; this check also makes the later PostgREST .or() filter injection-proof.
++    if (!UUID_RE.test(uid)) throw new Error("invalid user id");
++
++    current = "database:deletion_pending";
++    const { error: pendingErr } = await admin.rpc("begin_account_deletion", { _uid: uid });
++    if (pendingErr) throw new Error(pendingErr.message);
++
++    current = "storage:photos";
++    const { error: clearPhotosErr } = await admin.rpc("clear_profile_photos_for_deletion", { _uid: uid });
++    if (clearPhotosErr) throw new Error(`clear profile photo references: ${clearPhotosErr.message}`);
++    await removeFolder(admin, "photos", uid);
++
++    current = "storage:chat";
++    const { data: userMatches, error: matchErr } = await admin
++      .from("matches")
++      .select("id")
++      .or(`user_a.eq.${uid},user_b.eq.${uid}`);
++    if (matchErr) throw new Error(matchErr.message);
++    for (const m of (userMatches ?? []) as Array<{ id: string }>) {
++      await removeFolder(admin, "chat", m.id);
++    }
++
++    // Also remove chat objects referenced by messages this user sent (covers paths outside the match folders).
++    let page = 0;
++    const pageSize = 500;
++    for (;;) {
++      const { data: msgs, error: msgErr } = await admin
++        .from("messages")
++        .select("image_path")
++        .eq("sender", uid)
++        .not("image_path", "is", null)
++        .range(page * pageSize, (page + 1) * pageSize - 1);
++      if (msgErr) throw new Error(msgErr.message);
++      if (!msgs || msgs.length === 0) break;
++      const paths = (msgs as Array<{ image_path: string | null }>)
++        .map((m) => m.image_path as string)
++        .filter(Boolean);
++      for (let i = 0; i < paths.length; i += 100) {
++        const { error: rmErr } = await admin.storage.from("chat").remove(paths.slice(i, i + 100));
++        if (rmErr) throw new Error(rmErr.message);
++      }
++      if (msgs.length < pageSize) break;
++      page++;
++    }
++
++    current = "database";
++    const { error: purgeErr } = await admin.rpc("purge_user_data", { _uid: uid });
++    if (purgeErr) throw new Error(purgeErr.message);
++
++    current = "auth";
++    const { error: delErr } = await admin.auth.admin.deleteUser(uid);
++    if (delErr && !/not.?found/i.test(delErr.message)) throw new Error(delErr.message);
++
++    return { ok: true };
++  } catch (e: any) {
++    console.error(`delete-account failed at ${current}:`, e?.message || e);
++    return { ok: false, step: current, message: String(e?.message || e) };
++  }
++}
++
++export async function handleDeleteAccount(req: Request, deps: HandlerDeps): Promise<Response> {
++  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
++  if (req.method !== "POST") return json(405, { success: false, error: "Method not allowed" });
++
++  const { url, anon, serviceKey } = deps.env;
++  if (!url || !anon || !serviceKey) return json(500, { success: false, error: "Server misconfigured" });
++
++  const authHeader = req.headers.get("Authorization") ?? "";
++  if (!authHeader.startsWith("Bearer ")) {
++    return json(401, { success: false, code: "unauthenticated", error: "Authentication required" });
++  }
++
++  let body: { confirm?: boolean } = {};
++  try {
++    body = await req.json();
++  } catch {
++    /* empty body */
++  }
++  if (body.confirm !== true) return json(400, { success: false, error: "Confirmation required" });
++
++  // The caller is identified only from their own JWT. Any user id in the body is ignored.
++  const { data: userData, error: userErr } = await deps.makeUserClient(authHeader).auth.getUser();
++  if (userErr || !userData?.user) {
++    return json(401, { success: false, code: "invalid_session", error: "Invalid or expired session" });
++  }
++
++  const result = await executeAccountDeletion(deps.makeAdminClient(), userData.user.id);
++  if (result.ok) return json(200, { success: true });
++  return json(500, {
++    success: false,
++    retryable: true,
++    code: "deletion_incomplete",
++    failedStep: result.step,
++    error: `Account deletion did not finish (${result.step}). Some cleanup may already have completed; retry to finish deletion.`,
++  });
++}
+diff --git a/supabase/functions/delete-account/index.ts b/supabase/functions/delete-account/index.ts
+index e331e10..f3553a3 100644
+--- a/supabase/functions/delete-account/index.ts
++++ b/supabase/functions/delete-account/index.ts
+@@ -2,173 +2,26 @@
+ // STATUS: NOT DEPLOYED yet (deployed by the runbook in Part C / docs/DEPLOYMENT_RUNBOOK.md).
+ //
+ // Completely deletes the CALLING user. The user id is taken only from the verified JWT, never from the request body.
+-// Order (every step is retryable after a partial failure):
++// All logic lives in ./deletion.ts (unit-tested under jest). Order (every step is retryable after a partial failure):
+ //   1. verify caller JWT
+-//   2. suspend the profile to stop further discovery/interactions
+-//   3. clear profile photo references, then delete the user's storage objects recursively
++//   2. suspend the profile / mark deletion pending (begin_account_deletion)
++//   3. clear profile photo references, then delete the user's storage objects recursively (photos incl. verification
++//      selfies, chat media of all the user's matches)
+ //   4. purge DB rows via purge_user_data(uid) (service_role only RPC)
+ //   5. delete the Supabase Auth user (treats "already deleted" as success)
+ // The service-role key is read from the function's server-side environment (auto-injected by Supabase).
+ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
++import { handleDeleteAccount } from "./deletion.ts";
+ 
+-const CORS = {
+-  "Access-Control-Allow-Origin": "*",
+-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+-};
+-const json = (status: number, body: Record<string, unknown>) =>
+-  new Response(JSON.stringify(body), {
+-    status,
+-    headers: { ...CORS, "Content-Type": "application/json" },
+-  });
+-
+-async function removeFolder(
+-  admin: ReturnType<typeof createClient>,
+-  bucket: string,
+-  folder: string,
+-  depth = 0,
+-) {
+-  if (depth > 20) throw new Error(`removeFolder nesting limit reached in ${bucket}/${folder}`);
+-  // list() is paginated; loop until the folder is completely emptied.
+-  for (let guard = 0; guard < 50; guard++) {
+-    const { data, error } = await admin.storage.from(bucket).list(folder, { limit: 100 });
+-    if (error) throw new Error(`list ${bucket}/${folder}: ${error.message}`);
+-    if (!data || data.length === 0) return;
+-
+-    const files = data.filter((entry) => entry.id !== null);
+-    const directories = data.filter((entry) => entry.id === null);
+-    for (const directory of directories) {
+-      await removeFolder(admin, bucket, `${folder}/${directory.name}`, depth + 1);
+-    }
+-    if (files.length > 0) {
+-      const { error: rmErr } = await admin.storage
+-        .from(bucket)
+-        .remove(files.map((file) => `${folder}/${file.name}`));
+-      if (rmErr) throw new Error(`remove ${bucket}/${folder}: ${rmErr.message}`);
+-    } else if (directories.length === 0) {
+-      throw new Error(`removeFolder could not classify entries in ${bucket}/${folder}`);
+-    }
+-  }
+-  const { data: finalCheck, error: finalError } = await admin.storage
+-    .from(bucket)
+-    .list(folder, { limit: 1 });
+-  if (finalError) throw new Error(`verify ${bucket}/${folder}: ${finalError.message}`);
+-  if (finalCheck && finalCheck.length > 0) {
+-    throw new Error(`removeFolder guard limit reached: files still remain in ${bucket}/${folder}`);
+-  }
+-}
+-
+-Deno.serve(async (req) => {
+-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+-  if (req.method !== "POST") return json(405, { success: false, error: "Method not allowed" });
+-
++Deno.serve((req) => {
+   const url = Deno.env.get("SUPABASE_URL");
+   const anon = Deno.env.get("SUPABASE_ANON_KEY");
+   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+-  if (!url || !anon || !serviceKey)
+-    return json(500, { success: false, error: "Server misconfigured" });
+-
+-  const authHeader = req.headers.get("Authorization") ?? "";
+-  if (!authHeader.startsWith("Bearer "))
+-    return json(401, { success: false, error: "Authentication required" });
+-
+-  let body: { confirm?: boolean } = {};
+-  try {
+-    body = await req.json();
+-  } catch {
+-    /* empty body */
+-  }
+-  if (body.confirm !== true) return json(400, { success: false, error: "Confirmation required" });
+-
+-  // 1. identify the caller from their own JWT
+-  const userClient = createClient(url, anon, {
+-    global: { headers: { Authorization: authHeader } },
+-  });
+-  const { data: userData, error: userErr } = await userClient.auth.getUser();
+-  if (userErr || !userData.user)
+-    return json(401, { success: false, error: "Invalid or expired session" });
+-  const uid = userData.user.id;
+-
+-  const admin = createClient(url, serviceKey, {
+-    auth: { persistSession: false, autoRefreshToken: false },
++  return handleDeleteAccount(req, {
++    env: { url, anon, serviceKey },
++    makeUserClient: (authHeader) =>
++      createClient(url!, anon!, { global: { headers: { Authorization: authHeader } } }) as any,
++    makeAdminClient: () =>
++      createClient(url!, serviceKey!, { auth: { persistSession: false, autoRefreshToken: false } }) as any,
+   });
+-  const step = (name: string) => name;
+-  let current = step("start");
+-  try {
+-    current = step("database:deletion_pending");
+-    const { error: pendingErr } = await admin.rpc("begin_account_deletion", { _uid: uid });
+-    if (pendingErr) throw new Error(pendingErr.message);
+-
+-    // 2a. profile photos
+-    current = step("storage:photos");
+-    const { error: clearPhotosErr } = await admin.rpc("clear_profile_photos_for_deletion", {
+-      _uid: uid,
+-    });
+-    if (clearPhotosErr)
+-      throw new Error(`clear profile photo references: ${clearPhotosErr.message}`);
+-    await removeFolder(admin, "photos", uid);
+-
+-    // 2b. chat media: delete chat folders for all matches the user belongs to
+-    current = step("storage:chat");
+-    const { data: userMatches, error: matchErr } = await admin
+-      .from("matches")
+-      .select("id")
+-      .or(`user_a.eq.${uid},user_b.eq.${uid}`);
+-    if (matchErr) throw new Error(matchErr.message);
+-
+-    for (const m of userMatches ?? []) {
+-      await removeFolder(admin, "chat", m.id);
+-    }
+-
+-    // Also paginated scan for any leftover messages sent by user that might have had orphan paths
+-    let hasMoreMessages = true;
+-    let page = 0;
+-    const pageSize = 500;
+-    while (hasMoreMessages) {
+-      const { data: msgs, error: msgErr } = await admin
+-        .from("messages")
+-        .select("image_path")
+-        .eq("sender", uid)
+-        .not("image_path", "is", null)
+-        .range(page * pageSize, (page + 1) * pageSize - 1);
+-
+-      if (msgErr) throw new Error(msgErr.message);
+-      if (!msgs || msgs.length === 0) {
+-        hasMoreMessages = false;
+-        break;
+-      }
+-
+-      const paths = msgs.map((m) => m.image_path as string).filter(Boolean);
+-      if (paths.length > 0) {
+-        for (let i = 0; i < paths.length; i += 100) {
+-          const { error: rmErr } = await admin.storage.from("chat").remove(paths.slice(i, i + 100));
+-          if (rmErr) throw new Error(rmErr.message);
+-        }
+-      }
+-
+-      if (msgs.length < pageSize) {
+-        hasMoreMessages = false;
+-      } else {
+-        page++;
+-      }
+-    }
+-
+-    // 3. database rows
+-    current = step("database");
+-    const { error: purgeErr } = await admin.rpc("purge_user_data", { _uid: uid });
+-    if (purgeErr) throw new Error(purgeErr.message);
+-
+-    // 4. auth user (last, so a failure above leaves a retry-able, still-authenticated account)
+-    current = step("auth");
+-    const { error: delErr } = await admin.auth.admin.deleteUser(uid);
+-    if (delErr && !/not.?found/i.test(delErr.message)) throw new Error(delErr.message);
+-
+-    return json(200, { success: true });
+-  } catch (e: any) {
+-    console.error(`delete-account failed at ${current}:`, e?.message || e);
+-    return json(500, {
+-      success: false,
+-      retryable: true,
+-      error: `Account deletion did not finish (${current}). Some cleanup may already have completed; retry to finish deletion.`,
+-    });
+-  }
+ });
+diff --git a/supabase/migrations/20260101003500_account_deletion_hardening.sql b/supabase/migrations/20260101003500_account_deletion_hardening.sql
+new file mode 100644
+index 0000000..ebdba80
+--- /dev/null
++++ b/supabase/migrations/20260101003500_account_deletion_hardening.sql
+@@ -0,0 +1,121 @@
++-- Step 5: account deletion hardening. STAGED FILE: do not apply to the live Supabase project without review.
++--
++-- 1. purge_user_data() is made idempotent with respect to its audit trail: a retry no longer adds a duplicate
++--    'account_self_deleted' row for the same (anonymised) target. All other behaviour is copied unchanged from
++--    20260101002200_lifecycle_entitlements_release.sql.
++-- 2. find_orphaned_chat_folders(): READ-ONLY helper (service_role only) that lists chat/<folder> storage prefixes whose
++--    match row no longer exists (unmatch, block or account deletion removes the match but not its storage objects).
++--    It deletes nothing; it exists so the operator can measure the problem before deciding on a cleanup.
++--
++-- Deliberately NOT changed (open legal/product decisions, see docs/ACCOUNT_DELETION.md):
++--   * coin_transactions / coin_wallets are still erased by ON DELETE CASCADE from auth.users.
++--   * legal_acceptances / consent_records are still erased by ON DELETE CASCADE from auth.users.
++--   * no retention periods are invented here.
++BEGIN;
++
++CREATE OR REPLACE FUNCTION public.purge_user_data(_uid uuid)
++RETURNS void
++LANGUAGE plpgsql SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _user_id text;
++  _table text;
++  _column text;
++  _relation regclass;
++  _anonymized_id uuid;
++BEGIN
++  IF _uid IS NULL THEN RAISE EXCEPTION 'User ID required'; END IF;
++  _user_id := _uid::text;
++  _anonymized_id := md5('deleted-account:' || _user_id)::uuid;
++
++  DELETE FROM public.matches WHERE user_a = _user_id OR user_b = _user_id;
++  DELETE FROM public.swipes WHERE from_id = _user_id OR to_id = _user_id;
++  DELETE FROM public.blocks WHERE blocker = _user_id OR blocked = _user_id;
++  DELETE FROM public.user_daily_quotas WHERE user_id = _user_id;
++  DELETE FROM public.user_subscriptions WHERE user_id = _user_id;
++  DELETE FROM public.photo_reviews WHERE owner_id = _user_id;
++
++  -- Retain provider transaction evidence without retaining its Auth foreign-key identity.
++  UPDATE public.subscription_orders SET user_id = NULL WHERE user_id = _uid;
++
++  DELETE FROM public.account_state WHERE user_id = _uid;
++  DELETE FROM public.profiles WHERE id = _user_id;
++
++  UPDATE public.reports
++  SET reporter = CASE WHEN reporter = _user_id THEN 'deleted:' || md5(_user_id) ELSE reporter END,
++      target = CASE WHEN target = _user_id THEN 'deleted:' || md5(_user_id) ELSE target END
++  WHERE reporter = _user_id OR target = _user_id;
++
++  UPDATE public.admin_audit SET admin_id = _anonymized_id WHERE admin_id = _uid;
++  UPDATE public.admin_audit
++  SET target = 'deleted:' || md5(_user_id),
++      note = CASE
++        WHEN action = 'account_self_deleted' THEN 'User data purged; auth user and media removed'
++        ELSE note
++      END
++  WHERE target = _user_id;
++
++  FOR _table, _column IN
++    SELECT * FROM (VALUES
++      ('push_devices', 'user_id'),
++      ('notification_preferences', 'user_id'),
++      ('notification_outbox', 'recipient_id'),
++      ('notification_outbox', 'actor_id'),
++      ('discovery_locations', 'user_id'),
++      ('user_locations', 'user_id'),
++      ('video_calls', 'caller_id'),
++      ('video_calls', 'recipient_id'),
++      ('video_calls', 'callee_id'),
++      ('video_calls', 'user_a'),
++      ('video_calls', 'user_b'),
++      ('call_sessions', 'caller_id'),
++      ('call_sessions', 'callee_id')
++    ) AS optional_cleanup(table_name, column_name)
++  LOOP
++    _relation := to_regclass(format('public.%I', _table));
++    IF _relation IS NOT NULL AND EXISTS (
++      SELECT 1 FROM information_schema.columns
++      WHERE table_schema = 'public' AND table_name = _table AND column_name = _column
++    ) THEN
++      EXECUTE format('DELETE FROM %s WHERE %I::text = $1', _relation, _column) USING _user_id;
++    END IF;
++  END LOOP;
++
++  -- One audit event per deleted account, however many times the deletion is retried.
++  IF NOT EXISTS (
++    SELECT 1 FROM public.admin_audit
++    WHERE action = 'account_self_deleted' AND target = 'deleted:' || md5(_user_id)
++  ) THEN
++    INSERT INTO public.admin_audit (admin_id, action, target, note)
++    VALUES (
++      _anonymized_id,
++      'account_self_deleted',
++      'deleted:' || md5(_user_id),
++      'User data purged; auth user and media removed'
++    );
++  END IF;
++END;
++$$;
++
++REVOKE EXECUTE ON FUNCTION public.purge_user_data(uuid) FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.purge_user_data(uuid) TO service_role;
++
++-- Read-only: chat storage prefixes with no matching match row.
++CREATE OR REPLACE FUNCTION public.find_orphaned_chat_folders()
++RETURNS TABLE (folder text, object_count bigint)
++LANGUAGE sql STABLE SECURITY DEFINER
++SET search_path = public, storage, pg_temp
++AS $$
++  SELECT (storage.foldername(o.name))[1] AS folder, count(*) AS object_count
++  FROM storage.objects o
++  WHERE o.bucket_id = 'chat'
++    AND NOT EXISTS (SELECT 1 FROM public.matches m WHERE m.id::text = (storage.foldername(o.name))[1])
++  GROUP BY 1
++  ORDER BY 2 DESC;
++$$;
++
++REVOKE EXECUTE ON FUNCTION public.find_orphaned_chat_folders() FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.find_orphaned_chat_folders() TO service_role;
++
++COMMIT;
+diff --git a/supabase/tests/20_storage_deletion.sql b/supabase/tests/20_storage_deletion.sql
+index 06fe0eb..c608d00 100644
+--- a/supabase/tests/20_storage_deletion.sql
++++ b/supabase/tests/20_storage_deletion.sql
+@@ -62,7 +62,7 @@ INSERT INTO public.t_results SELECT 'purge removes profile/swipes/matches/messag
+   AND (SELECT count(*) FROM public.messages)=0
+   AND NOT EXISTS(SELECT 1 FROM public.user_daily_quotas WHERE user_id='00000000-0000-0000-0000-00000000000a')
+   AND NOT EXISTS(SELECT 1 FROM public.account_state WHERE user_id='00000000-0000-0000-0000-00000000000a'), 'purge x2 ok';
+-INSERT INTO public.t_results SELECT 'purge retry safe: audit rows written', count(*)=2, count(*)::text FROM public.admin_audit WHERE action='account_self_deleted';
++INSERT INTO public.t_results SELECT 'purge retry safe: audit rows written', count(*)=1, count(*)::text FROM public.admin_audit WHERE action='account_self_deleted'; -- Step 5: one audit row per deleted account, however many retries
+ -- deleting auth user afterwards cascades cleanly
+ DELETE FROM auth.users WHERE id='00000000-0000-0000-0000-00000000000a';
+ INSERT INTO public.t_results VALUES('auth user delete after purge ok', true, 'ok');
+diff --git a/supabase/tests/53_account_deletion.sql b/supabase/tests/53_account_deletion.sql
+new file mode 100644
+index 0000000..e5b3642
+--- /dev/null
++++ b/supabase/tests/53_account_deletion.sql
+@@ -0,0 +1,140 @@
++\set ON_ERROR_STOP on
++-- 53_account_deletion.sql: Step 5 account deletion / retention (migration *_account_deletion_hardening.sql).
++-- Covers: pending state, purge idempotency (single audit row), cross-user isolation, location/push/consent/legal/coin
++-- cleanup, retained records (reports, payment orders, anonymised audit), orphaned chat-media finder, and that only
++-- service_role can run the deletion functions.
++-- Fixtures: X (deleted), Y (counterpart, must survive intact), Z (bystander, must survive intact).
++INSERT INTO auth.users (id, email) VALUES
++ ('b3000000-0000-0000-0000-000000000001', 'dx@x'),
++ ('b3000000-0000-0000-0000-000000000002', 'dy@x'),
++ ('b3000000-0000-0000-0000-000000000003', 'dz@x');
++CALL public.test_complete_profile('b3000000-0000-0000-0000-000000000001', 'Xan', '1995-01-01', 'man', 'woman');
++CALL public.test_complete_profile('b3000000-0000-0000-0000-000000000002', 'Yas', '1995-01-01', 'woman', 'man');
++CALL public.test_complete_profile('b3000000-0000-0000-0000-000000000003', 'Zed', '1995-01-01', 'woman', 'man');
++
++INSERT INTO public.matches (id, user_a, user_b) VALUES
++ ('b3100000-0000-0000-0000-000000000012', 'b3000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000002'),
++ ('b3100000-0000-0000-0000-000000000023', 'b3000000-0000-0000-0000-000000000002', 'b3000000-0000-0000-0000-000000000003');
++INSERT INTO public.messages (match_id, sender, body) VALUES
++ ('b3100000-0000-0000-0000-000000000012', 'b3000000-0000-0000-0000-000000000001', 'from X'),
++ ('b3100000-0000-0000-0000-000000000012', 'b3000000-0000-0000-0000-000000000002', 'from Y to X'),
++ ('b3100000-0000-0000-0000-000000000023', 'b3000000-0000-0000-0000-000000000002', 'Y to Z');
++INSERT INTO storage.objects (bucket_id, name) VALUES
++ ('chat', 'b3100000-0000-0000-0000-000000000012/m1.jpg'),
++ ('chat', 'b3100000-0000-0000-0000-000000000023/m2.jpg');
++
++-- X: consent, location, push token, legal acceptance, coins, order, reports ----------------------------------------
++SET ROLE authenticated;
++SET request.jwt.claim.sub = 'b3000000-0000-0000-0000-000000000001';
++SELECT public.accept_current_legal_documents('2026-10-18', '2026-10-18');
++SELECT public.set_my_consent('location_discovery', '2026-10-18', 'granted');
++SELECT public.set_my_consent('push_notifications', '2026-10-18', 'granted');
++SELECT public.set_my_discovery_location(18.52, 73.86, 10);
++SELECT public.register_push_device('ExponentPushToken[b3000000-aaaa-bbbb-cccc-000000000001]', 'android', '1.0.0');
++RESET ROLE;
++SELECT public.credit_coins_from_purchase('b3000000-0000-0000-0000-000000000001', 100, 'deletion-test-coins-x1');
++INSERT INTO public.subscription_orders (user_id, store, order_id, product_id, token_hash, tier, amount_inr, expires_at)
++VALUES ('b3000000-0000-0000-0000-000000000001', 'google_play', 'GPA.DEL-0001', 'chahat_premium_1m', 'del-token-hash-1', 'premium', 199, now() + interval '30 days');
++INSERT INTO public.reports (reporter, target, category, note) VALUES
++ ('b3000000-0000-0000-0000-000000000002', 'b3000000-0000-0000-0000-000000000001', 'test', 'Y reports X'),
++ ('b3000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000003', 'test', 'X reports Z');
++
++-- Y: own consent + coins that must be untouched ---------------------------------------------------------------------
++SET ROLE authenticated;
++SET request.jwt.claim.sub = 'b3000000-0000-0000-0000-000000000002';
++SELECT public.set_my_consent('location_discovery', '2026-10-18', 'granted');
++RESET ROLE;
++SELECT public.credit_coins_from_purchase('b3000000-0000-0000-0000-000000000002', 50, 'deletion-test-coins-y1');
++
++INSERT INTO public.t_results
++SELECT 'delete: fixtures present before deletion',
++  (SELECT count(*) FROM public.discovery_locations WHERE user_id = 'b3000000-0000-0000-0000-000000000001') = 1
++  AND (SELECT count(*) FROM public.push_devices WHERE user_id = 'b3000000-0000-0000-0000-000000000001') = 1
++  AND (SELECT count(*) FROM public.consent_records WHERE user_id = 'b3000000-0000-0000-0000-000000000001') = 2
++  AND (SELECT count(*) FROM public.legal_acceptances WHERE user_id = 'b3000000-0000-0000-0000-000000000001') >= 1
++  AND (SELECT balance FROM public.coin_wallets WHERE user_id = 'b3000000-0000-0000-0000-000000000001') = 100, 'fixture counts';
++
++-- Authorization: deletion functions are service_role only ------------------------------------------------------------
++SET ROLE authenticated;
++SET request.jwt.claim.sub = 'b3000000-0000-0000-0000-000000000002';
++CALL public.expect_fail('delete: authenticated Y cannot purge X', $q$SELECT public.purge_user_data('b3000000-0000-0000-0000-000000000001')$q$);
++CALL public.expect_fail('delete: authenticated Y cannot begin deletion of X', $q$SELECT public.begin_account_deletion('b3000000-0000-0000-0000-000000000001')$q$);
++CALL public.expect_fail('delete: authenticated cannot list orphaned chat folders', $q$SELECT * FROM public.find_orphaned_chat_folders()$q$);
++RESET ROLE;
++SET ROLE anon;
++CALL public.expect_fail('delete: anon cannot purge', $q$SELECT public.purge_user_data('b3000000-0000-0000-0000-000000000001')$q$);
++RESET ROLE;
++INSERT INTO public.t_results
++SELECT 'delete: rejected calls changed nothing',
++  EXISTS (SELECT 1 FROM public.profiles WHERE id = 'b3000000-0000-0000-0000-000000000001' AND status = 'active'), 'X still active';
++
++-- Pending state (account_state_guard only accepts deletion state from the service role) -----------------------------
++SET request.jwt.claim.role = 'service_role';
++SELECT public.begin_account_deletion('b3000000-0000-0000-0000-000000000001');
++INSERT INTO public.t_results
++SELECT 'delete: begin suspends profile, flags pending, removes push tokens',
++  (SELECT status FROM public.profiles WHERE id = 'b3000000-0000-0000-0000-000000000001') = 'suspended'
++  AND (SELECT (data ->> 'deletionPending') FROM public.account_state WHERE user_id = 'b3000000-0000-0000-0000-000000000001') = 'true'
++  AND (SELECT count(*) FROM public.push_devices WHERE user_id = 'b3000000-0000-0000-0000-000000000001') = 0, 'pending state';
++SELECT public.begin_account_deletion('b3000000-0000-0000-0000-000000000001');
++RESET request.jwt.claim.role;
++INSERT INTO public.t_results VALUES ('delete: begin is repeatable', true, 'ok');
++
++-- Purge twice (retry) then the Auth user (what the Edge Function does last) ---------------------------------------
++SELECT public.purge_user_data('b3000000-0000-0000-0000-000000000001');
++SELECT public.purge_user_data('b3000000-0000-0000-0000-000000000001');
++DELETE FROM auth.users WHERE id = 'b3000000-0000-0000-0000-000000000001';
++SELECT public.purge_user_data('b3000000-0000-0000-0000-000000000001');
++INSERT INTO public.t_results VALUES ('delete: purge after auth deletion still ok (late retry)', true, 'ok');
++
++INSERT INTO public.t_results
++SELECT 'delete: X profile, account state, matches and chat messages are gone',
++  NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.account_state WHERE user_id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.matches WHERE 'b3000000-0000-0000-0000-000000000001' IN (user_a, user_b))
++  AND NOT EXISTS (SELECT 1 FROM public.messages WHERE match_id = 'b3100000-0000-0000-0000-000000000012'), 'rows removed';
++INSERT INTO public.t_results
++SELECT 'delete: location, push token, consent, legal acceptance, coins are gone',
++  NOT EXISTS (SELECT 1 FROM public.discovery_locations WHERE user_id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.discovery_location_settings WHERE user_id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.push_devices WHERE user_id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.consent_records WHERE user_id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.legal_acceptances WHERE user_id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.coin_wallets WHERE user_id = 'b3000000-0000-0000-0000-000000000001')
++  AND NOT EXISTS (SELECT 1 FROM public.coin_transactions WHERE user_id = 'b3000000-0000-0000-0000-000000000001'), 'all cleaned';
++
++-- Cross-user isolation -----------------------------------------------------------------------------------------------
++INSERT INTO public.t_results
++SELECT 'delete: Y and Z data and their own match survive intact',
++  EXISTS (SELECT 1 FROM public.profiles WHERE id = 'b3000000-0000-0000-0000-000000000002')
++  AND EXISTS (SELECT 1 FROM public.profiles WHERE id = 'b3000000-0000-0000-0000-000000000003')
++  AND EXISTS (SELECT 1 FROM public.matches WHERE id = 'b3100000-0000-0000-0000-000000000023')
++  AND (SELECT count(*) FROM public.messages WHERE match_id = 'b3100000-0000-0000-0000-000000000023') = 1
++  AND EXISTS (SELECT 1 FROM public.consent_records WHERE user_id = 'b3000000-0000-0000-0000-000000000002')
++  AND (SELECT balance FROM public.coin_wallets WHERE user_id = 'b3000000-0000-0000-0000-000000000002') = 50, 'Y/Z intact';
++
++-- Retained records, de-linked -------------------------------------------------------------------------------------
++INSERT INTO public.t_results
++SELECT 'retain: payment order kept without user link',
++  (SELECT count(*) FROM public.subscription_orders WHERE token_hash = 'del-token-hash-1' AND user_id IS NULL AND amount_inr = 199) = 1, 'order retained, user_id NULL';
++INSERT INTO public.t_results
++SELECT 'retain: reports kept with deleted identifiers; the other party is untouched',
++  (SELECT count(*) FROM public.reports WHERE target = 'deleted:' || md5('b3000000-0000-0000-0000-000000000001')
++        AND reporter = 'b3000000-0000-0000-0000-000000000002') = 1
++  AND (SELECT count(*) FROM public.reports WHERE reporter = 'deleted:' || md5('b3000000-0000-0000-0000-000000000001')
++        AND target = 'b3000000-0000-0000-0000-000000000003') = 1
++  AND NOT EXISTS (SELECT 1 FROM public.reports WHERE 'b3000000-0000-0000-0000-000000000001' IN (reporter, target)), 'reports de-linked';
++INSERT INTO public.t_results
++SELECT 'retain: exactly one anonymised audit row after repeated purges',
++  (SELECT count(*) FROM public.admin_audit WHERE action = 'account_self_deleted'
++     AND target = 'deleted:' || md5('b3000000-0000-0000-0000-000000000001')) = 1
++  AND NOT EXISTS (SELECT 1 FROM public.admin_audit WHERE 'b3000000-0000-0000-0000-000000000001' IN (target, admin_id::text)), 'single audit row';
++
++-- Orphaned chat media finder (read-only) --------------------------------------------------------------------------
++INSERT INTO public.t_results
++SELECT 'orphans: finder lists the deleted match folder, not the live one',
++  EXISTS (SELECT 1 FROM public.find_orphaned_chat_folders() WHERE folder = 'b3100000-0000-0000-0000-000000000012' AND object_count = 1)
++  AND NOT EXISTS (SELECT 1 FROM public.find_orphaned_chat_folders() WHERE folder = 'b3100000-0000-0000-0000-000000000023'), 'orphan listing';
++INSERT INTO public.t_results
++SELECT 'orphans: finder is read-only (objects still present)',
++  (SELECT count(*) FROM storage.objects WHERE bucket_id = 'chat' AND name LIKE 'b3100000-%') = 2, 'objects untouched';
+diff --git a/supabase/tests/run.sh b/supabase/tests/run.sh
+index 7895d6a..f5329a8 100644
+--- a/supabase/tests/run.sh
++++ b/supabase/tests/run.sh
+@@ -116,7 +116,7 @@ setup_db() {
+ # 10. Functional / RLS / Storage / Deletion Suite (Fail-Fast)
+ echo "== functional / RLS / storage / deletion =="
+ setup_db "$FUNC_DB" || exit 1
+-for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 29_phase789_lifecycle.sql 35_uniform_quota.sql 36_purchase_verification.sql 37_profile_media.sql 38_push_notifications.sql 39_location_discovery.sql 40_video_calls.sql 41_google_play_verification.sql 42_call_tokens.sql 43_coin_billing.sql 44_voice_messages.sql 47_chat_media_paths.sql 48_location_privacy.sql 49_call_lifecycle.sql 50_call_daily_allowance.sql 51_legal_acceptances.sql 52_optional_consents.sql 90_assert.sql; do
++for f in 10_functional_rls.sql 20_storage_deletion.sql 25_photo_reviews.sql 27_photo_visibility.sql 28_security_foundations.sql 29_phase789_lifecycle.sql 35_uniform_quota.sql 36_purchase_verification.sql 37_profile_media.sql 38_push_notifications.sql 39_location_discovery.sql 40_video_calls.sql 41_google_play_verification.sql 42_call_tokens.sql 43_coin_billing.sql 44_voice_messages.sql 47_chat_media_paths.sql 48_location_privacy.sql 49_call_lifecycle.sql 50_call_daily_allowance.sql 51_legal_acceptances.sql 52_optional_consents.sql 53_account_deletion.sql 90_assert.sql; do
+   out_file="/tmp/${RUN_ID}_test_${f}.out"
+   psql_test "$FUNC_DB" -f "$f" > "$out_file" 2>&1
+   rc=$?

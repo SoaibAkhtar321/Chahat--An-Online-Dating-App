@@ -1,6 +1,6 @@
 # Account deletion: current design and status
 
-Status: **Server Edge Function (`delete-account`) now marks deletion pending, recursively removes nested media, and performs the database purge before deleting Auth (NOT DEPLOYED yet).**
+Status: **Edge Function (`delete-account`) marks deletion pending, removes media, purges the database, then deletes Auth (NOT DEPLOYED yet). Step 5 changes (migration `20260101003500_account_deletion_hardening.sql`, function refactor, tests) are STAGED LOCALLY: not committed, not applied to any live database.**
 
 ## Flow
 
@@ -16,7 +16,7 @@ in `mobile/src/services/auth.ts` > `supabase.functions.invoke("delete-account", 
   non-2xx -> the function's own message and `retryable` flag when present; network failure -> retryable.
 - There is no client-side fallback (no RPC, no direct table deletes).
 
-## Server contract (`supabase/functions/delete-account/index.ts`, `verify_jwt = true`)
+## Server contract (`supabase/functions/delete-account/` : `index.ts` wiring, `deletion.ts` logic, `verify_jwt = true`)
 
 1. Identify caller from Authorization header (`auth.getUser()`); body is never trusted for the id.
 2. Call service-role-only `begin_account_deletion(_uid)` to suspend the profile and record a pending
@@ -26,19 +26,56 @@ in `mobile/src/services/auth.ts` > `supabase.functions.invoke("delete-account", 
 5. `purge_user_data(_uid)` (granted to `service_role` only; revoked from PUBLIC, anon, authenticated).
 6. `auth.admin.deleteUser(uid)` last ("not found" is treated as success), so a failure earlier leaves a
    suspended, still-authenticated account that can retry.
-7. Returns `{ success: true }`, or HTTP 500 with `{ success: false, retryable: true, error }`; partial
-   completion is explicit so a retry can finish remaining work.
+7. Returns `{ success: true }`, or HTTP 500 with `{ success: false, retryable: true, code: "deletion_incomplete", failedStep, error }`; partial
+   completion is explicit so a retry can finish remaining work. A missing/invalid JWT gets 401 (`unauthenticated` / `invalid_session`) and nothing is touched.
+8. If the Auth user was already deleted but the success response was lost, the retry gets 401 (the JWT no longer
+   resolves). The app tells the user to try logging in: login failing means the deletion finished.
 
 The old `delete_user_account()` RPC is dropped by `supabase/migrations/20260101000300_mobile_security_hardening.sql`.
 
-## Retained data (by design in `purge_user_data`)
+## What is deleted, what is kept (per category)
 
-- Reports are kept as moderation records, with reporter/target IDs replaced by deterministic deleted-user
-  references. Report notes remain and require a retention/privacy-policy decision.
-- Provider transaction rows are retained with `subscription_orders.user_id` set to `NULL`; the Auth user
-  can be deleted without losing store references, token hashes, or amounts. Active entitlement rows are removed.
-- An anonymized `admin_audit` row (`account_self_deleted`) is written per call; retries can add duplicate
-  events. Audit retention and report-note retention still require a privacy-policy/legal decision.
+Retention PERIODS are not set anywhere in the repo. Every period below is **"needs legal decision"**; none has been invented.
+Access for retained rows = service role / database admins only (clients cannot read them: reports and `admin_audit` are
+admin-only, `subscription_orders` rows with `user_id = NULL` match no user's RLS policy).
+
+| Category | Where | On deletion | Purpose if kept | Retention period |
+|---|---|---|---|---|
+| Profile, account state, quotas, subscriptions (entitlements) | `profiles`, `account_state`, `user_daily_quotas`, `user_subscriptions` | Deleted | n/a | n/a |
+| Profile photos, verification selfies | storage `photos/<uid>/` (incl. `verification/`), `photo_reviews` | Deleted | n/a | n/a |
+| Matches, likes, blocks, messages, chat images and voice | `matches`, `swipes`, `blocks`, `messages` (cascade), storage `chat/<matchId>/` | Deleted for current matches. Messages vanish for the other person too | n/a | n/a |
+| Location | `discovery_locations`, `discovery_location_settings` | Deleted | n/a | n/a |
+| Push tokens, notification preferences and queue | `push_devices`, `notification_*` | Deleted (tokens already removed when deletion starts) | n/a | n/a |
+| Call records and rate limits | `video_calls`, `call_events`, `call_token_rate_limits` | Deleted (also removes the other party's history of those calls) | n/a | n/a |
+| Terms/Privacy acceptance evidence | `legal_acceptances` | **Deleted** (FK cascade). Open decision: erasing evidence of acceptance may be a risk in a dispute | Would be: proof of acceptance | **Needs legal decision** |
+| Optional-consent evidence | `consent_records` | **Deleted** (FK cascade). Same open decision | Would be: proof of consent/withdrawal | **Needs legal decision** |
+| Coin wallet and ledger | `coin_wallets`, `coin_transactions` | **Deleted** (FK cascade; the append-only trigger permits only this cascade). Unspent coins are lost. Open decision: `subscription_orders` is retained but this payment-related ledger is not | Would be: payment/accounting records | **Needs legal decision** |
+| Subscription payment records | `subscription_orders` | **Kept**, `user_id` set to NULL (store order id, token hash, amount, dates remain) | Payment/refund reconciliation | **Needs legal decision** |
+| Reports about/by the user | `reports` | **Kept**, reporter/target replaced by `deleted:<md5>`; free-text notes remain (may contain personal data) | Moderation, safety | **Needs legal decision** (also whether notes must be scrubbed) |
+| Deletion audit event | `admin_audit` | **Kept**, anonymised; exactly one `account_self_deleted` row per account (retries no longer add duplicates) | Proof that deletion happened | **Needs legal decision** |
+| Third-party processing | Google Cloud Vision SafeSearch (photo moderation), Agora (calls), Google Play (billing) | Not controlled by this repo | n/a | Provider terms not reviewed here; list belongs in `serviceProviderConfirmation` |
+
+Not deleted by this app: a Google Play subscription (the user must cancel it in Google Play; the delete dialog and the
+Legal & Privacy screen both say so).
+
+## Processing status and delay
+
+Deletion runs synchronously in one request; there is no background queue. If it stops part-way the account stays
+suspended and the app says it can be retried from Settings. There is no "pending deletion" screen and no
+scheduled retry job. Requests that cannot be done in the app go through the privacy contact on the Legal & Privacy screen
+(its address and response time are still placeholders in `operatorDetails.ts`).
+
+## Known gap: orphaned chat media (unmatch / block)
+
+Unmatching or blocking deletes the `matches` row (messages cascade) but not the files under `chat/<matchId>/`. Those
+objects become unreachable and `delete-account` cannot find them via `matches`. `find_orphaned_chat_folders()`
+(service role, read-only) measures it. No cleanup is implemented: it needs a product decision on whether unmatch/block
+should delete media.
+
+## Migration order
+
+Apply every file in `supabase/migrations/` in lexical (timestamp) order. Do not hand-maintain a list here; the previous
+list went stale. `20260101003500_account_deletion_hardening.sql` is the newest and is not applied anywhere yet.
 
 ## Recent security hardening (Resolved)
 
@@ -63,23 +100,6 @@ The old `delete_user_account()` RPC is dropped by `supabase/migrations/202601010
 - Signed URLs (1 hour) cannot be revoked on block, suspension, or deletion until they expire naturally on the storage CDN.
 - Reports and anonymized audit events are retained after account deletion (including report notes; DPDP compliance check needed).
 - All database test runs so far ran with stand-ins and unit test harnesses; execution against real Supabase / PostgreSQL 16 container required per deployment runbook.
-
-## Migration order
-
-1. `supabase/migrations/20260101000000_core_schema.sql`
-2. `supabase/migrations/20260101000100_storage.sql`
-3. `supabase/migrations/20260101000200_admin_moderation.sql`
-4. `supabase/migrations/20260101000300_mobile_security_hardening.sql`
-5. `supabase/migrations/20260101000400_security_followups.sql`
-6. `supabase/migrations/20260101000500_privacy_and_rate_limits.sql`
-7. `supabase/migrations/20260101000600_trigger_function_hardening.sql`
-8. `supabase/migrations/20260101000700_subscription_entitlements_and_like_security.sql`
-9. `supabase/migrations/20260101000800_photo_visibility_stopgap.sql`
-10. `supabase/migrations/20260101000900_photo_reviews.sql`
-11. `supabase/migrations/20260101001000_photo_visibility_approved_only.sql`
-12. `supabase/migrations/20260101001100_uniform_like_quota.sql`
-13. `supabase/migrations/20260101001200_daily_like_limit_20.sql`
-14. `supabase/migrations/20260101001300_critical_security_foundations.sql`
-15. `supabase/migrations/20260101001400_harden_verification_metadata_guard.sql`
-16. `supabase/migrations/20260101001500_subscription_orders_and_replay_protection.sql`
-17. `supabase/migrations/20260101002200_lifecycle_entitlements_release.sql`
+- Legal decisions still open (see the retention table): evidence of Terms/consent acceptance and the coin ledger are erased with the account; reports (with free-text notes), payment orders and the anonymised audit event are kept with no defined period. These need qualified legal review before release.
+- Orphaned chat media after unmatch/block is measured by `find_orphaned_chat_folders()` but not cleaned up.
+- The Step 5 migration and the refactored function have been run only against a disposable local PostgreSQL 16 with Supabase stand-ins and jest fakes, never against a real Supabase project.

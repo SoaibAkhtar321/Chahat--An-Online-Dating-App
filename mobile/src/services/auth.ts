@@ -283,7 +283,7 @@ export interface DeleteAccountResult {
 }
 
 const SESSION_EXPIRED_MESSAGE =
-  "Your session has expired. Please log in again, then retry deleting your account.";
+  "Your session is no longer valid. If you were in the middle of deleting your account it may already be complete. Try logging in again: if login fails, the deletion finished; if it works, retry deleting your account.";
 const UNAVAILABLE_MESSAGE =
   "Account deletion isn't available right now. Please try again later or contact support.";
 const NETWORK_MESSAGE = "Could not reach the server. Check your connection and try again.";

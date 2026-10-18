@@ -264,11 +264,15 @@ export default function SettingsScreen() {
         setDeleteConfirmationText("");
         Alert.alert(
           "Account deleted",
-          "Your account and data have been removed." + (res.warning ? `\n\n${res.warning}` : ""),
+          "Your account and data have been removed, except the records described in Legal & Privacy." + (res.warning ? `\n\n${res.warning}` : ""),
         );
         router.replace("/(auth)/welcome");
       },
-      onFailure: (message) => Alert.alert("Could not delete account", message),
+      onFailure: (message) =>
+        Alert.alert(
+          "Could not delete account",
+          `${message}\n\nYour account stays suspended until deletion finishes. You can retry from Settings; for help use Legal & Privacy.`,
+        ),
     });
 
   return (
@@ -506,7 +510,7 @@ export default function SettingsScreen() {
       <Dialog
         visible={deleteStep === 1}
         title="Delete your account?"
-        body="Your profile, photos, matches and messages will be permanently deleted, along with your sign-in. Some moderation records may be retained. This action cannot be reversed."
+        body={"This permanently deletes your profile, photos (including any verification selfie), matches, chat messages and media (also from the people you chatted with), location, notification settings, coin balance and your Terms and consent records, along with your sign-in. It cannot be undone.\n\nKept without a link to you: reports about members and anonymous deletion and payment records. Deleting does not cancel a Google Play subscription, so cancel it in Google Play first. If it fails part-way, some data may already be gone; retry from Settings to finish. See Legal & Privacy for details."}
         confirmText="Continue"
         danger
         onConfirm={() => setDeleteStep(2)}

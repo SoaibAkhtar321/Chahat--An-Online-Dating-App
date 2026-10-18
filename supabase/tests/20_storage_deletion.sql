@@ -62,7 +62,7 @@ INSERT INTO public.t_results SELECT 'purge removes profile/swipes/matches/messag
   AND (SELECT count(*) FROM public.messages)=0
   AND NOT EXISTS(SELECT 1 FROM public.user_daily_quotas WHERE user_id='00000000-0000-0000-0000-00000000000a')
   AND NOT EXISTS(SELECT 1 FROM public.account_state WHERE user_id='00000000-0000-0000-0000-00000000000a'), 'purge x2 ok';
-INSERT INTO public.t_results SELECT 'purge retry safe: audit rows written', count(*)=2, count(*)::text FROM public.admin_audit WHERE action='account_self_deleted';
+INSERT INTO public.t_results SELECT 'purge retry safe: audit rows written', count(*)=1, count(*)::text FROM public.admin_audit WHERE action='account_self_deleted'; -- Step 5: one audit row per deleted account, however many retries
 -- deleting auth user afterwards cascades cleanly
 DELETE FROM auth.users WHERE id='00000000-0000-0000-0000-00000000000a';
 INSERT INTO public.t_results VALUES('auth user delete after purge ok', true, 'ok');
