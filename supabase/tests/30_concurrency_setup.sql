@@ -1,3 +1,5 @@
+INSERT INTO app_settings (key, value) VALUES ('call_daily_allowance_enabled', '0'::jsonb)
+  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 -- 1 male "F" + 30 women; 10 mutual pairs (men M1..M10 / women W1..W10)
 INSERT INTO auth.users(id) SELECT ('10000000-0000-0000-0000-'||lpad(g::text,12,'0'))::uuid FROM generate_series(1,31) g;
 INSERT INTO auth.users(id) SELECT ('20000000-0000-0000-0000-'||lpad(g::text,12,'0'))::uuid FROM generate_series(1,20) g;

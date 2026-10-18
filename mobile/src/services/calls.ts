@@ -57,6 +57,9 @@ export async function transitionVideoCall(callId: string, action: CallAction): P
     _action: action,
   });
   if (error) throw new Error(`Could not update call: ${error.message}`);
+  if (data?.success === false && data?.error === "daily_call_allowance_used") {
+    throw new Error("The caller has used today's video-call time. It renews tomorrow.");
+  }
   if (typeof data?.status !== "string") throw new Error("The server returned an invalid call state.");
   return data.status as CallStatus;
 }

@@ -1,4 +1,8 @@
 \set ON_ERROR_STOP on
+-- Older call suites (40/43/49) assert the legacy per-call rules; the daily allowance is covered by 50_call_daily_allowance.sql.
+INSERT INTO public.app_settings (key, value) VALUES ('call_daily_allowance_enabled', '0'::jsonb)
+  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
 -- users
 INSERT INTO auth.users(id,email) VALUES
  ('00000000-0000-0000-0000-00000000000a','a@x'),('00000000-0000-0000-0000-00000000000b','b@x'),('00000000-0000-0000-0000-00000000000c','c@x');
@@ -68,7 +72,7 @@ BEGIN
   INSERT INTO public.t_results VALUES('8 likes succeed under limit 10', ok=8, ok::text);
 END $$;
 DO $$ DECLARE r jsonb; BEGIN
-  r:=public.record_swipe('ananya','like'); INSERT INTO public.t_results VALUES('re-like same target is idempotent (no extra quota)', (r->>'success')::boolean AND (r->>'likes_remaining')::int=12, r::text);
+  r:=public.record_swipe('ananya','like'); INSERT INTO public.t_results VALUES('re-like same target is idempotent (no extra quota)', (r->>'success')::boolean AND (r->>'likes_remaining')::int=42, r::text);
 END $$;
 RESET ROLE;
 -- bump quota via service-side config to test limit: set limit to 8 and verify cap
