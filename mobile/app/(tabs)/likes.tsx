@@ -39,6 +39,9 @@ export default function LikesScreen() {
     // The server decides entitlement; the client only renders what it is allowed to see.
     const access = await fetchLikesAccess();
     if (!access) {
+      // Never greet the person with a failure message: show the normal "see who likes you" view with a soft refresh.
+      setEligible(false);
+      setCount(0);
       setLikers([]);
       setState("error");
       return;
@@ -96,18 +99,12 @@ export default function LikesScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Likes</Text>
         <Text style={styles.subtitle}>
-          {state === "error"
-            ? "Couldn't load your likes."
-            : backend && !isPremiumUser
+          {backend && !isPremiumUser
               ? "Premium members can see who likes them."
               : total > 0
               ? `${total} ${total === 1 ? "person" : "people"} liked you`
               : "No new likes right now. Keep your profile fresh!"}
         </Text>
-
-        {state === "error" && (
-          <Button title="Try again" onPress={() => void load()} style={styles.bannerBtn} />
-        )}
 
         <View style={styles.grid}>
           {shown.map((profile) => (
@@ -138,7 +135,21 @@ export default function LikesScreen() {
           ))}
         </View>
 
-        {state === "ready" && !isPremiumUser && (
+        {state === "ready" && isPremiumUser && total === 0 && (
+          <View style={styles.premiumBanner}>
+            <Text style={styles.bannerTitle}>No likes yet</Text>
+            <Text style={styles.bannerDesc}>
+              Complete your profile and keep exploring to get noticed.
+            </Text>
+            <Button
+              title="Go to Discover"
+              onPress={() => router.push("/(tabs)/discover")}
+              style={styles.bannerBtn}
+            />
+          </View>
+        )}
+
+        {(state === "ready" || state === "error") && backend && !isPremiumUser && (
           <View style={styles.premiumBanner}>
             <Text style={styles.bannerTitle}>See who likes you</Text>
             <Text style={styles.bannerDesc}>
@@ -150,6 +161,14 @@ export default function LikesScreen() {
               onPress={() => router.push("/premium")}
               style={styles.bannerBtn}
             />
+            {state === "error" && (
+              <Button
+                title="Refresh"
+                variant="ghost"
+                onPress={() => void load()}
+                style={styles.bannerBtn}
+              />
+            )}
           </View>
         )}
       </ScrollView>

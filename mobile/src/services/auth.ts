@@ -249,6 +249,58 @@ export async function updateRecoveryPassword(
   }
 }
 
+/** Confirms a signup with the 6-digit code from the e-mail. On success the session is created, so no second login is needed. */
+export async function verifySignupCode(
+  email: string,
+  code: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) return { success: false, error: CONFIG_ERROR };
+  const token = code.replace(/\s+/g, "");
+  if (!/^\d{6,8}$/.test(token)) {
+    return { success: false, error: "Enter the code from your email." };
+  }
+  try {
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim().toLowerCase(),
+      token,
+      type: "signup",
+    });
+    if (error) {
+      return {
+        success: false,
+        error: /expired|invalid/i.test(error.message)
+          ? "That code is incorrect or has expired. Check it or request a new one."
+          : error.message,
+      };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Could not verify the code" };
+  }
+}
+
+/**
+ * Used while the verify screen is open: once the e-mail has been confirmed (by link, on any browser or device) the
+ * stored credentials sign the person in automatically. Returns "pending" until then.
+ */
+export async function checkSignupConfirmed(
+  email: string,
+  password: string,
+): Promise<"confirmed" | "pending" | "error"> {
+  if (!isSupabaseConfigured()) return "error";
+  try {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+    if (!error) return "confirmed";
+    if (/not confirmed/i.test(error.message)) return "pending";
+    return "error";
+  } catch {
+    return "error";
+  }
+}
+
 export async function resendConfirmation(
   email: string,
 ): Promise<{ success: boolean; error?: string }> {

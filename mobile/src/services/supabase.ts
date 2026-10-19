@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { secureKey } from "./secureKey";
 
 const isWeb = Platform.OS === "web";
 
@@ -13,7 +14,7 @@ const ExpoSecureStoreAdapter = {
       if (isWeb) {
         return await AsyncStorage.getItem(key);
       }
-      return await SecureStore.getItemAsync(key);
+      return await SecureStore.getItemAsync(secureKey(key));
     } catch (error) {
       console.error("Could not read persisted Supabase session:", error);
       throw error;
@@ -24,7 +25,7 @@ const ExpoSecureStoreAdapter = {
       if (isWeb) {
         await AsyncStorage.setItem(key, value);
       } else {
-        await SecureStore.setItemAsync(key, value);
+        await SecureStore.setItemAsync(secureKey(key), value);
       }
     } catch (error) {
       console.error("Could not persist Supabase session:", error);
@@ -36,7 +37,7 @@ const ExpoSecureStoreAdapter = {
       if (isWeb) {
         await AsyncStorage.removeItem(key);
       } else {
-        await SecureStore.deleteItemAsync(key);
+        await SecureStore.deleteItemAsync(secureKey(key));
       }
     } catch (error) {
       console.error("Could not clear persisted Supabase session:", error);

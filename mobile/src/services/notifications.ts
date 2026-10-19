@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
+import { secureKey } from "./secureKey";
 import { Platform } from "react-native";
 import { isServiceConfigured } from "../config/appConfig";
 import { supabase, isSupabaseConfigured } from "./supabase";
@@ -64,7 +65,7 @@ const LEGACY_STORAGE_KEY_PREFS = "milo_notification_prefs";
 const LEGACY_STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
 const PUSH_PERMISSION_PROMPT_KEY = "milo_push_permission_prompted";
 const inboxKey = (userId: string) => `${LEGACY_STORAGE_KEY_NOTICES}:${userId}`;
-const pushTokenKey = (userId: string) => `milo_expo_push_token:${userId}`;
+const pushTokenKey = (userId: string) => secureKey(`milo_expo_push_token_${userId}`);
 
 function formatTimeAgo(timestamp: number): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -354,7 +355,7 @@ export async function clearNotificationState(
   if (clearPushToken && userId) {
     await Promise.all([
       SecureStore.deleteItemAsync(pushTokenKey(userId)),
-      SecureStore.deleteItemAsync(`chahat_expo_push_token:${userId}`),
+      SecureStore.deleteItemAsync(secureKey(`chahat_expo_push_token_${userId}`)),
     ]);
   }
 }

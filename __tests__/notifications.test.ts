@@ -165,7 +165,7 @@ describe("real Expo push registration", () => {
       _previous_token: null,
     });
     expect(mockSecureSet).toHaveBeenCalledWith(
-      "milo_expo_push_token:user-1",
+      "milo_expo_push_token_user-1",
       "ExponentPushToken[12345678-1234-1234-1234-123456789abc]",
     );
   });
@@ -253,7 +253,7 @@ describe("real Expo push registration", () => {
     expect(mockRpc).toHaveBeenCalledWith("unregister_push_device", {
       _token: "ExponentPushToken[12345678-1234-1234-1234-123456789abc]",
     });
-    expect(mockSecureDelete).toHaveBeenCalledWith("milo_expo_push_token:user-1");
+    expect(mockSecureDelete).toHaveBeenCalledWith("milo_expo_push_token_user-1");
   });
 
   it("validates only real Expo token formats", () => {

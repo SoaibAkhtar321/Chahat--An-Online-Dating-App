@@ -175,7 +175,10 @@ export default function SettingsScreen() {
         setNotifCalls(prefs.calls);
         setLockScreenDetails(prefs.lockScreenDetails);
       })
-      .catch((error) => Alert.alert("Notifications unavailable", error.message));
+      .catch((error) => {
+        // Technical detail stays in the log; the toggles keep their defaults and saving reports a friendly message.
+        console.error("Could not load notification preferences:", error);
+      });
   }, [user?.id]);
 
   const updateNotificationPreferences = async (next: NotificationPreferences) => {
@@ -185,7 +188,11 @@ export default function SettingsScreen() {
     }
     const result = await saveNotificationPreferences(user.id, next);
     if (!result.success) {
-      Alert.alert("Could not save setting", result.error || "Please try again.");
+      console.error("Could not save notification preferences:", result.error);
+      Alert.alert(
+        "Couldn't save this setting",
+        "Notification settings are temporarily unavailable. Please try again in a moment.",
+      );
       return false;
     }
     return true;
@@ -558,10 +565,10 @@ export default function SettingsScreen() {
             router.replace("/(auth)/welcome");
           } catch (error) {
             Alert.alert(
-              "Could not sign out securely",
+              "Could not log out",
               error instanceof Error
                 ? error.message
-                : "The device notification token could not be removed. Retry when connected.",
+                : "We couldn't log you out on this device. Please close the app and try again.",
             );
           }
         }}

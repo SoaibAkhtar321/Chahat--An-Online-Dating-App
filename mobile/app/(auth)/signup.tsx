@@ -16,6 +16,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { signUpUser } from "../../src/services/auth";
+import { setPendingSignup } from "../../src/services/pendingSignup";
 import { LegalAcceptanceCheckbox } from "../../src/components/legal/LegalAcceptanceCheckbox";
 import { currentLegalAcceptanceClaim } from "../../src/constants/legalVersions";
 import { validateLegalAcceptance } from "../../src/utils/legalGate";
@@ -68,6 +69,7 @@ export default function SignupScreen() {
       return;
     }
 
+    setPendingSignup(email, password);
     router.push("/(auth)/verify");
   };
 

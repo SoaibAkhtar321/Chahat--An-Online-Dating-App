@@ -122,28 +122,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loadUserProfile]);
 
   const signOut = useCallback(async () => {
-    const { data, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) throw sessionError;
-    const userId = data.session?.user.id ?? activeUserId.current;
+    // Logging out must always succeed on this device. Server-side cleanup (push token, session revocation) is best-effort
+    // and only logged; the one hard failure is not being able to clear the local session.
+    let userId: string | null = activeUserId.current;
+    try {
+      const { data } = await supabase.auth.getSession();
+      userId = data.session?.user.id ?? userId;
+    } catch (sessionError) {
+      console.error("Could not read session during sign-out:", sessionError);
+    }
 
     if (userId) {
-      const tokenResult = await unregisterPushNotificationToken(userId);
-      if (!tokenResult.success) {
-        throw new Error(`Could not securely sign out: ${tokenResult.error}`);
+      try {
+        const tokenResult = await unregisterPushNotificationToken(userId);
+        if (!tokenResult.success) {
+          console.error("Push token was not unregistered during sign-out:", tokenResult.error);
+        }
+      } catch (tokenError) {
+        console.error("Push token cleanup failed during sign-out:", tokenError);
       }
     }
 
     const { error } = await supabase.auth.signOut();
     if (error) {
+      console.error("Server session revocation failed; clearing local session:", error);
       const { error: localError } = await supabase.auth.signOut({ scope: "local" });
       if (localError) {
-        throw new Error(
-          `Sign-out failed: ${error.message}; local cleanup failed: ${localError.message}`,
-        );
+        throw new Error("We couldn't log you out on this device. Please close the app and try again.");
       }
-      throw new Error(
-        `Signed out on this device, but server session revocation failed: ${error.message}`,
-      );
     }
 
     if (userId) {
