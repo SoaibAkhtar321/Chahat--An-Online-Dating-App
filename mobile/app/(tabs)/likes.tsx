@@ -1,35 +1,93 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { Lock, Heart } from "lucide-react-native";
+import { useRouter, useFocusEffect } from "expo-router";
+import { Heart } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
 import { Button } from "../../src/components/ui/Button";
-import { hasEntitlement } from "../../src/services/subscription";
+import { useAuth } from "../../src/context/AuthContext";
+import { Alert } from "../../src/utils/alert";
+import { isSupabaseConfigured } from "../../src/services/supabase";
+import { fetchLikesAccess, fetchReceivedLikes } from "../../src/services/likes";
+import { submitSwipe } from "../../src/services/discovery";
+import type { Profile } from "../../src/types";
 
 const { width } = Dimensions.get("window");
 const CARD_SIZE = (width - 48) / 2;
+
+type LoadState = "loading" | "ready" | "error";
 
 export default function LikesScreen() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
-  const { deck, swipeCard, subscription } = useMilo();
+  const { user } = useAuth();
+  const { deck, refreshMatches } = useMilo();
+  const backend = isSupabaseConfigured();
 
-  // Likers are profiles with likesYou = true
-  const likers = deck.filter((p) => p.likesYou);
-  const isPremiumUser = hasEntitlement(subscription?.tier || "free", "seeWhoLikedYou");
+  const [state, setState] = useState<LoadState>(backend ? "loading" : "ready");
+  const [eligible, setEligible] = useState(false);
+  const [count, setCount] = useState(0);
+  const [likers, setLikers] = useState<Profile[]>([]);
+
+  const load = useCallback(async () => {
+    if (!backend) return;
+    setState("loading");
+    // The server decides entitlement; the client only renders what it is allowed to see.
+    const access = await fetchLikesAccess();
+    if (!access) {
+      setLikers([]);
+      setState("error");
+      return;
+    }
+    setEligible(access.eligible);
+    setCount(access.count ?? 0);
+    if (!access.eligible) {
+      setLikers([]);
+      setState("ready");
+      return;
+    }
+    const result = await fetchReceivedLikes();
+    if (result.status === "ok") {
+      setLikers(result.profiles);
+      setCount(result.profiles.length);
+      setState("ready");
+    } else if (result.status === "upgrade_required") {
+      setEligible(false);
+      setLikers([]);
+      setState("ready");
+    } else {
+      setState("error");
+    }
+  }, [backend]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  // No backend configured (local preview): fall back to the demo deck, as before.
+  const previewLikers = deck.filter((p) => p.likesYou);
+  const shown = backend ? likers : previewLikers;
+  const isPremiumUser = backend ? eligible : true;
+  const total = backend ? count : previewLikers.length;
 
   const handleLikeBack = async (id: string) => {
-    const res = await swipeCard("like");
+    if (!user) return;
+    // Like back the profile that was tapped (not whatever happens to be first in the deck).
+    const res = await submitSwipe(id, "like", user.id);
+    if (!res.success) {
+      Alert.alert("Couldn't like back", res.error || "Please try again.");
+      return;
+    }
+    void refreshMatches();
+    void load();
     if (res.isMatch) {
-      router.push({
-        pathname: "/match/[id]",
-        params: { id },
-      });
+      router.push({ pathname: "/match/[id]", params: { id: res.matchId || id } });
     }
   };
 
@@ -38,65 +96,54 @@ export default function LikesScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Likes</Text>
         <Text style={styles.subtitle}>
-          {likers.length > 0
-            ? `${likers.length} ${likers.length === 1 ? "person" : "people"} liked you`
-            : "No new likes right now. Keep your profile fresh!"}
+          {state === "error"
+            ? "Couldn't load your likes."
+            : backend && !isPremiumUser
+              ? "Premium members can see who likes them."
+              : total > 0
+              ? `${total} ${total === 1 ? "person" : "people"} liked you`
+              : "No new likes right now. Keep your profile fresh!"}
         </Text>
 
+        {state === "error" && (
+          <Button title="Try again" onPress={() => void load()} style={styles.bannerBtn} />
+        )}
+
         <View style={styles.grid}>
-          {likers.map((profile) => (
+          {shown.map((profile) => (
             <View key={profile.id} style={styles.gridItem}>
-              {isPremiumUser ? (
-                <TouchableOpacity
-                  style={styles.card}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/profile/[id]",
-                      params: { id: profile.id },
-                    })
-                  }
-                  activeOpacity={0.8}
-                >
-                  <ProfilePhoto
-                    uri={profile.photos[0]}
-                    name={profile.name}
-                    style={styles.image}
-                  />
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.cardName}>
-                      {profile.name}, {profile.age}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => handleLikeBack(profile.id)}
-                      style={styles.likeBackBtn}
-                      activeOpacity={0.8}
-                    >
-                      <Heart
-                        size={16}
-                        color={Colors.primaryForeground}
-                        fill={Colors.primaryForeground}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.lockedCard}>
-                  <View style={styles.lockIconCircle}>
-                    <Lock size={28} color={Colors.mutedForeground} />
-                  </View>
-                  <Text style={styles.lockedHint}>Someone near you</Text>
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push({ pathname: "/profile/[id]", params: { id: profile.id } })
+                }
+                activeOpacity={0.8}
+              >
+                <ProfilePhoto uri={profile.photos[0]} name={profile.name} style={styles.image} />
+                <View style={styles.cardFooter}>
+                  <Text style={styles.cardName}>
+                    {profile.name}
+                    {profile.age ? `, ${profile.age}` : ""}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => handleLikeBack(profile.id)}
+                    style={styles.likeBackBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Heart size={16} color={Colors.primaryForeground} fill={Colors.primaryForeground} />
+                  </TouchableOpacity>
                 </View>
-              )}
+              </TouchableOpacity>
             </View>
           ))}
         </View>
 
-        {likers.length > 0 && !isPremiumUser && (
+        {state === "ready" && !isPremiumUser && (
           <View style={styles.premiumBanner}>
             <Text style={styles.bannerTitle}>See who likes you</Text>
             <Text style={styles.bannerDesc}>
-              The full incoming-likes list is a premium preview. Swiping and chatting stay 100%
-              free: when you like them back in Discover, you will match immediately!
+              Seeing the full list of people who liked you is a Premium feature. Swiping and chatting
+              stay free: when you like someone back in Discover, you will match immediately!
             </Text>
             <Button
               title="Explore Premium"

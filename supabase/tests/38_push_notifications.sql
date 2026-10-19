@@ -96,8 +96,11 @@ SELECT 'account has both active devices after token rotation',
   count(*)::text
 FROM public.push_devices
 WHERE user_id = '00000000-0000-0000-0000-0000000000f1' AND active;
+-- Phase 2: a like only notifies while unanswered, so the pair is inserted sequentially: f1's like
+-- notifies f2; f2's reciprocal like is a match, not a "someone likes you" event.
 INSERT INTO public.swipes(from_id, to_id, kind) VALUES
-  ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f2', 'like'),
+  ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000f2', 'like');
+INSERT INTO public.swipes(from_id, to_id, kind) VALUES
   ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000f1', 'like');
 -- The legacy on_swipe auto-match trigger was removed (matches come from record_swipe),
 -- so create the mutual match explicitly.

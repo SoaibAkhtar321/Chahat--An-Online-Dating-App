@@ -5,6 +5,9 @@ import { useRootNavigationState, useRouter } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../services/supabase";
 import { resolveNotificationDestination } from "../../services/notificationPolicy";
+import { checkLikesAccessRaw } from "../../services/likes";
+import { resolveLikeTapRoute } from "../../services/likesPolicy";
+import { isValidUUID } from "../../utils/validation";
 
 export function NotificationResponseHandler() {
   const router = useRouter();
@@ -26,12 +29,16 @@ export function NotificationResponseHandler() {
       if (!data || typeof data !== "object") return;
       const category = data.category;
       const matchId = data.matchId;
-      const initialDestination = resolveNotificationDestination(category, matchId, user.id);
-      if (initialDestination?.kind === "likes") {
-        router.push("/(tabs)/likes");
+      if (category === "like") {
+        // Phase 2: never trust the push payload or a cached tier; ask the server on every tap.
+        const route = await resolveLikeTapRoute(checkLikesAccessRaw);
+        if (!active) return;
+        if (route.kind === "likes") router.push("/(tabs)/likes");
+        else if (route.kind === "premium") router.push("/premium");
+        else Alert.alert("Couldn't open likes", route.message);
         return;
       }
-      if (initialDestination?.kind === "chat" && typeof matchId === "string") {
+      if ((category === "match" || category === "message") && typeof matchId === "string" && isValidUUID(matchId)) {
         const { data: match, error } = await supabase
           .from("matches")
           .select("id, user_a, user_b")

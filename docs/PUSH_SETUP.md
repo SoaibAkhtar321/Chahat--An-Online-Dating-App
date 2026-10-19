@@ -46,3 +46,19 @@ Emulators cannot receive real pushes.
   (sub-minute needs a recent pg_cron); a database webhook on `notification_outbox` insert that calls
   `dispatch-push` gives near-instant delivery and is safe because dispatch is idempotent.
 - Run `supabase functions deploy dispatch-push --no-verify-jwt` again after this phase (index.ts and policy.ts changed).
+
+## Phase 2: "Someone likes you" push and the Premium gate
+
+- The like push is generic ("Someone likes you") and carries only `category` and `notificationId`.
+  It never contains the liker's id, name or photo; `route_data` for likes is empty.
+- A like only notifies while it is **valid**: it exists, is non-mutual and unanswered (the recipient has
+  not liked back or passed), is not blocked, and both accounts are active and onboarded. That single
+  rule is `public._like_is_valid()`; the trigger, the list, the count and delivery-time suppression
+  (`LikeNoLongerValid` in `claim_push_deliveries`) all use it.
+- Duplicates/retries: the outbox event id is the deterministic pair `from:to`, so replays hit the unique
+  key and do nothing; an in-flight delivery is not re-claimed.
+- On tap, the app calls `get_my_likes_access()` every time (free members get `{"eligible": false}` only, no count). Eligible members open `/(tabs)/likes`,
+  others open the existing `/premium` paywall. If the check fails the app shows an alert and does not
+  navigate. The tap never trusts the push payload or a cached tier.
+- Migration: `20260101003800_phase2_premium_likes_flow.sql` (apply after `...003700`). Not yet applied
+  to any hosted project.

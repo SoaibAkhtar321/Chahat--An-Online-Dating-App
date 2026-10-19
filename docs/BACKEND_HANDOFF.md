@@ -55,3 +55,13 @@ Hosting/database, object storage + CDN bandwidth, video minutes, SMS OTP per mes
 The current server-configured daily Like limit is 50 per IST day for the free plan (premium is unlimited); the client reads it from the backend rather than hard-coding it. Boost and provider-backed push registration require integration before launch. Product/provider catalog localization, call rates, and legally required account-retention periods still need confirmation.
 
 Video-call allowance (migration `20260101003200`): a daily allowance that resets at midnight IST. Free callers get `call_free_daily_seconds` (15 s); premium callers get `call_premium_daily_seconds` (300 s) and are never charged coins. A free caller who has used their 15 s can still continue by paying coins from minute 1; a premium caller who has used their 300 s is refused with `daily_call_allowance_used`. `call_daily_allowance_enabled = 0` restores the legacy per-call rules.
+
+## Received likes (Phase 2)
+
+- Liker identities are returned **only** by `get_received_likes(_limit, _before)`, which checks
+  `get_active_subscription_tier(auth.uid())` in `('premium','plus','vip')` and otherwise raises
+  `upgrade_required` (SQLSTATE 42501). No JWT claim or client flag is consulted.
+- `get_my_likes_access()` returns `{"eligible": false}` for free members (no count, no identities) and `{"eligible": true, "count": n}` for Premium+. The legacy `get_incoming_likes_count()` is gated identically (it was previously open to all members).
+- The `paid members read received likes` RLS policy on `public.swipes` was dropped, so there is no direct
+  table path to incoming likes for any client role.
+- `_like_is_valid(from, to)` is the single validity rule (internal, no client or service-role grant).
