@@ -1,0 +1,984 @@
+diff --git a/__tests__/chatScreenProtection.test.tsx b/__tests__/chatScreenProtection.test.tsx
+new file mode 100644
+index 0000000..ea58eb6
+--- /dev/null
++++ b/__tests__/chatScreenProtection.test.tsx
+@@ -0,0 +1,136 @@
++import React from "react";
++import TestRenderer, { act } from "react-test-renderer";
++
++// Wiring test: the real chat screen must switch screenshot protection on while it is focused and off again
++// when it is covered or closed. Everything around it is stubbed, like in chatDeleteScreen.test.tsx.
++const { createFakeScreenCapture } = require("./helpers/fakeScreenCapture");
++
++const ME = "aaaaaaaa-0000-4000-8000-000000000001";
++const MATCH = "f6c60000-0000-4000-8000-000000000001";
++const mockUser = { id: ME };
++const mockMiloValue = { matches: [], refreshMatches: jest.fn() };
++
++const mockFake = createFakeScreenCapture();
++jest.mock("expo-screen-capture", () => mockFake.module);
++jest.mock("@react-native-async-storage/async-storage", () => ({
++  getItem: jest.fn().mockResolvedValue(null),
++  setItem: jest.fn().mockResolvedValue(undefined),
++  removeItem: jest.fn().mockResolvedValue(undefined),
++}), { virtual: true });
++jest.mock("react-native-safe-area-context", () => {
++  const { View } = require("react-native");
++  return { SafeAreaView: View };
++});
++jest.mock("expo-router", () => ({
++  useLocalSearchParams: () => ({ id: "f6c60000-0000-4000-8000-000000000001" }),
++  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
++  useFocusEffect: (effect: () => void) => require("@react-navigation/core").useFocusEffect(effect),
++}));
++jest.mock("expo-image", () => {
++  const { View } = require("react-native");
++  return { Image: View };
++});
++jest.mock("expo-image-picker", () => ({ MediaTypeOptions: { Images: "Images" } }));
++jest.mock("lucide-react-native", () => new Proxy({ __esModule: true }, { get: (t: any, k: string) => (k in t ? t[k] : () => null) }));
++jest.mock("../mobile/src/components/profile/ProfilePhoto", () => ({ ProfilePhoto: () => null }));
++jest.mock("../mobile/src/components/chat/CoupleGamesModal", () => ({ CoupleGamesModal: () => null }));
++jest.mock("../mobile/src/context/AuthContext", () => ({ useAuth: () => ({ user: mockUser }) }));
++jest.mock("../mobile/src/context/MiloContext", () => ({ useMilo: () => mockMiloValue }));
++jest.mock("../mobile/src/services/activeConversation", () => ({ setActiveConversation: jest.fn(), clearActiveConversation: jest.fn() }));
++jest.mock("../mobile/src/services/calls", () => ({ buildNewCallRoute: jest.fn() }));
++jest.mock("../mobile/src/services/callMedia", () => ({ isCallingAvailable: () => false }));
++jest.mock("../mobile/src/services/moderation", () => ({ blockUser: jest.fn(), reportUser: jest.fn(), unmatchUser: jest.fn() }));
++jest.mock("../mobile/src/services/voiceMedia", () => ({
++  VOICE_LIMITS: { maxDurationMs: 60000 },
++  getAudioRecorderAdapter: jest.fn(),
++  getAudioPlayerAdapter: () => ({ stopAsync: jest.fn(), pauseAsync: jest.fn(), playAsync: jest.fn() }),
++}));
++jest.mock("../mobile/src/services/supabase", () => ({
++  supabase: { removeChannel: jest.fn(), rpc: jest.fn() },
++  isSupabaseConfigured: () => true,
++}));
++jest.mock("../mobile/src/services/chat", () => ({
++  fetchMessagesForMatch: jest.fn().mockResolvedValue([]),
++  sendChatMessage: jest.fn(),
++  sendVoiceMessage: jest.fn(),
++  markChatRead: jest.fn(),
++  subscribeToMatchMessages: jest.fn(() => ({ id: "channel" })),
++}));
++jest.mock("../mobile/src/utils/alert", () => ({ Alert: { alert: jest.fn() } }));
++
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { NavigationContext } = require("@react-navigation/core");
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { Platform } = require("react-native");
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const ChatDetailScreen = require("../mobile/app/chat/[id]").default;
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { screenProtectionHolderCount } = require("../mobile/src/services/screenProtection");
++
++const native = mockFake.state;
++
++function createNav() {
++  let focused = true;
++  const listeners: Record<"focus" | "blur", Set<() => void>> = { focus: new Set(), blur: new Set() };
++  return {
++    isFocused: () => focused,
++    addListener: (type: "focus" | "blur", cb: () => void) => {
++      listeners[type].add(cb);
++      return () => listeners[type].delete(cb);
++    },
++    focus() {
++      focused = true;
++      listeners.focus.forEach((cb) => cb());
++    },
++    blur() {
++      focused = false;
++      listeners.blur.forEach((cb) => cb());
++    },
++  };
++}
++
++const flush = () => act(async () => { await jest.advanceTimersByTimeAsync(0); });
++
++beforeEach(() => {
++  jest.useFakeTimers();
++  Platform.OS = "android";
++  native.reset();
++});
++
++afterEach(() => {
++  jest.useRealTimers();
++});
++
++describe("Phase 3C: chat screen screenshot protection", () => {
++  it("protects the chat while it is open, drops protection when covered, and clears it on unmount", async () => {
++    const nav = createNav();
++    let renderer!: TestRenderer.ReactTestRenderer;
++    await act(async () => {
++      renderer = TestRenderer.create(
++        <NavigationContext.Provider value={nav}>
++          <ChatDetailScreen />
++        </NavigationContext.Provider>,
++      );
++    });
++    await flush();
++    expect(MATCH).toBeTruthy();
++    expect(native.flagSecure).toBe(true);
++    expect(screenProtectionHolderCount()).toBe(1);
++
++    // Profile or call screen pushed on top: no chat content is visible any more.
++    await act(async () => nav.blur());
++    await flush();
++    expect(native.flagSecure).toBe(false);
++
++    // Back on the chat.
++    await act(async () => nav.focus());
++    await flush();
++    expect(native.flagSecure).toBe(true);
++
++    await act(async () => renderer.unmount());
++    await flush();
++    expect(native.flagSecure).toBe(false);
++    expect(screenProtectionHolderCount()).toBe(0);
++    expect(native.tags.size).toBe(0);
++  });
++});
+diff --git a/__tests__/helpers/fakeScreenCapture.ts b/__tests__/helpers/fakeScreenCapture.ts
+new file mode 100644
+index 0000000..0773b01
+--- /dev/null
++++ b/__tests__/helpers/fakeScreenCapture.ts
+@@ -0,0 +1,68 @@
++// Test double for expo-screen-capture 7.0.1 (the SDK 52 release). It reproduces the library's JS key
++// bookkeeping exactly (a key is recorded BEFORE the native call; the native "allow" runs only when the last
++// key is removed) on top of a fake Android window whose FLAG_SECURE state tests can read and break.
++export function createFakeScreenCapture() {
++  const state = {
++    /** Whether the fake activity window currently has FLAG_SECURE. */
++    flagSecure: false,
++    /** Keys the library believes are active. */
++    tags: new Set<string>(),
++    /** Every native call, in order. */
++    nativeCalls: [] as string[],
++    /** Every value flagSecure took, in order (to prove it never dipped when it should not). */
++    flagHistory: [] as boolean[],
++    failNext: { prevent: 0, allow: 0 },
++    fail(kind: "prevent" | "allow", times = 1) {
++      state.failNext[kind] = times;
++    },
++    reset() {
++      state.flagSecure = false;
++      state.tags.clear();
++      state.nativeCalls.length = 0;
++      state.flagHistory.length = 0;
++      state.failNext.prevent = 0;
++      state.failNext.allow = 0;
++    },
++  };
++
++  const setFlag = (value: boolean) => {
++    state.flagSecure = value;
++    state.flagHistory.push(value);
++  };
++
++  async function nativePrevent() {
++    state.nativeCalls.push("prevent");
++    if (state.failNext.prevent > 0) {
++      state.failNext.prevent -= 1;
++      throw new Error("MissingActivity");
++    }
++    setFlag(true);
++  }
++
++  async function nativeAllow() {
++    state.nativeCalls.push("allow");
++    if (state.failNext.allow > 0) {
++      state.failNext.allow -= 1;
++      throw new Error("MissingActivity");
++    }
++    setFlag(false);
++  }
++
++  const module = {
++    __esModule: true,
++    async preventScreenCaptureAsync(key = "default") {
++      if (!state.tags.has(key)) {
++        state.tags.add(key);
++        await nativePrevent();
++      }
++    },
++    async allowScreenCaptureAsync(key = "default") {
++      state.tags.delete(key);
++      if (state.tags.size === 0) {
++        await nativeAllow();
++      }
++    },
++  };
++
++  return { state, module };
++}
+diff --git a/__tests__/screenProtection.test.ts b/__tests__/screenProtection.test.ts
+new file mode 100644
+index 0000000..5ad98cf
+--- /dev/null
++++ b/__tests__/screenProtection.test.ts
+@@ -0,0 +1,255 @@
++const { createFakeScreenCapture } = require("./helpers/fakeScreenCapture");
++
++const mockFake = createFakeScreenCapture();
++jest.mock("expo-screen-capture", () => mockFake.module);
++
++const native = mockFake.state;
++
++type Service = typeof import("../mobile/src/services/screenProtection");
++
++let svc: Service;
++let appStateHandler: ((state: string) => void) | undefined;
++let removeAppStateListener: jest.Mock;
++let addAppStateListener: jest.SpyInstance;
++let warn: jest.SpyInstance;
++
++/** Fresh module state (holders, retry budget, listeners) for every test. */
++function load(platform: string = "android") {
++  jest.resetModules();
++  const RN = require("react-native");
++  RN.Platform.OS = platform;
++  removeAppStateListener = jest.fn();
++  appStateHandler = undefined;
++  addAppStateListener = jest.spyOn(RN.AppState, "addEventListener").mockImplementation(((_t: string, handler: (s: string) => void) => {
++    appStateHandler = handler;
++    return { remove: removeAppStateListener };
++  }) as never);
++  svc = require("../mobile/src/services/screenProtection");
++}
++
++const flush = () => jest.advanceTimersByTimeAsync(0);
++
++beforeEach(() => {
++  jest.useFakeTimers();
++  native.reset();
++  warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
++  load();
++});
++
++afterEach(() => {
++  jest.useRealTimers();
++  warn.mockRestore();
++  addAppStateListener.mockRestore();
++});
++
++describe("screen protection: platform", () => {
++  it.each(["ios", "web"])("does nothing on %s", async (platform) => {
++    load(platform);
++    const release = svc.acquireScreenProtection();
++    await flush();
++    expect(native.nativeCalls).toEqual([]);
++    expect(svc.screenProtectionHolderCount()).toBe(0);
++    expect(addAppStateListener).not.toHaveBeenCalled();
++    release();
++    await flush();
++    expect(native.nativeCalls).toEqual([]);
++  });
++
++  it("turns FLAG_SECURE on for the first holder and off when it releases (Android)", async () => {
++    const release = svc.acquireScreenProtection();
++    await flush();
++    expect(native.flagSecure).toBe(true);
++    release();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++    expect(native.tags.size).toBe(0);
++  });
++});
++
++describe("screen protection: conflicting holders", () => {
++  it("stays on until the last holder releases", async () => {
++    const a = svc.acquireScreenProtection();
++    const b = svc.acquireScreenProtection();
++    await flush();
++    expect(native.nativeCalls).toEqual(["prevent"]);
++
++    a();
++    await flush();
++    expect(native.flagSecure).toBe(true);
++    expect(native.nativeCalls).toEqual(["prevent"]);
++
++    b();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++    expect(native.nativeCalls).toEqual(["prevent", "allow"]);
++  });
++
++  it("releasing the same holder twice never drops another holder's protection", async () => {
++    const a = svc.acquireScreenProtection();
++    const b = svc.acquireScreenProtection();
++    a();
++    a();
++    a();
++    await flush();
++    expect(svc.screenProtectionHolderCount()).toBe(1);
++    expect(native.flagSecure).toBe(true);
++    b();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("leaving one chat and entering another in the same tick never allows capture", async () => {
++    const chatA = svc.acquireScreenProtection();
++    await flush();
++    native.nativeCalls.length = 0;
++    native.flagHistory.length = 0;
++
++    chatA();
++    const chatB = svc.acquireScreenProtection();
++    await flush();
++
++    expect(native.nativeCalls).toEqual([]);
++    expect(native.flagHistory).toEqual([]);
++    expect(native.flagSecure).toBe(true);
++    chatB();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("a leave followed by an enter ends protected, in order", async () => {
++    const chatA = svc.acquireScreenProtection();
++    await flush();
++    chatA();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++    const chatB = svc.acquireScreenProtection();
++    await flush();
++    expect(native.flagSecure).toBe(true);
++    chatB();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++});
++
++describe("screen protection: native failures", () => {
++  it("clears the stale key and retries when enabling fails, so protection really turns on", async () => {
++    native.fail("prevent", 1);
++    const release = svc.acquireScreenProtection();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++    expect(native.tags.size).toBe(0); // the library's recorded key was cleaned up, not left to block retries
++
++    await jest.advanceTimersByTimeAsync(400);
++    expect(native.flagSecure).toBe(true);
++    expect(warn).not.toHaveBeenCalled();
++    release();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("gives up after the retry budget with one warning, and a later acquire tries again", async () => {
++    native.fail("prevent", 3);
++    const first = svc.acquireScreenProtection();
++    await flush();
++    await jest.advanceTimersByTimeAsync(400);
++    await jest.advanceTimersByTimeAsync(1500);
++    expect(native.flagSecure).toBe(false);
++    expect(warn).toHaveBeenCalledTimes(1);
++    expect(String(warn.mock.calls[0]![0])).toMatch(/Screen protection could not be updated/);
++
++    await jest.advanceTimersByTimeAsync(10_000);
++    expect(warn).toHaveBeenCalledTimes(1); // no endless retry loop
++
++    const second = svc.acquireScreenProtection(); // failures are exhausted now, so this succeeds
++    await flush();
++    expect(native.flagSecure).toBe(true);
++    first();
++    second();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("retries when removing protection fails, and the window ends up unprotected", async () => {
++    const release = svc.acquireScreenProtection();
++    await flush();
++    native.fail("allow", 1);
++    release();
++    await flush();
++    expect(native.flagSecure).toBe(true); // the native clear failed
++    await jest.advanceTimersByTimeAsync(400);
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("a failed release followed by a new chat still ends protected", async () => {
++    const a = svc.acquireScreenProtection();
++    await flush();
++    native.fail("allow", 1);
++    a();
++    await flush();
++    const b = svc.acquireScreenProtection();
++    await jest.advanceTimersByTimeAsync(2000);
++    expect(native.flagSecure).toBe(true);
++    b();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++});
++
++describe("screen protection: foreground re-apply", () => {
++  it("only listens for app state while a holder exists", async () => {
++    expect(addAppStateListener).not.toHaveBeenCalled();
++    const a = svc.acquireScreenProtection();
++    const b = svc.acquireScreenProtection();
++    expect(addAppStateListener).toHaveBeenCalledTimes(1);
++    a();
++    expect(removeAppStateListener).not.toHaveBeenCalled();
++    b();
++    expect(removeAppStateListener).toHaveBeenCalledTimes(1);
++    await flush();
++  });
++
++  it("re-applies the flag when the app returns to the foreground, without a gap", async () => {
++    const release = svc.acquireScreenProtection();
++    await flush();
++    native.flagHistory.length = 0;
++
++    appStateHandler!("active");
++    await flush();
++
++    expect(native.flagSecure).toBe(true);
++    expect(native.flagHistory).not.toContain(false);
++    expect(native.tags.size).toBe(1);
++    release();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++    expect(native.tags.size).toBe(0);
++  });
++
++  it("restores protection on a recreated activity window", async () => {
++    const release = svc.acquireScreenProtection();
++    await flush();
++    native.flagSecure = false; // Android recreated the activity: the new window has no FLAG_SECURE
++
++    appStateHandler!("active");
++    await flush();
++    expect(native.flagSecure).toBe(true);
++    release();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("ignores background transitions and does nothing without holders", async () => {
++    const release = svc.acquireScreenProtection();
++    await flush();
++    native.nativeCalls.length = 0;
++    appStateHandler!("background");
++    await flush();
++    expect(native.nativeCalls).toEqual([]);
++    release();
++    await flush();
++    native.nativeCalls.length = 0;
++    appStateHandler?.("active");
++    await flush();
++    expect(native.nativeCalls).toEqual([]);
++  });
++});
+diff --git a/__tests__/screenProtectionLifecycle.test.tsx b/__tests__/screenProtectionLifecycle.test.tsx
+new file mode 100644
+index 0000000..f3d2e78
+--- /dev/null
++++ b/__tests__/screenProtectionLifecycle.test.tsx
+@@ -0,0 +1,219 @@
++import React from "react";
++import { Text } from "react-native";
++import TestRenderer, { act } from "react-test-renderer";
++
++const { createFakeScreenCapture } = require("./helpers/fakeScreenCapture");
++
++const mockFake = createFakeScreenCapture();
++jest.mock("expo-screen-capture", () => mockFake.module);
++// Use the real react-navigation focus semantics (focus, blur, cleanup on unmount) rather than a stub.
++jest.mock("expo-router", () => ({
++  useFocusEffect: (effect: () => void) => require("@react-navigation/core").useFocusEffect(effect),
++}));
++
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { NavigationContext } = require("@react-navigation/core");
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { Platform } = require("react-native");
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { useScreenProtection } = require("../mobile/src/hooks/useScreenProtection");
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { screenProtectionHolderCount } = require("../mobile/src/services/screenProtection");
++
++const native = mockFake.state;
++
++/** Just enough of a navigation object for useFocusEffect: isFocused(), focus/blur events. */
++function createNav(initiallyFocused = true) {
++  let focused = initiallyFocused;
++  const listeners: Record<"focus" | "blur", Set<() => void>> = { focus: new Set(), blur: new Set() };
++  return {
++    isFocused: () => focused,
++    addListener: (type: "focus" | "blur", cb: () => void) => {
++      listeners[type].add(cb);
++      return () => listeners[type].delete(cb);
++    },
++    focus() {
++      focused = true;
++      listeners.focus.forEach((cb) => cb());
++    },
++    blur() {
++      focused = false;
++      listeners.blur.forEach((cb) => cb());
++    },
++  };
++}
++type Nav = ReturnType<typeof createNav>;
++
++function Screen({ nav, enabled = true, explode = false }: { nav: Nav; enabled?: boolean; explode?: boolean }) {
++  return (
++    <NavigationContext.Provider value={nav}>
++      <Inner enabled={enabled} explode={explode} />
++    </NavigationContext.Provider>
++  );
++}
++
++function Inner({ enabled, explode }: { enabled: boolean; explode: boolean }) {
++  useScreenProtection(enabled);
++  if (explode) throw new Error("render failed");
++  return <Text>chat</Text>;
++}
++
++class Boundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
++  state = { failed: false };
++  static getDerivedStateFromError() {
++    return { failed: true };
++  }
++  render() {
++    return this.state.failed ? <Text>error screen</Text> : this.props.children;
++  }
++}
++
++const flush = () => act(async () => { await jest.advanceTimersByTimeAsync(0); });
++
++const mounted: TestRenderer.ReactTestRenderer[] = [];
++async function mount(element: React.ReactElement) {
++  let r!: TestRenderer.ReactTestRenderer;
++  await act(async () => {
++    r = TestRenderer.create(element);
++  });
++  mounted.push(r);
++  await flush();
++  return r;
++}
++
++let consoleError: jest.SpyInstance;
++
++beforeEach(() => {
++  jest.useFakeTimers();
++  Platform.OS = "android";
++  native.reset();
++  consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
++});
++
++afterEach(async () => {
++  await act(async () => {
++    mounted.splice(0).forEach((r) => r.unmount());
++  });
++  await flush();
++  // Whatever a test did, nothing may stay protected once every screen is gone.
++  expect(screenProtectionHolderCount()).toBe(0);
++  expect(native.flagSecure).toBe(false);
++  consoleError.mockRestore();
++  jest.useRealTimers();
++});
++
++describe("screen protection lifecycle (useScreenProtection)", () => {
++  it("protects while the screen is mounted and focused, and releases on unmount", async () => {
++    const nav = createNav();
++    const r = await mount(<Screen nav={nav} />);
++    expect(native.flagSecure).toBe(true);
++
++    await act(async () => r.unmount());
++    mounted.pop();
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("releases when another screen covers the chat (blur) and protects again on return (focus)", async () => {
++    const nav = createNav();
++    await mount(<Screen nav={nav} />);
++    expect(native.flagSecure).toBe(true);
++
++    await act(async () => nav.blur());
++    await flush();
++    expect(native.flagSecure).toBe(false);
++
++    await act(async () => nav.focus());
++    await flush();
++    expect(native.flagSecure).toBe(true);
++  });
++
++  it("does not protect a screen that is mounted but not focused", async () => {
++    const nav = createNav(false);
++    await mount(<Screen nav={nav} />);
++    expect(native.flagSecure).toBe(false);
++    await act(async () => nav.focus());
++    await flush();
++    expect(native.flagSecure).toBe(true);
++  });
++
++  it("releases when a render error tears the screen down", async () => {
++    const nav = createNav();
++    const r = await mount(
++      <Boundary>
++        <Screen nav={nav} />
++      </Boundary>,
++    );
++    expect(native.flagSecure).toBe(true);
++
++    await act(async () => {
++      r.update(
++        <Boundary>
++          <Screen nav={nav} explode />
++        </Boundary>,
++      );
++    });
++    await flush();
++    expect(JSON.stringify(r.toJSON())).toContain("error screen");
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("switching to another chat in one navigation step never allows capture in between", async () => {
++    const navA = createNav();
++    const navB = createNav(false);
++    await mount(<Screen nav={navA} />);
++    await mount(<Screen nav={navB} />);
++    expect(native.flagSecure).toBe(true);
++    native.nativeCalls.length = 0;
++
++    // react-navigation may deliver the old screen's blur before the new screen's focus.
++    await act(async () => {
++      navA.blur();
++      navB.focus();
++    });
++    await flush();
++    expect(native.nativeCalls).toEqual([]);
++    expect(native.flagSecure).toBe(true);
++
++    await act(async () => navB.blur());
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("one screen leaving never switches off protection for another that is still showing", async () => {
++    const navA = createNav();
++    const navB = createNav();
++    const a = await mount(<Screen nav={navA} />);
++    await mount(<Screen nav={navB} />);
++
++    await act(async () => a.unmount());
++    mounted.splice(mounted.indexOf(a), 1);
++    await flush();
++    expect(native.flagSecure).toBe(true);
++
++    await act(async () => navB.blur());
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("`enabled = false` never protects, and turning it off later releases", async () => {
++    const nav = createNav();
++    const r = await mount(<Screen nav={nav} enabled={false} />);
++    expect(native.flagSecure).toBe(false);
++
++    await act(async () => r.update(<Screen nav={nav} enabled />));
++    await flush();
++    expect(native.flagSecure).toBe(true);
++
++    await act(async () => r.update(<Screen nav={nav} enabled={false} />));
++    await flush();
++    expect(native.flagSecure).toBe(false);
++  });
++
++  it("is a no-op on iOS", async () => {
++    Platform.OS = "ios";
++    await mount(<Screen nav={createNav()} />);
++    expect(native.nativeCalls).toEqual([]);
++    expect(native.flagSecure).toBe(false);
++  });
++});
+diff --git a/docs/SCREENSHOT_PROTECTION.md b/docs/SCREENSHOT_PROTECTION.md
+new file mode 100644
+index 0000000..c6e6b4a
+--- /dev/null
++++ b/docs/SCREENSHOT_PROTECTION.md
+@@ -0,0 +1,44 @@
++# Chat screenshot protection (Phase 3C)
++
++While a conversation is on screen, Android blocks screenshots and screen recording and hides the app's
++Recents thumbnail. This uses `FLAG_SECURE` on the activity window through `expo-screen-capture` (`~7.0.1`, the
++SDK 52 release; it adds no permissions and no config plugin).
++
++## How it works
++
++- `mobile/src/services/screenProtection.ts` owns the native switch. Each screen that wants protection calls
++  `acquireScreenProtection()` and gets a release function. Protection stays on until the last holder releases,
++  and releasing twice is harmless, so two screens can never switch each other off.
++- `mobile/src/hooks/useScreenProtection.ts` ties a screen to that service with `useFocusEffect`. The release
++  runs when the screen loses focus (profile or call pushed on top), when it unmounts (back, sign-out) and when
++  a render error tears it down.
++- `mobile/app/chat/[id].tsx` calls `useScreenProtection()`. Any future sensitive screen can do the same.
++- Native calls run one at a time and always apply the state wanted at that moment. If a native call fails
++  (for example no activity attached yet), the stale key that `expo-screen-capture` keeps in JS is cleared and the
++  call is retried twice (400 ms, 1.5 s) before one warning is logged. The next acquire/release starts fresh.
++- When the app returns to the foreground with a chat open, the flag is applied again, in case Android recreated
++  the activity (font size or language change), which would otherwise lose it. Keys are swapped, not
++  allow-then-prevent, so there is no unprotected moment.
++
++## Platform limits
++
++- **Android only.** On iOS and web this is a deliberate no-op: expo-screen-capture can block screen recording
++  on iOS but not screenshots, so enabling it would suggest protection that does not exist.
++- `FLAG_SECURE` belongs to the activity window. React Native `Modal`s (message action sheet, confirm dialogs,
++  couple games) open in their own windows and are not covered by it; the chat behind them is still blanked,
++  and none of them shows message text.
++- Not covered: the chat list's last-message previews (`app/(tabs)/chats.tsx`), notification text, another
++  camera pointed at the screen, rooted or modified devices.
++- Protection is applied right after the screen's first render, in a few milliseconds; message content only
++  arrives after a network fetch, so it is not visible before then.
++- This is a native feature: a build that does not include `expo-screen-capture` (an older development build)
++  cannot protect anything. The service then logs one warning and the chat still works. Rebuild the app
++  (`expo run:android` or an EAS build) to get it.
++
++## Manual check on a device
++
++1. Open a chat, take a screenshot: it is blocked or black, and a screen recording shows a black chat.
++2. Open the app switcher: the chat thumbnail is blank.
++3. From the chat open a profile or start a call, take a screenshot: allowed (no chat content showing).
++4. Go back to the chat: blocked again. Leave the chat to the chat list or tabs: screenshots work again.
++5. Open chat A, then chat B from a notification: still blocked throughout.
+diff --git a/mobile/app/chat/[id].tsx b/mobile/app/chat/[id].tsx
+index 67c8e19..1376bc8 100644
+--- a/mobile/app/chat/[id].tsx
++++ b/mobile/app/chat/[id].tsx
+@@ -14,6 +14,7 @@ import { Alert } from "../../src/utils/alert";
+ import { SafeAreaView } from "react-native-safe-area-context";
+ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+ import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
++import { useScreenProtection } from "../../src/hooks/useScreenProtection";
+ import { buildNewCallRoute } from "../../src/services/calls";
+ import { isCallingAvailable } from "../../src/services/callMedia";
+ import { Image } from "expo-image";
+@@ -140,6 +141,9 @@ export default function ChatDetailScreen() {
+     }, [matchId]),
+   );
+ 
++  // Screenshots and screen recording are blocked (Android) while this conversation is on screen.
++  useScreenProtection();
++
+   // Deletion bookkeeping belongs to one conversation: reset only when the conversation changes
+   // (not when the auth user object is refreshed), and before the effect below fetches.
+   useEffect(() => {
+diff --git a/mobile/src/hooks/useScreenProtection.ts b/mobile/src/hooks/useScreenProtection.ts
+new file mode 100644
+index 0000000..778fe4f
+--- /dev/null
++++ b/mobile/src/hooks/useScreenProtection.ts
+@@ -0,0 +1,19 @@
++import { useCallback } from "react";
++import { useFocusEffect } from "expo-router";
++import { acquireScreenProtection } from "../services/screenProtection";
++
++/**
++ * Blocks screenshots and screen recording (Android) while this screen is focused.
++ *
++ * Protection is released when the screen loses focus (another screen is pushed on top, a call opens),
++ * when it unmounts (back navigation, sign-out) and when a render error tears the screen down, because
++ * `useFocusEffect` runs its cleanup in all of those cases. Pass `enabled = false` to switch it off.
++ */
++export function useScreenProtection(enabled: boolean = true): void {
++  useFocusEffect(
++    useCallback(() => {
++      if (!enabled) return undefined;
++      return acquireScreenProtection();
++    }, [enabled]),
++  );
++}
+diff --git a/mobile/src/services/screenProtection.ts b/mobile/src/services/screenProtection.ts
+new file mode 100644
+index 0000000..0e6ee9e
+--- /dev/null
++++ b/mobile/src/services/screenProtection.ts
+@@ -0,0 +1,140 @@
++import { AppState, Platform, type AppStateStatus } from "react-native";
++import * as ScreenCapture from "expo-screen-capture";
++
++// Blocks screenshots, screen recording and the Recents thumbnail while sensitive content (the chat
++// screen) is visible. On Android this sets FLAG_SECURE on the activity window through expo-screen-capture.
++//
++// Why this wrapper exists instead of calling `usePreventScreenCapture` directly:
++//  - Several screens may want protection at once (chat A -> chat B, or a future screen). Each caller gets
++//    its own holder; protection stays on until the LAST holder releases, and releasing twice is harmless.
++//  - expo-screen-capture remembers a key as "active" before the native call finishes. If that native call
++//    fails (for example no activity is attached yet), the key stays recorded and every later attempt is a
++//    silent no-op. This module clears the stale key and retries a few times.
++//  - Native calls are issued one at a time and always apply the state wanted at that moment, so a quick
++//    leave/enter cannot be reordered into "allowed" while a chat is open.
++//  - FLAG_SECURE belongs to one Activity window. When the app returns to the foreground it is applied
++//    again, in case Android recreated the activity (font size or language change) while a chat was open.
++//
++// Android only. On iOS and web this is a deliberate no-op (expo-screen-capture can only block screen
++// recording on iOS, not screenshots, so it would give a false sense of protection).
++
++const KEY_PREFIX = "chahat-screen-protection";
++const RETRY_DELAYS_MS = [400, 1500];
++
++type Subscription = { remove(): void };
++
++let nextHolderId = 1;
++const holders = new Set<number>();
++
++/** Key currently registered with expo-screen-capture; null while protection is off. */
++let nativeKey: string | null = null;
++let keyGeneration = 0;
++/** Set after a failure or a foreground return: re-run the native "prevent" even if we think it is on. */
++let reassertRequested = false;
++let failures = 0;
++let retryTimer: ReturnType<typeof setTimeout> | null = null;
++let queue: Promise<void> = Promise.resolve();
++let appStateSubscription: Subscription | null = null;
++
++async function applyDesiredState(): Promise<void> {
++  // Read the wanted state when this step runs, not when it was queued, so bursts collapse into one call.
++  const wanted = holders.size > 0;
++  try {
++    if (wanted) {
++      const reassert = reassertRequested;
++      reassertRequested = false;
++      if (nativeKey === null || reassert) {
++        const previous = nativeKey;
++        const next = `${KEY_PREFIX}:${++keyGeneration}`;
++        try {
++          await ScreenCapture.preventScreenCaptureAsync(next);
++        } catch (error) {
++          // The library already recorded `next` as active; forget it so that a retry reaches the native module.
++          await ScreenCapture.allowScreenCaptureAsync(next).catch(() => undefined);
++          throw error;
++        }
++        nativeKey = next;
++        // Swap keys instead of allow-then-prevent so capture is never allowed in between.
++        if (previous !== null) await ScreenCapture.allowScreenCaptureAsync(previous);
++      }
++    } else if (nativeKey !== null) {
++      const key = nativeKey;
++      await ScreenCapture.allowScreenCaptureAsync(key);
++      nativeKey = null;
++    }
++    failures = 0;
++  } catch (error) {
++    handleFailure(error);
++  }
++}
++
++function handleFailure(error: unknown): void {
++  reassertRequested = true;
++  if (failures >= RETRY_DELAYS_MS.length) {
++    console.warn(
++      "Screen protection could not be updated:",
++      error instanceof Error ? error.message : "unknown error",
++    );
++    return;
++  }
++  const delay = RETRY_DELAYS_MS[failures]!;
++  failures += 1;
++  retryTimer = setTimeout(() => {
++    retryTimer = null;
++    schedule(false);
++  }, delay);
++}
++
++/** `external` = a new acquire/release/foreground event, which earns a fresh set of retries. */
++function schedule(external: boolean): void {
++  if (external) {
++    failures = 0;
++    if (retryTimer) {
++      clearTimeout(retryTimer);
++      retryTimer = null;
++    }
++  }
++  queue = queue.then(applyDesiredState);
++}
++
++function startAppStateWatch(): void {
++  if (appStateSubscription) return;
++  appStateSubscription = AppState.addEventListener("change", (state: AppStateStatus) => {
++    if (state === "active" && holders.size > 0) {
++      reassertRequested = true;
++      schedule(true);
++    }
++  });
++}
++
++function stopAppStateWatch(): void {
++  appStateSubscription?.remove();
++  appStateSubscription = null;
++}
++
++/**
++ * Turns protection on and returns a function that gives this holder's claim back.
++ * Protection stays on while at least one holder is outstanding. The returned function is idempotent.
++ */
++export function acquireScreenProtection(): () => void {
++  if (Platform.OS !== "android") return () => undefined;
++
++  const id = nextHolderId++;
++  holders.add(id);
++  startAppStateWatch();
++  schedule(true);
++
++  let released = false;
++  return () => {
++    if (released) return;
++    released = true;
++    holders.delete(id);
++    if (holders.size === 0) stopAppStateWatch();
++    schedule(true);
++  };
++}
++
++/** Number of outstanding holders (diagnostics and tests). */
++export function screenProtectionHolderCount(): number {
++  return holders.size;
++}
+diff --git a/package-lock.json b/package-lock.json
+index 7dea450..04487cd 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -27,7 +27,7 @@
+         "expo-location": "~18.0.10",
+         "expo-notifications": "^0.29.14",
+         "expo-router": "~4.0.17",
+-        "expo-screen-capture": "^58.0.5",
++        "expo-screen-capture": "~7.0.1",
+         "expo-secure-store": "~14.0.1",
+         "expo-status-bar": "~2.0.1",
+         "expo-system-ui": "~4.0.9",
+@@ -7108,9 +7108,9 @@
+       }
+     },
+     "node_modules/expo-screen-capture": {
+-      "version": "58.0.5",
+-      "resolved": "https://registry.npmjs.org/expo-screen-capture/-/expo-screen-capture-58.0.5.tgz",
+-      "integrity": "sha512-VtPO26F+KzSx7HaUO85Pa7gcYt3Thm5c9rZpG8O85MCtlmZkH6Uy4lTB3K459l/ueTEdOf1epAa7TAW0heaXyw==",
++      "version": "7.0.1",
++      "resolved": "https://registry.npmjs.org/expo-screen-capture/-/expo-screen-capture-7.0.1.tgz",
++      "integrity": "sha512-9VAiusz2S3lEXW5XZNg6kVCo1+HrjSkFO7/0L9b94+xCo7SxTu4SSt9aXEDzpivoeha33P3P4qCFg8TwgIl+Ow==",
+       "license": "MIT",
+       "peerDependencies": {
+         "expo": "*",
+diff --git a/package.json b/package.json
+index cd1050c..30b2d92 100644
+--- a/package.json
++++ b/package.json
+@@ -36,7 +36,7 @@
+     "expo-location": "~18.0.10",
+     "expo-notifications": "^0.29.14",
+     "expo-router": "~4.0.17",
+-    "expo-screen-capture": "^58.0.5",
++    "expo-screen-capture": "~7.0.1",
+     "expo-secure-store": "~14.0.1",
+     "expo-status-bar": "~2.0.1",
+     "expo-system-ui": "~4.0.9",

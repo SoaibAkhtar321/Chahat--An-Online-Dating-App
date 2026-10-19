@@ -14,6 +14,7 @@ import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
+import { useScreenProtection } from "../../src/hooks/useScreenProtection";
 import { buildNewCallRoute } from "../../src/services/calls";
 import { isCallingAvailable } from "../../src/services/callMedia";
 import { Image } from "expo-image";
@@ -139,6 +140,9 @@ export default function ChatDetailScreen() {
       return () => clearActiveConversation(matchId);
     }, [matchId]),
   );
+
+  // Screenshots and screen recording are blocked (Android) while this conversation is on screen.
+  useScreenProtection();
 
   // Deletion bookkeeping belongs to one conversation: reset only when the conversation changes
   // (not when the auth user object is refreshed), and before the effect below fetches.
