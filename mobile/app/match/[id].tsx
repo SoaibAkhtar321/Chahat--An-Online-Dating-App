@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { safeBack } from "../../src/utils/navigation";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -75,7 +76,7 @@ export default function MatchScreen() {
 
         <TouchableOpacity
           style={styles.keepButton}
-          onPress={() => router.back()}
+          onPress={() => safeBack(router)}
           activeOpacity={0.8}
         >
           <Text style={styles.keepButtonText}>Keep discovering</Text>

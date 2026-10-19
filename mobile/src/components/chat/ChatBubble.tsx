@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Pressable } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Alert } from "react-native";
 import { Image } from "expo-image";
 import { Check, CheckCheck, AlertCircle, Play, Pause, Mic, Ban } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
@@ -55,17 +55,25 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     if (isPlaying) {
       await player.pauseAsync();
       setIsPlaying(false);
-    } else {
-      setIsPlaying(true);
-      await player.playAsync(message.audio, (status) => {
-        if (status.durationMs > 0) {
-          setProgress(status.positionMs / status.durationMs);
-        }
-        if (status.didJustFinish) {
-          setIsPlaying(false);
-          setProgress(0);
-        }
-      });
+      return;
+    }
+    setIsPlaying(true);
+    const res = await player.playAsync(message.audio, (status) => {
+      if (status.durationMs > 0) {
+        setProgress(status.positionMs / status.durationMs);
+      }
+      if (status.didJustFinish || (!status.isPlaying && status.positionMs === 0)) {
+        setIsPlaying(false);
+        setProgress(0);
+      }
+    });
+    if (!res.success) {
+      setIsPlaying(false);
+      setProgress(0);
+      Alert.alert(
+        "Voice message",
+        res.error || "Could not play this voice message. Please try again.",
+      );
     }
   };
 

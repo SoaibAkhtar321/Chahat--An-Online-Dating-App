@@ -1,4 +1,4 @@
-// Voice Media Service: Audio Recording and Playback Adapters for Milo / Chahat Native Android
+// Voice Media Service: real expo-av recording and playback adapters for Chahat (Android).
 // Manages runtime microphone permissions, voice note duration limits, file size constraints,
 // audio adapters, and local file cleanup.
 
@@ -126,41 +126,84 @@ export async function cleanupAbandonedVoiceFile(uri: string): Promise<void> {
 // Pluggable Adapter Registry
 // -----------------------------------------------------------------------------
 
-class DefaultAudioRecorderAdapter implements AudioRecorderAdapter {
-  private recording = false;
-  private startTime = 0;
-  private autoStopTimer: any = null;
+// Real adapters backed by expo-av (SDK 52). expo-av is required lazily so that importing this module
+// never fails in tests or in a build that lacks the native module; each call then reports a calm error.
+function loadExpoAv(): any | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require("expo-av");
+  } catch {
+    return null;
+  }
+}
+
+const UNAVAILABLE = "Voice messages aren't available in this build.";
+
+const RECORDING_OPTIONS = {
+  isMeteringEnabled: false,
+  android: {
+    extension: ".m4a",
+    outputFormat: 2, // MPEG_4
+    audioEncoder: 3, // AAC
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+  },
+  ios: {
+    extension: ".m4a",
+    outputFormat: "aac ",
+    audioQuality: 64,
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: { mimeType: "audio/webm", bitsPerSecond: 32000 },
+};
+
+class ExpoAvAudioRecorderAdapter implements AudioRecorderAdapter {
+  private recording: any = null;
 
   isRecording(): boolean {
-    return this.recording;
+    return this.recording !== null;
   }
 
   async requestPermissionsAsync(): Promise<{ granted: boolean; canAskAgain: boolean }> {
-    // Safe runtime permission check for Android/Expo
-    return { granted: true, canAskAgain: true };
+    const av = loadExpoAv();
+    if (!av) return { granted: false, canAskAgain: false };
+    try {
+      const res = await av.Audio.requestPermissionsAsync();
+      return { granted: !!res.granted, canAskAgain: res.canAskAgain !== false };
+    } catch {
+      return { granted: false, canAskAgain: true };
+    }
   }
 
-  async startRecordingAsync(maxDurationMs = VOICE_LIMITS.maxDurationMs): Promise<{ success: boolean; error?: string }> {
-    if (this.recording) {
-      return { success: false, error: "A recording is already in progress." };
-    }
+  async startRecordingAsync(): Promise<{ success: boolean; error?: string }> {
+    const av = loadExpoAv();
+    if (!av) return { success: false, error: UNAVAILABLE };
+    if (this.recording) return { success: false, error: "A recording is already in progress." };
     const perm = await this.requestPermissionsAsync();
-    if (!perm.granted) {
-      return { success: false, error: "Microphone permission was denied." };
+    if (!perm.granted) return { success: false, error: "Microphone permission was denied." };
+
+    const rec = new av.Audio.Recording();
+    try {
+      await av.Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await rec.prepareToRecordAsync(RECORDING_OPTIONS);
+      await rec.startAsync();
+      this.recording = rec;
+      return { success: true };
+    } catch {
+      try {
+        await rec.stopAndUnloadAsync();
+      } catch {
+        // Nothing was started.
+      }
+      await this.resetAudioMode(av);
+      return { success: false, error: "Could not start recording. Please try again." };
     }
-
-    this.recording = true;
-    this.startTime = Date.now();
-
-    if (maxDurationMs > 0) {
-      this.autoStopTimer = setTimeout(() => {
-        if (this.recording) {
-          this.stopRecordingAsync();
-        }
-      }, maxDurationMs);
-    }
-
-    return { success: true };
   }
 
   async stopRecordingAsync(): Promise<{
@@ -168,55 +211,69 @@ class DefaultAudioRecorderAdapter implements AudioRecorderAdapter {
     result?: VoiceRecordingResult;
     error?: string;
   }> {
-    if (!this.recording) {
-      return { success: false, error: "No recording is currently active." };
+    const av = loadExpoAv();
+    const rec = this.recording;
+    if (!av || !rec) return { success: false, error: "No recording is currently active." };
+    this.recording = null;
+    let uri: string | null = null;
+    try {
+      const status = await rec.stopAndUnloadAsync();
+      uri = rec.getURI();
+      const durationMs = Math.round(status?.durationMillis ?? 0);
+      if (!uri) return { success: false, error: "The recording could not be saved." };
+
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const FileSystem = require("expo-file-system");
+      const info = await FileSystem.getInfoAsync(uri);
+      const fileSizeBytes = info?.exists && typeof info.size === "number" ? info.size : 0;
+
+      const validation = validateVoiceRecording({ durationMs, fileSizeBytes, mimeType: "audio/m4a" });
+      if (!validation.valid) {
+        await cleanupAbandonedVoiceFile(uri);
+        return { success: false, error: validation.error };
+      }
+      return { success: true, result: { uri, durationMs, fileSizeBytes, mimeType: "audio/m4a" } };
+    } catch {
+      if (uri) await cleanupAbandonedVoiceFile(uri);
+      return { success: false, error: "The recording could not be saved." };
+    } finally {
+      await this.resetAudioMode(av);
     }
-    if (this.autoStopTimer) {
-      clearTimeout(this.autoStopTimer);
-      this.autoStopTimer = null;
-    }
-
-    const durationMs = Math.max(1, Date.now() - this.startTime);
-    this.recording = false;
-
-    // Estimate file size based on AAC 32kbps (~4000 bytes/sec)
-    const estimatedBytes = Math.max(1024, Math.round((durationMs / 1000) * 4096));
-    const simulatedUri = `file:///data/user/0/com.chahat.dating/cache/voice_${Date.now()}.${VOICE_LIMITS.defaultExtension}`;
-
-    const validation = validateVoiceRecording({
-      durationMs,
-      fileSizeBytes: estimatedBytes,
-      mimeType: "audio/m4a",
-    });
-
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
-
-    return {
-      success: true,
-      result: {
-        uri: simulatedUri,
-        durationMs,
-        fileSizeBytes: estimatedBytes,
-        mimeType: "audio/m4a",
-      },
-    };
   }
 
   async cancelRecordingAsync(): Promise<void> {
-    if (this.autoStopTimer) {
-      clearTimeout(this.autoStopTimer);
-      this.autoStopTimer = null;
+    const av = loadExpoAv();
+    const rec = this.recording;
+    this.recording = null;
+    if (!rec) return;
+    let uri: string | null = null;
+    try {
+      await rec.stopAndUnloadAsync();
+      uri = rec.getURI();
+    } catch {
+      // Already stopped.
     }
-    this.recording = false;
+    if (uri) await cleanupAbandonedVoiceFile(uri);
+    if (av) await this.resetAudioMode(av);
+  }
+
+  private async resetAudioMode(av: any): Promise<void> {
+    try {
+      await av.Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+    } catch {
+      // Non-fatal.
+    }
   }
 }
 
-class DefaultAudioPlayerAdapter implements AudioPlayerAdapter {
-  private playing = false;
-  private timer: any = null;
+class ExpoAvAudioPlayerAdapter implements AudioPlayerAdapter {
+  private sound: any = null;
   private currentUri: string | null = null;
+  private playing = false;
+  // Incremented on every play/stop so a late status callback from an old sound is ignored.
+  private generation = 0;
+  // Listener of the clip currently loaded, told when another clip replaces it so its bubble resets.
+  private activeListener: ((status: PlaybackStatus) => void) | undefined;
 
   isPlaying(): boolean {
     return this.playing;
@@ -226,55 +283,91 @@ class DefaultAudioPlayerAdapter implements AudioPlayerAdapter {
     uri: string,
     onStatusUpdate?: (status: PlaybackStatus) => void,
   ): Promise<{ success: boolean; error?: string }> {
-    if (!uri) {
-      return { success: false, error: "Audio URI is required." };
+    const av = loadExpoAv();
+    if (!av) return { success: false, error: UNAVAILABLE };
+    if (!uri) return { success: false, error: "Audio URI is required." };
+
+    try {
+      // Resume the same clip after a pause instead of reloading it.
+      if (this.sound && this.currentUri === uri) {
+        await this.sound.playAsync();
+        this.playing = true;
+        return { success: true };
+      }
+
+      this.activeListener?.({ positionMs: 0, durationMs: 0, isPlaying: false, didJustFinish: true });
+      await this.stopAsync();
+      this.activeListener = onStatusUpdate;
+      const gen = ++this.generation;
+      await av.Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+      });
+      const { sound } = await av.Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, progressUpdateIntervalMillis: 200 },
+        (status: any) => {
+          if (gen !== this.generation) return;
+          if (!status?.isLoaded) {
+            if (status?.error) {
+              this.playing = false;
+              onStatusUpdate?.({ positionMs: 0, durationMs: 0, isPlaying: false, didJustFinish: true });
+            }
+            return;
+          }
+          this.playing = !!status.isPlaying;
+          onStatusUpdate?.({
+            positionMs: status.positionMillis ?? 0,
+            durationMs: status.durationMillis ?? 0,
+            isPlaying: !!status.isPlaying,
+            didJustFinish: !!status.didJustFinish,
+          });
+          if (status.didJustFinish) {
+            void this.stopAsync();
+          }
+        },
+      );
+      if (gen !== this.generation) {
+        await sound.unloadAsync().catch(() => {});
+        return { success: false, error: "Playback was interrupted." };
+      }
+      this.sound = sound;
+      this.currentUri = uri;
+      this.playing = true;
+      return { success: true };
+    } catch {
+      this.playing = false;
+      return { success: false, error: "Could not play this voice message. It may have expired." };
     }
-
-    await this.stopAsync();
-    this.playing = true;
-    this.currentUri = uri;
-
-    const totalDurationMs = 15_000; // Simulated standard duration if unknown
-    let positionMs = 0;
-
-    this.timer = setInterval(() => {
-      if (!this.playing) {
-        clearInterval(this.timer);
-        return;
-      }
-      positionMs += 250;
-      const didJustFinish = positionMs >= totalDurationMs;
-      if (onStatusUpdate) {
-        onStatusUpdate({
-          positionMs: Math.min(positionMs, totalDurationMs),
-          durationMs: totalDurationMs,
-          isPlaying: !didJustFinish,
-          didJustFinish,
-        });
-      }
-      if (didJustFinish) {
-        this.stopAsync();
-      }
-    }, 250);
-
-    return { success: true };
   }
 
   async pauseAsync(): Promise<void> {
     this.playing = false;
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
+    try {
+      await this.sound?.pauseAsync();
+    } catch {
+      // Already unloaded.
     }
   }
 
   async stopAsync(): Promise<void> {
+    this.generation++;
     this.playing = false;
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    const sound = this.sound;
+    this.sound = null;
     this.currentUri = null;
+    if (!sound) return;
+    try {
+      await sound.stopAsync();
+    } catch {
+      // Already stopped.
+    }
+    try {
+      await sound.unloadAsync();
+    } catch {
+      // Already unloaded.
+    }
   }
 
   async releaseAsync(): Promise<void> {
@@ -282,8 +375,8 @@ class DefaultAudioPlayerAdapter implements AudioPlayerAdapter {
   }
 }
 
-let activeRecorderAdapter: AudioRecorderAdapter = new DefaultAudioRecorderAdapter();
-let activePlayerAdapter: AudioPlayerAdapter = new DefaultAudioPlayerAdapter();
+let activeRecorderAdapter: AudioRecorderAdapter = new ExpoAvAudioRecorderAdapter();
+let activePlayerAdapter: AudioPlayerAdapter = new ExpoAvAudioPlayerAdapter();
 
 export function getAudioRecorderAdapter(): AudioRecorderAdapter {
   return activeRecorderAdapter;

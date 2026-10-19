@@ -68,6 +68,50 @@ import * as supabaseModule from "../mobile/src/services/supabase";
 
 const root = path.resolve(__dirname, "..");
 
+const mockFs = {
+  deleteAsync: jest.fn(async () => undefined),
+  getInfoAsync: jest.fn(async () => ({ exists: true, size: 16384 })),
+};
+jest.mock("expo-file-system", () => mockFs, { virtual: true });
+
+jest.mock(
+  "expo-av",
+  () => {
+    const recording = {
+      prepareToRecordAsync: jest.fn(async () => undefined),
+      startAsync: jest.fn(async () => undefined),
+      stopAndUnloadAsync: jest.fn(async () => ({ durationMillis: 4200 })),
+      getURI: jest.fn(() => "file:///cache/rec.m4a"),
+    };
+    let statusCb: ((s: any) => void) | null = null;
+    const sound = {
+      playAsync: jest.fn(async () => undefined),
+      pauseAsync: jest.fn(async () => undefined),
+      stopAsync: jest.fn(async () => undefined),
+      unloadAsync: jest.fn(async () => undefined),
+    };
+    return {
+      __recording: recording,
+      __sound: sound,
+      __emitStatus: (s: any) => statusCb?.(s),
+      Audio: {
+        requestPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
+        setAudioModeAsync: jest.fn(async () => undefined),
+        Recording: jest.fn(() => recording),
+        Sound: {
+          createAsync: jest.fn(async (_src: any, _opts: any, cb: (s: any) => void) => {
+            statusCb = cb;
+            return { sound };
+          }),
+        },
+      },
+    };
+  },
+  { virtual: true },
+);
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mockAv = require("expo-av");
+
 describe("Phase 5: Secure Voice Messages and Chat Storage", () => {
   beforeEach(() => {
     resetUploadRateLimiter();
@@ -81,56 +125,103 @@ describe("Phase 5: Secure Voice Messages and Chat Storage", () => {
   describe("1. Audio Recording & Playback Adapters and Permissions", () => {
     test("audio recorder adapter requests runtime microphone permissions", async () => {
       const adapter = getAudioRecorderAdapter();
-      expect(typeof adapter.requestPermissionsAsync).toBe("function");
       const perm = await adapter.requestPermissionsAsync();
-      expect(perm).toHaveProperty("granted");
-      expect(typeof perm.granted).toBe("boolean");
+      expect(mockAv.Audio.requestPermissionsAsync).toHaveBeenCalled();
+      expect(perm).toEqual({ granted: true, canAskAgain: true });
     });
 
-    test("audio recorder enforces single recording at a time", async () => {
+    test("recorder reports denied permission and does not start", async () => {
+      mockAv.Audio.requestPermissionsAsync.mockResolvedValueOnce({ granted: false, canAskAgain: false });
       const adapter = getAudioRecorderAdapter();
+      const res = await adapter.startRecordingAsync();
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/permission/i);
       expect(adapter.isRecording()).toBe(false);
+    });
 
-      const start1 = await adapter.startRecordingAsync(5000);
-      expect(start1.success).toBe(true);
+    test("recorder enforces a single recording and cancel deletes the file", async () => {
+      const adapter = getAudioRecorderAdapter();
+      expect((await adapter.startRecordingAsync(5000)).success).toBe(true);
       expect(adapter.isRecording()).toBe(true);
-
-      // Concurrent second start must fail
-      const start2 = await adapter.startRecordingAsync(5000);
-      expect(start2.success).toBe(false);
-      expect(start2.error).toMatch(/already in progress/i);
+      const second = await adapter.startRecordingAsync(5000);
+      expect(second.success).toBe(false);
+      expect(second.error).toMatch(/already in progress/i);
 
       await adapter.cancelRecordingAsync();
       expect(adapter.isRecording()).toBe(false);
+      expect(mockFs.deleteAsync).toHaveBeenCalledWith("file:///cache/rec.m4a", { idempotent: true });
+      expect((await adapter.stopRecordingAsync()).success).toBe(false);
     });
 
-    test("audio recorder cancel aborts active recording cleanly", async () => {
+    test("recorder returns the real file uri, duration and size from the device", async () => {
       const adapter = getAudioRecorderAdapter();
       await adapter.startRecordingAsync();
-      expect(adapter.isRecording()).toBe(true);
-      await adapter.cancelRecordingAsync();
+      const res = await adapter.stopRecordingAsync();
+      expect(res.success).toBe(true);
+      expect(res.result).toEqual({
+        uri: "file:///cache/rec.m4a",
+        durationMs: 4200,
+        fileSizeBytes: 16384,
+        mimeType: "audio/m4a",
+      });
       expect(adapter.isRecording()).toBe(false);
-
-      // Stopping when not recording returns error
-      const stopRes = await adapter.stopRecordingAsync();
-      expect(stopRes.success).toBe(false);
     });
 
-    test("audio player adapter plays, pauses, stops, and releases cleanly", async () => {
-      const player = getAudioPlayerAdapter();
-      expect(player.isPlaying()).toBe(false);
+    test("recorder rejects and deletes a too-short or empty recording", async () => {
+      const adapter = getAudioRecorderAdapter();
+      mockAv.__recording.stopAndUnloadAsync.mockResolvedValueOnce({ durationMillis: 100 });
+      await adapter.startRecordingAsync();
+      const tooShort = await adapter.stopRecordingAsync();
+      expect(tooShort.success).toBe(false);
+      expect(tooShort.error).toMatch(/too short/i);
+      expect(mockFs.deleteAsync).toHaveBeenCalled();
 
-      const playRes = await player.playAsync("https://example.com/audio.m4a");
+      mockFs.getInfoAsync.mockResolvedValueOnce({ exists: true, size: 0 });
+      await adapter.startRecordingAsync();
+      const empty = await adapter.stopRecordingAsync();
+      expect(empty.success).toBe(false);
+      expect(empty.error).toMatch(/empty/i);
+    });
+
+    test("recorder start failure leaves no active recording", async () => {
+      mockAv.__recording.startAsync.mockRejectedValueOnce(new Error("busy"));
+      const adapter = getAudioRecorderAdapter();
+      const res = await adapter.startRecordingAsync();
+      expect(res.success).toBe(false);
+      expect(adapter.isRecording()).toBe(false);
+    });
+
+    test("player plays, pauses, resumes the same clip, stops and releases", async () => {
+      const player = getAudioPlayerAdapter();
+      const updates: any[] = [];
+      const playRes = await player.playAsync("https://example.com/audio.m4a", (s) => updates.push(s));
       expect(playRes.success).toBe(true);
       expect(player.isPlaying()).toBe(true);
+      expect(mockAv.Audio.Sound.createAsync).toHaveBeenCalledTimes(1);
 
       await player.pauseAsync();
       expect(player.isPlaying()).toBe(false);
 
-      await player.stopAsync();
-      expect(player.isPlaying()).toBe(false);
+      // Same clip again resumes, it does not reload.
+      await player.playAsync("https://example.com/audio.m4a");
+      expect(mockAv.__sound.playAsync).toHaveBeenCalled();
+      expect(mockAv.Audio.Sound.createAsync).toHaveBeenCalledTimes(1);
 
+      mockAv.__emitStatus({ isLoaded: true, isPlaying: true, positionMillis: 1000, durationMillis: 4000 });
+      expect(updates.at(-1)).toMatchObject({ positionMs: 1000, durationMs: 4000, isPlaying: true });
+
+      await player.stopAsync();
+      expect(mockAv.__sound.unloadAsync).toHaveBeenCalled();
+      expect(player.isPlaying()).toBe(false);
       await player.releaseAsync();
+    });
+
+    test("player reports a calm error when the (expired) URL cannot load", async () => {
+      mockAv.Audio.Sound.createAsync.mockRejectedValueOnce(new Error("403"));
+      const player = getAudioPlayerAdapter();
+      const res = await player.playAsync("https://example.com/expired.m4a");
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/could not play/i);
       expect(player.isPlaying()).toBe(false);
     });
 

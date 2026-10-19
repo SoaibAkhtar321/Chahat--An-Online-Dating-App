@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
+import { useHardwareBack } from "../../src/hooks/useHardwareBack";
 import {
   View,
   Text,
@@ -154,6 +155,19 @@ export default function OnboardingScreen() {
       setError("");
     }
   };
+
+  // Hardware/gesture back steps back through onboarding exactly like the on-screen arrow, and is
+  // ignored while saving. On the first step it falls through to normal navigation.
+  const onHardwareBack = useCallback((): boolean => {
+    if (saving) return true;
+    if (step > 0) {
+      setStep((prev) => Math.max(0, prev - 1));
+      setError("");
+      return true;
+    }
+    return false;
+  }, [saving, step]);
+  useHardwareBack(onHardwareBack);
 
   const handleFinish = async () => {
     if (!validateStep()) return;

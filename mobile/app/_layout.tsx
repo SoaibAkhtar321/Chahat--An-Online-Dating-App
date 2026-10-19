@@ -15,6 +15,10 @@ import { MiloProvider } from "../src/context/MiloContext";
 import { IncomingCallProvider } from "../src/context/IncomingCallContext";
 import { IncomingCallOverlay } from "../src/components/calls/IncomingCallOverlay";
 import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
+import { registerDefaultCallProvider } from "../src/services/registerCallProvider";
+
+// Registers the call media adapter once; it reports "unavailable" if the SDK or App ID is missing.
+registerDefaultCallProvider();
 
 // Show a visible error screen (with retry) instead of a blank screen when a route throws
 export { ErrorBoundary } from "expo-router";

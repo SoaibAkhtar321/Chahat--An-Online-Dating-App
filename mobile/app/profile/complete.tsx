@@ -1,4 +1,6 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { safeBack, hasUnsavedChanges } from "../../src/utils/navigation";
+import { useHardwareBack } from "../../src/hooks/useHardwareBack";
 import {
   View,
   Text,
@@ -73,6 +75,34 @@ export default function CompleteProfileScreen() {
   const [languages, setLanguages] = useState<string[]>(profile?.languages || ["English", "Hindi"]);
   const [lifestyle, setLifestyle] = useState<Record<string, string>>(profile?.lifestyle || {});
   const [photos, setPhotos] = useState<PhotoItem[]>(profile?.photos || []);
+
+  // Unsaved-changes guard shared by the header arrow and Android hardware/gesture back.
+  const initialSnapshot = useRef<string | null>(null);
+  const currentSnapshot = () => ({
+    name, city, bio, promptQ, promptA, intents, selectedInterests, work, education, languages, lifestyle,
+    photos: photos.map((ph) => ph.id || ph.uri),
+  });
+  useEffect(() => {
+    initialSnapshot.current = JSON.stringify(currentSnapshot());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const requestExit = useCallback((): boolean => {
+    if (saving) return true; // never leave mid-save
+    const dirty =
+      initialSnapshot.current !== null &&
+      hasUnsavedChanges(initialSnapshot.current, JSON.stringify(currentSnapshot()));
+    if (!dirty) {
+      safeBack(router, "/(tabs)/me");
+      return true;
+    }
+    Alert.alert("Discard changes?", "Your profile changes haven't been saved.", [
+      { text: "Keep editing", style: "cancel" },
+      { text: "Discard", style: "destructive", onPress: () => safeBack(router, "/(tabs)/me") },
+    ]);
+    return true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saving, router, name, city, bio, promptQ, promptA, intents, selectedInterests, work, education, languages, lifestyle, photos]);
+  useHardwareBack(requestExit);
   const uploadedPhotoCache = useRef(new Map<string, PhotoItem>());
 
   // Calculate live completeness
@@ -240,7 +270,7 @@ export default function CompleteProfileScreen() {
       Alert.alert(
         "Profile updated! 🎉",
         "Your profile details have been saved successfully.",
-        [{ text: "OK", onPress: () => router.back() }],
+        [{ text: "OK", onPress: () => safeBack(router) }],
       );
     } catch (err: any) {
       console.error("CompleteProfile save failed:", err);
@@ -256,7 +286,7 @@ export default function CompleteProfileScreen() {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => requestExit()}
           style={styles.backButton}
           accessibilityLabel="Go back"
         >

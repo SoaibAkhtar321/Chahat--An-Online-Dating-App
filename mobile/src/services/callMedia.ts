@@ -1,6 +1,6 @@
 // Client-side call media abstraction. The app talks only to these interfaces; a real audio/video
 // SDK (Agora, ZEGOCLOUD, ...) is added later as one adapter that implements CallMediaProvider.
-// No adapter ships in this build, so calling is reported as unavailable instead of being faked.
+// Until an adapter is registered (and its SDK is present) calling is reported as unavailable instead of being faked.
 import { isServiceConfigured } from "../config/appConfig";
 
 export type CallMediaType = "audio" | "video";
@@ -84,6 +84,11 @@ let activeProvider: CallMediaProvider = notConfiguredMediaProvider;
 
 export function getCallMediaProvider(): CallMediaProvider {
   return activeProvider;
+}
+
+/** Registers the real SDK adapter once at app start (see registerCallProvider.ts). */
+export function registerCallMediaProvider(provider: CallMediaProvider): void {
+  activeProvider = provider;
 }
 
 /** Test seam; production code never calls this. */

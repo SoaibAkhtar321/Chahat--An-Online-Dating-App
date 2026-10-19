@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { safeBack } from "../../src/utils/navigation";
 import { getDistanceTo } from "../../src/services/location";
 import { formatDistanceLabel } from "../../src/services/locationPolicy";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from "react-native";
@@ -119,7 +120,7 @@ export default function ProfileDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.center]}>
         <Text style={styles.errorText}>Profile not found</Text>
-        <TouchableOpacity style={styles.backBtnAlt} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtnAlt} onPress={() => safeBack(router)}>
           <Text style={styles.backBtnText}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -139,7 +140,7 @@ export default function ProfileDetailScreen() {
         params: { id: targetProfile.id },
       });
     } else {
-      router.back();
+      safeBack(router);
     }
   };
 
@@ -168,7 +169,7 @@ export default function ProfileDetailScreen() {
 
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => safeBack(router)}
             activeOpacity={0.8}
           >
             <ArrowLeft size={20} color={Colors.foreground} />
@@ -347,7 +348,7 @@ export default function ProfileDetailScreen() {
           if (dialogAction === "block") {
             await blockUser(targetProfile.id);
             setDialogAction(null);
-            router.back();
+            safeBack(router);
           } else {
             const rep = await reportUser(
               targetProfile.id,
@@ -358,7 +359,7 @@ export default function ProfileDetailScreen() {
             setDialogAction(null);
             if (rep.success) {
               Alert.alert("Report submitted", "Thank you for helping keep Chahat safe.");
-              router.back();
+              safeBack(router);
             } else {
               Alert.alert("Could not report", rep.error || "Please try again later.");
             }

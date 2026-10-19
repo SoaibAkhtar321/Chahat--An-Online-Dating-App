@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { safeBack } from "../../utils/navigation";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
@@ -27,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
     if (onBackPress) {
       onBackPress();
     } else {
-      router.back();
+      safeBack(router);
     }
   };
 

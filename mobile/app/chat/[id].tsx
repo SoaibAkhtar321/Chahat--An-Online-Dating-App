@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { safeBack } from "../../src/utils/navigation";
 import {
   View,
   Text,
@@ -17,6 +18,7 @@ import { clearActiveConversation, setActiveConversation } from "../../src/servic
 import { useScreenProtection } from "../../src/hooks/useScreenProtection";
 import { buildNewCallRoute } from "../../src/services/calls";
 import { isCallingAvailable } from "../../src/services/callMedia";
+import { isServiceConfigured } from "../../src/config/appConfig";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -66,7 +68,12 @@ import {
   removeMessage,
   tombstoneMessage,
 } from "../../src/utils/messageState";
-import { getAudioRecorderAdapter, VOICE_LIMITS } from "../../src/services/voiceMedia";
+import {
+  cleanupAbandonedVoiceFile,
+  getAudioPlayerAdapter,
+  getAudioRecorderAdapter,
+  VOICE_LIMITS,
+} from "../../src/services/voiceMedia";
 import { blockUser, reportUser, unmatchUser } from "../../src/services/moderation";
 import { supabase } from "../../src/services/supabase";
 import type { Message, Profile } from "../../src/types";
@@ -77,6 +84,8 @@ export default function ChatDetailScreen() {
   const router = useRouter();
   const { id: matchId } = useLocalSearchParams<{ id: string }>();
   const callingAvailable = isCallingAvailable();
+  // Off unless EXPO_PUBLIC_FEATURE_VOICE_MESSAGES is exactly "true" (development/test builds only).
+  const voiceEnabled = isServiceConfigured("voiceMessages");
   const { user } = useAuth();
   const { matches, refreshMatches } = useMilo();
 
@@ -109,6 +118,8 @@ export default function ChatDetailScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const recordingTimerRef = useRef<any>(null);
+  // Guards against a double stop (timer limit + Send tap) and lets unmount clean up.
+  const recordingActiveRef = useRef(false);
 
   const flatListRef = useRef<FlatList>(null);
   messagesRef.current = messages;
@@ -334,53 +345,64 @@ export default function ChatDetailScreen() {
     }
   };
 
+  const clearRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
   const handleStartRecording = async () => {
+    if (recordingActiveRef.current || sending) return;
     const adapter = getAudioRecorderAdapter();
     const perm = await adapter.requestPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
-        "Microphone Permission Required",
-        "Chahat needs access to your microphone to record voice messages.",
+        "Microphone access needed",
+        perm.canAskAgain
+          ? "Allow microphone access to record voice messages."
+          : "Microphone access is turned off for Chahat. You can turn it on in your phone's Settings > Apps > Chahat > Permissions.",
       );
       return;
     }
 
     const startRes = await adapter.startRecordingAsync(VOICE_LIMITS.maxDurationMs);
     if (!startRes.success) {
-      Alert.alert("Recording Error", startRes.error || "Could not start audio recording.");
+      Alert.alert("Voice message", startRes.error || "Could not start recording.");
       return;
     }
 
+    recordingActiveRef.current = true;
     setIsRecording(true);
     setRecordingSeconds(0);
+    const startedAt = Date.now();
     recordingTimerRef.current = setInterval(() => {
-      setRecordingSeconds((prev) => {
-        const next = prev + 1;
-        if (next >= 60) {
-          handleStopAndSendRecording();
-        }
-        return next;
-      });
-    }, 1000);
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setRecordingSeconds(elapsed);
+      if (elapsed >= VOICE_LIMITS.maxDurationMs / 1000) {
+        void handleStopAndSendRecording();
+      }
+    }, 250);
   };
 
   const handleStopAndSendRecording = async () => {
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
+    if (!recordingActiveRef.current) return;
+    recordingActiveRef.current = false;
+    clearRecordingTimer();
     setIsRecording(false);
+    setRecordingSeconds(0);
 
     const adapter = getAudioRecorderAdapter();
     const stopRes = await adapter.stopRecordingAsync();
     if (!stopRes.success || !stopRes.result) {
-      if (stopRes.error) {
-        Alert.alert("Voice Message", stopRes.error);
-      }
+      if (stopRes.error) Alert.alert("Voice message", stopRes.error);
       return;
     }
 
-    if (!user || !matchId) return;
+    if (!user || !matchId) {
+      await cleanupAbandonedVoiceFile(stopRes.result.uri);
+      return;
+    }
 
     setSending(true);
     const durationSec = Math.max(1, Math.round(stopRes.result.durationMs / 1000));
@@ -392,26 +414,40 @@ export default function ChatDetailScreen() {
       stopRes.result.mimeType,
     );
     setSending(false);
+    // The local copy is no longer needed whether or not the upload worked.
+    await cleanupAbandonedVoiceFile(stopRes.result.uri);
 
     if (res.success && res.message) {
       upsertSentMessage(res.message);
       refreshMatches();
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } else {
-      Alert.alert("Could not send voice message", res.error || "Please try again.");
+      Alert.alert("Couldn't send voice message", res.error || "Please check your connection and try again.");
     }
   };
 
   const handleCancelRecording = async () => {
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
+    recordingActiveRef.current = false;
+    clearRecordingTimer();
     setIsRecording(false);
     setRecordingSeconds(0);
-    const adapter = getAudioRecorderAdapter();
-    await adapter.cancelRecordingAsync();
+    await getAudioRecorderAdapter().cancelRecordingAsync();
   };
+
+  // Leaving the chat mid-recording discards it instead of leaving the microphone open.
+  useEffect(() => {
+    return () => {
+      if (recordingActiveRef.current) {
+        recordingActiveRef.current = false;
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        void getAudioRecorderAdapter().cancelRecordingAsync();
+      }
+      void getAudioPlayerAdapter().stopAsync();
+    };
+  }, []);
+
+  const formatRecordingTime = (total: number) =>
+    `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 
   const handleConfirmAction = async () => {
     if (!actionDialog) return;
@@ -420,12 +456,12 @@ export default function ChatDetailScreen() {
       await blockUser(otherUser.id);
       Alert.alert("Blocked", `You have blocked ${otherUser.name}.`);
       refreshMatches();
-      router.back();
+      safeBack(router);
     } else if (actionDialog === "unmatch") {
       await unmatchUser(matchId);
       Alert.alert("Unmatched", `You have unmatched with ${otherUser.name}.`);
       refreshMatches();
-      router.back();
+      safeBack(router);
     } else if (actionDialog === "report") {
       const rep = await reportUser(otherUser.id, "Inappropriate behavior", "Reported from mobile chat", "chat");
       if (rep.success) {
@@ -447,7 +483,7 @@ export default function ChatDetailScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => safeBack(router)} style={styles.backBtn} activeOpacity={0.7}>
           <ArrowLeft size={22} color={Colors.foreground} />
         </TouchableOpacity>
 
@@ -702,6 +738,34 @@ export default function ChatDetailScreen() {
         )}
 
         {/* Input Bar */}
+        {isRecording ? (
+          <View style={styles.inputBar} testID="voice-recording-bar">
+            <TouchableOpacity
+              style={styles.attachBtn}
+              onPress={() => void handleCancelRecording()}
+              accessibilityLabel="Cancel voice message"
+              testID="voice-cancel"
+              activeOpacity={0.7}
+            >
+              <Trash2 size={22} color={Colors.destructive} />
+            </TouchableOpacity>
+            <View style={styles.recordingInfo}>
+              <View style={styles.recordingDot} />
+              <Text style={styles.recordingTime}>
+                {formatRecordingTime(recordingSeconds)} / {formatRecordingTime(VOICE_LIMITS.maxDurationMs / 1000)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.sendBtn}
+              onPress={() => void handleStopAndSendRecording()}
+              accessibilityLabel="Send voice message"
+              testID="voice-send"
+              activeOpacity={0.8}
+            >
+              <Send size={18} color={Colors.primaryForeground} />
+            </TouchableOpacity>
+          </View>
+        ) : (
         <View style={styles.inputBar}>
           <TouchableOpacity style={styles.attachBtn} onPress={handlePickImage} activeOpacity={0.7}>
             <ImagePlus size={22} color={Colors.primary} />
@@ -733,18 +797,32 @@ export default function ChatDetailScreen() {
             maxLength={1000}
           />
 
-          <TouchableOpacity
-            style={[
-              styles.sendBtn,
-              !inputText.trim() && !selectedImageUri && styles.sendBtnDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={(!inputText.trim() && !selectedImageUri) || sending}
-            activeOpacity={0.8}
-          >
-            <Send size={18} color={Colors.primaryForeground} />
-          </TouchableOpacity>
+          {voiceEnabled && !inputText.trim() && !selectedImageUri ? (
+            <TouchableOpacity
+              style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
+              onPress={() => void handleStartRecording()}
+              disabled={sending}
+              accessibilityLabel="Record voice message"
+              testID="voice-record"
+              activeOpacity={0.8}
+            >
+              <Mic size={18} color={Colors.primaryForeground} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.sendBtn,
+                !inputText.trim() && !selectedImageUri && styles.sendBtnDisabled,
+              ]}
+              onPress={handleSend}
+              disabled={(!inputText.trim() && !selectedImageUri) || sending}
+              activeOpacity={0.8}
+            >
+              <Send size={18} color={Colors.primaryForeground} />
+            </TouchableOpacity>
+          )}
         </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* Couple Games Modal */}
@@ -1116,5 +1194,23 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   sendBtnDisabled: {
     backgroundColor: Colors.muted,
+  },
+  recordingInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  recordingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.destructive,
+  },
+  recordingTime: {
+    color: Colors.foreground,
+    fontSize: 15,
+    fontVariant: ["tabular-nums"],
   },
 });

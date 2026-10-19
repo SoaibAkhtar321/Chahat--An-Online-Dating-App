@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from "react-native";
 import { Alert } from "../../utils/alert";
 import * as ImagePicker from "expo-image-picker";
@@ -9,12 +9,10 @@ import type { PhotoItem } from "../../types";
 import { compressToUnderLimit } from "../../utils/compressImage";
 import { ProfilePhoto } from "./ProfilePhoto";
 import { hasSelectedPhotoUri } from "../../services/profilePolicy";
+import { PhotoPreviewModal, type PickedPhoto } from "./PhotoPreviewModal";
 
 const { width } = Dimensions.get("window");
 const ITEM_WIDTH = (width - 64) / 3;
-
-// Set to false to skip the Android crop screen (it can silently return "canceled" on some devices).
-const ALLOW_CROP = true;
 
 interface PhotoUploaderProps {
   photos: PhotoItem[];
@@ -32,16 +30,23 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   const photosRef = useRef(photos);
   photosRef.current = photos;
   const busyRef = useRef(false);
+  // A picked photo waits here for the Done/Crop review. The target slot is fixed at pick time so a
+  // later change to the list can never put the photo in the wrong place.
+  const [pending, setPending] = useState<{ photo: PickedPhoto; index: number; originalUri: string } | null>(null);
 
   // Compresses the picked image to under 1 MB, then adds it to the list.
-  const addPhoto = async (asset: { uri: string; width?: number }, index: number) => {
-    if (hasSelectedPhotoUri(photosRef.current, asset.uri)) return;
+  const addPhoto = async (
+    asset: { uri: string; width?: number },
+    index: number,
+    originalUri: string = asset.uri,
+  ) => {
+    if (hasSelectedPhotoUri(photosRef.current, originalUri)) return;
     const compressedUri = await compressToUnderLimit(asset.uri, asset.width);
     const current = photosRef.current;
     const newPhoto: PhotoItem = {
       id: `photo_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       uri: compressedUri,
-      sourceUri: asset.uri,
+      sourceUri: originalUri,
       status: "pending",
       isMain: index === 0,
     };
@@ -94,9 +99,9 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: ALLOW_CROP,
-        aspect: [3, 4],
-        quality: 0.8,
+        // No system editor: its top-right "Crop" acted as Done. Review happens in PhotoPreviewModal.
+        allowsEditing: false,
+        quality: 1,
       });
 
       if (result.canceled) return;
@@ -110,7 +115,12 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         return;
       }
 
-      await addPhoto(asset, index);
+      if (hasSelectedPhotoUri(photosRef.current, asset.uri)) return;
+      setPending({
+        photo: { uri: asset.uri, width: asset.width, height: asset.height },
+        index,
+        originalUri: asset.uri,
+      });
     } catch (err: any) {
       console.error("PhotoUploader: pickImage failed", err);
       Alert.alert(
@@ -137,10 +147,22 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     }
   };
 
+  const confirmPending = async (final: PickedPhoto) => {
+    const target = pending;
+    if (!target) return;
+    try {
+      await addPhoto(final, target.index, target.originalUri);
+      setPending(null);
+    } catch (err: any) {
+      Alert.alert("Could not add photo", err?.message || "Something went wrong while preparing the photo.");
+    }
+  };
+
   const slots = Array.from({ length: maxPhotos }, (_, i) => photos[i] || null);
 
   return (
     <View style={styles.grid}>
+      <PhotoPreviewModal photo={pending?.photo ?? null} onDone={confirmPending} onCancel={() => setPending(null)} />
       {slots.map((item, index) => (
         <View key={index} style={styles.slot}>
           {item ? (

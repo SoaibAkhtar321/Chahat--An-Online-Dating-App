@@ -50,6 +50,11 @@ export class CallController {
 
   constructor(private readonly deps: CallControllerDeps) {}
 
+  /** The live media session, if any. The call screen uses it only to render video. */
+  getSession(): CallMediaSession | null {
+    return this.session;
+  }
+
   getState(): CallControllerState {
     return this.state;
   }

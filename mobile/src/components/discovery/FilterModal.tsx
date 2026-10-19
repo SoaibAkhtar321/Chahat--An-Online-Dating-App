@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { X, Check } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
@@ -8,6 +8,8 @@ import { INTERESTS, LANGUAGES, DEFAULT_FILTERS } from "../../types";
 import { Chip } from "../ui/Chip";
 import { Button } from "../ui/Button";
 import { Slider, RangeSlider } from "../ui/Slider";
+import { Alert } from "../../utils/alert";
+import { hasUnsavedChanges } from "../../utils/navigation";
 
 interface FilterModalProps {
   visible: boolean;
@@ -20,6 +22,24 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
+
+  // Start from the applied filters every time the sheet opens, so discarded edits never linger.
+  useEffect(() => {
+    if (visible) setLocalFilters(filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  // Used by the X button AND Android hardware/gesture back (Modal onRequestClose), so both behave alike.
+  const requestClose = () => {
+    if (!hasUnsavedChanges(filters, localFilters)) {
+      onClose();
+      return;
+    }
+    Alert.alert("Discard changes?", "Your filter changes haven't been applied.", [
+      { text: "Keep editing", style: "cancel" },
+      { text: "Discard", style: "destructive", onPress: onClose },
+    ]);
+  };
 
   const toggleInterest = (interest: string) => {
     setLocalFilters((prev) => ({
@@ -49,10 +69,20 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={requestClose}
+    >
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <TouchableOpacity
+            onPress={requestClose}
+            style={styles.closeButton}
+            accessibilityLabel="Close filters"
+            testID="filters-close"
+          >
             <X size={24} color={Colors.foreground} />
           </TouchableOpacity>
           <Text style={styles.title}>Discovery Filters</Text>

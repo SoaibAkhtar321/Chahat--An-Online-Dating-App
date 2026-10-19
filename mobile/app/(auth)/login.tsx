@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { safeBack } from "../../src/utils/navigation";
 import {
   View,
   Text,
@@ -82,7 +83,7 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, "/(auth)/welcome")}>
             <ArrowLeft size={20} color={Colors.foreground} />
           </TouchableOpacity>
 

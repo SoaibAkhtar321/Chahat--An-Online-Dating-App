@@ -32,6 +32,8 @@ export function readPublicEnv(): EnvSource {
     EXPO_PUBLIC_FEATURE_CALLS: process.env.EXPO_PUBLIC_FEATURE_CALLS,
     EXPO_PUBLIC_FEATURE_VOICE_MESSAGES: process.env.EXPO_PUBLIC_FEATURE_VOICE_MESSAGES,
     EXPO_PUBLIC_FEATURE_COIN_TOPUP: process.env.EXPO_PUBLIC_FEATURE_COIN_TOPUP,
+    // Public Agora App ID (an identifier, not a secret). The App Certificate stays on the server.
+    EXPO_PUBLIC_AGORA_APP_ID: process.env.EXPO_PUBLIC_AGORA_APP_ID,
   };
 }
 

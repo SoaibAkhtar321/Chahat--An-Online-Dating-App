@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { safeBack } from "../../src/utils/navigation";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { CallVideoStage, type CallSessionWithVideo } from "../../src/services/agoraCallMedia";
 import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -166,7 +168,7 @@ export default function CallScreen() {
         return;
       }
     }
-    router.back();
+    safeBack(router);
   };
 
   const isRecipient = Boolean(user?.id && recipientId && user.id === recipientId);
@@ -196,7 +198,7 @@ export default function CallScreen() {
     setResponding(true);
     try {
       setStatus(await transitionVideoCall(callId, "decline"));
-      router.back();
+      safeBack(router);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not decline the call.");
       await refreshCall().catch(() => undefined);
@@ -211,7 +213,7 @@ export default function CallScreen() {
         <View style={styles.center}>
           {status === "creating" ? <ActivityIndicator color={Colors.primary} /> : null}
           <Text style={styles.title}>{error ?? "Matched connection not found."}</Text>
-          <TouchableOpacity style={styles.endCallBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.endCallBtn} onPress={() => safeBack(router)}>
             <Text style={styles.endCallText}>Back</Text>
           </TouchableOpacity>
         </View>
@@ -229,7 +231,7 @@ export default function CallScreen() {
           : "Invitation sent. Waiting for the other person to accept."
         : status === "accepted"
           ? !callingAvailable
-            ? "Invitation accepted. A live audio/video provider is not configured in this build."
+            ? "Calling isn't available in this build."
             : media.phase === "connected"
               ? "Connected."
               : media.phase === "failed"
@@ -239,6 +241,11 @@ export default function CallScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {callKind === "video" && media.phase === "connected" ? (
+        <View style={{ flex: 1, width: "100%" }}>
+          <CallVideoStage session={(controller?.getSession() as CallSessionWithVideo | null) ?? null} />
+        </View>
+      ) : null}
       <View style={styles.content}>
         <ProfilePhoto
           uri={partnerPhoto}
@@ -259,8 +266,8 @@ export default function CallScreen() {
           {media.error ? <Text style={styles.error}>{media.error.message}</Text> : null}
           {callingAvailable ? null : (
             <Text style={styles.providerNotice}>
-              No media session has started. A call provider must be configured and a development
-              client built before live calls can connect.
+              Calling isn't available in this build yet. It needs a development build with the call
+              provider set up.
             </Text>
           )}
         </View>
@@ -325,7 +332,7 @@ export default function CallScreen() {
           </TouchableOpacity>
         )}
         {isTerminal && (
-          <TouchableOpacity style={styles.endCallBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.endCallBtn} onPress={() => safeBack(router)}>
             <Text style={styles.endCallText}>Close</Text>
           </TouchableOpacity>
         )}
