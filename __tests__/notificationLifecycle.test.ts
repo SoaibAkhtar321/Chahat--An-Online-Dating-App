@@ -94,6 +94,7 @@ jest.doMock("../mobile/src/services/supabase", () => ({
         matches: boolean;
         messages: boolean;
         likes: boolean;
+        calls?: boolean;
         lock_screen_details?: string;
       }) => {
         if (table === "notification_preferences") {
@@ -103,6 +104,7 @@ jest.doMock("../mobile/src/services/supabase", () => ({
             matches: row.matches,
             messages: row.messages,
             likes: row.likes,
+            ...(row.calls !== undefined ? { calls: row.calls } : {}),
             ...(row.lock_screen_details !== undefined
               ? { lock_screen_details: row.lock_screen_details }
               : {}),
@@ -142,6 +144,7 @@ describe("account-scoped notification state", () => {
       matches: false,
       messages: true,
       likes: false,
+      calls: true,
       lockScreenDetails: "name",
     });
     await expect(getNotificationPreferences("user-b")).rejects.toThrow(
@@ -152,6 +155,7 @@ describe("account-scoped notification state", () => {
       matches: true,
       messages: true,
       likes: true,
+      calls: true,
       lockScreenDetails: "name",
     });
   });

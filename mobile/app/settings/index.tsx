@@ -54,6 +54,7 @@ export default function SettingsScreen() {
   const [notifMatches, setNotifMatches] = useState(true);
   const [notifMessages, setNotifMessages] = useState(true);
   const [notifLikes, setNotifLikes] = useState(true);
+  const [notifCalls, setNotifCalls] = useState(true);
   const [lockScreenDetails, setLockScreenDetails] = useState<LockScreenDetails>("name");
 
   const refreshLocationStatus = React.useCallback(async () => {
@@ -171,6 +172,7 @@ export default function SettingsScreen() {
         setNotifMatches(prefs.matches);
         setNotifMessages(prefs.messages);
         setNotifLikes(prefs.likes);
+        setNotifCalls(prefs.calls);
         setLockScreenDetails(prefs.lockScreenDetails);
       })
       .catch((error) => Alert.alert("Notifications unavailable", error.message));
@@ -212,6 +214,7 @@ export default function SettingsScreen() {
         matches: val,
         messages: notifMessages,
         likes: notifLikes,
+        calls: notifCalls,
         lockScreenDetails,
       })
     ) {
@@ -226,6 +229,7 @@ export default function SettingsScreen() {
         matches: notifMatches,
         messages: val,
         likes: notifLikes,
+        calls: notifCalls,
         lockScreenDetails,
       })
     ) {
@@ -240,10 +244,26 @@ export default function SettingsScreen() {
         matches: notifMatches,
         messages: notifMessages,
         likes: val,
+        calls: notifCalls,
         lockScreenDetails,
       })
     ) {
       setNotifLikes(val);
+      if (val) await registerAfterEnable(true);
+    }
+  };
+
+  const handleToggleNotifCalls = async (val: boolean) => {
+    if (
+      await updateNotificationPreferences({
+        matches: notifMatches,
+        messages: notifMessages,
+        likes: notifLikes,
+        calls: val,
+        lockScreenDetails,
+      })
+    ) {
+      setNotifCalls(val);
       if (val) await registerAfterEnable(true);
     }
   };
@@ -261,6 +281,7 @@ export default function SettingsScreen() {
         matches: notifMatches,
         messages: notifMessages,
         likes: notifLikes,
+        calls: notifCalls,
         lockScreenDetails: next,
       })
     ) {
@@ -445,6 +466,11 @@ export default function SettingsScreen() {
                   label="Likes received"
                   value={notifLikes}
                   onValueChange={handleToggleNotifLikes}
+                />
+                <Toggle
+                  label="Incoming calls"
+                  value={notifCalls}
+                  onValueChange={handleToggleNotifCalls}
                 />
                 <TouchableOpacity
                   style={styles.navRow}

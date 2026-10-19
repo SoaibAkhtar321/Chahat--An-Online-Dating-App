@@ -1,0 +1,268 @@
+# Patch: Chahat Android Notification System & Lifecycle Hardening
+# Base: Milo-Prototype-Baseline (Phase 4 baseline)
+# Target: Android Notification Implementation & Verification
+
+diff -u /dev/null b/supabase/migrations/20260101004100_notifications_and_call_lifecycle_hardening.sql
+--- /dev/null
++++ b/supabase/migrations/20260101004100_notifications_and_call_lifecycle_hardening.sql
+@@ -0,0 +1,138 @@
++-- 20260101004100_notifications_and_call_lifecycle_hardening.sql
++-- Chahat Notification & Call Reliability Hardening
++-- 1. Near-real-time push dispatch trigger (H-1): fires async net.http_post to dispatch-push when outbox rows are inserted.
++-- 2. Safe, bounded retention cleanup routine (M-4): purges terminal deliveries and processed outbox records older than retention window.
++-- 3. Dedicated indexes for bounded retention cleanup.
++
++BEGIN;
++
++-- ---------- 1. Near-real-time push dispatch trigger (H-1) ----------
++CREATE OR REPLACE FUNCTION public.trigger_push_dispatch()
++RETURNS trigger
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _url text;
++  _secret text;
++BEGIN
++  -- Only attempt async dispatch via pg_net if net schema and vault secrets are present
++  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net')
++     AND EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'net')
++     AND to_regclass('vault.decrypted_secrets') IS NOT NULL THEN
++    BEGIN
++      SELECT decrypted_secret INTO _url
++      FROM vault.decrypted_secrets
++      WHERE name = 'chahat_project_url' LIMIT 1;
++
++      SELECT decrypted_secret INTO _secret
++      FROM vault.decrypted_secrets
++      WHERE name = 'chahat_push_dispatch_secret' LIMIT 1;
++
++      IF _url IS NOT NULL AND _secret IS NOT NULL THEN
++        PERFORM net.http_post(
++          url := _url || '/functions/v1/dispatch-push',
++          headers := jsonb_build_object(
++            'Content-Type', 'application/json',
++            'x-dispatch-secret', _secret
++          ),
++          body := '{}'::jsonb
++        );
++      END IF;
++    EXCEPTION WHEN OTHERS THEN
++      -- Asynchronous notification dispatch must never block or abort business transactions.
++      -- pg_cron will pick up queued outbox entries during its regular sweep.
++      NULL;
++    END;
++  END IF;
++  RETURN NULL;
++END;
++$$;
++
++REVOKE EXECUTE ON FUNCTION public.trigger_push_dispatch() FROM PUBLIC, anon, authenticated, service_role;
++
++DROP TRIGGER IF EXISTS trg_push_dispatch_on_outbox ON public.notification_outbox;
++CREATE TRIGGER trg_push_dispatch_on_outbox
++  AFTER INSERT ON public.notification_outbox
++  FOR EACH STATEMENT
++  EXECUTE FUNCTION public.trigger_push_dispatch();
++
++-- ---------- 2. Bounded retention cleanup function (M-4) ----------
++CREATE OR REPLACE FUNCTION public.purge_notification_history(
++  _retention_days integer DEFAULT 30,
++  _batch_size integer DEFAULT 1000
++)
++RETURNS jsonb
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _purged_deliveries integer := 0;
++  _purged_outbox integer := 0;
++  _cutoff timestamptz;
++BEGIN
++  IF coalesce(auth.role(), '') <> 'service_role' THEN
++    RAISE EXCEPTION 'Service role required';
++  END IF;
++
++  IF _retention_days IS NULL OR _retention_days < 1 OR _retention_days > 365 THEN
++    RAISE EXCEPTION 'Invalid retention period: must be between 1 and 365 days';
++  END IF;
++
++  IF _batch_size IS NULL OR _batch_size < 1 OR _batch_size > 5000 THEN
++    RAISE EXCEPTION 'Invalid batch size: must be between 1 and 5000';
++  END IF;
++
++  _cutoff := now() - make_interval(days => _retention_days);
++
++  -- 1. Purge terminal deliveries older than the retention cutoff in a bounded batch.
++  DELETE FROM public.notification_deliveries d
++  WHERE d.ctid IN (
++    SELECT x.ctid
++    FROM public.notification_deliveries x
++    WHERE x.status IN ('delivered', 'failed', 'suppressed')
++      AND x.created_at < _cutoff
++    LIMIT _batch_size
++  );
++  GET DIAGNOSTICS _purged_deliveries = ROW_COUNT;
++
++  -- 2. Purge processed outbox records older than the retention cutoff that have no remaining deliveries.
++  DELETE FROM public.notification_outbox o
++  WHERE o.ctid IN (
++    SELECT x.ctid
++    FROM public.notification_outbox x
++    WHERE x.processed_at IS NOT NULL
++      AND x.created_at < _cutoff
++      AND NOT EXISTS (
++        SELECT 1 FROM public.notification_deliveries d
++        WHERE d.notification_id = x.id
++      )
++    LIMIT _batch_size
++  );
++  GET DIAGNOSTICS _purged_outbox = ROW_COUNT;
++
++  RETURN jsonb_build_object(
++    'purged_deliveries', _purged_deliveries,
++    'purged_outbox', _purged_outbox,
++    'retention_days', _retention_days,
++    'cutoff', _cutoff
++  );
++END;
++$$;
++
++REVOKE EXECUTE ON FUNCTION public.purge_notification_history(integer, integer) FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.purge_notification_history(integer, integer) TO service_role;
++
++-- ---------- 3. Dedicated indexes for cleanup efficiency ----------
++CREATE INDEX IF NOT EXISTS notification_deliveries_cleanup_idx
++  ON public.notification_deliveries (created_at)
++  WHERE status IN ('delivered', 'failed', 'suppressed');
++
++CREATE INDEX IF NOT EXISTS notification_outbox_cleanup_idx
++  ON public.notification_outbox (created_at)
++  WHERE processed_at IS NOT NULL;
++
++COMMIT;
++
+diff -u a/mobile/src/services/notifications.ts b/mobile/src/services/notifications.ts
+--- a/mobile/src/services/notifications.ts
++++ b/mobile/src/services/notifications.ts
+@@ -34,6 +34,7 @@
+   matches: boolean;
+   messages: boolean;
+   likes: boolean;
++  calls: boolean;
+   lockScreenDetails: LockScreenDetails;
+ }
+ 
+@@ -53,6 +54,7 @@
+   matches: true,
+   messages: true,
+   likes: true,
++  calls: true,
+   lockScreenDetails: "name",
+ };
+@@ -91,6 +93,7 @@
+   const { data, error } = await supabase
+     .from("notification_preferences")
+-    .select("matches, messages, likes, lock_screen_details")
++    .select("matches, messages, likes, calls, lock_screen_details")
+     .eq("user_id", userId)
+     .maybeSingle();
+@@ -98,6 +101,7 @@
+   const row = data as {
+     matches?: boolean;
+     messages?: boolean;
+     likes?: boolean;
++    calls?: boolean;
+     lockScreenDetails?: string;
+   } | null;
+   return {
+@@ -105,6 +109,7 @@
+     matches: row?.matches ?? DEFAULT_PREFERENCES.matches,
+     messages: row?.messages ?? DEFAULT_PREFERENCES.messages,
+     likes: row?.likes ?? DEFAULT_PREFERENCES.likes,
++    calls: row?.calls ?? DEFAULT_PREFERENCES.calls,
+     lockScreenDetails: LOCK_SCREEN_DETAILS.includes(row?.lock_screen_details as LockScreenDetails)
+       ? (row?.lock_screen_details as LockScreenDetails)
+       : DEFAULT_PREFERENCES.lockScreenDetails,
+@@ -113,8 +118,10 @@
+ export async function saveNotificationPreferences(
+   userId: string,
+-  prefs: Omit<NotificationPreferences, "lockScreenDetails"> & {
++  prefs: Omit<NotificationPreferences, "lockScreenDetails" | "calls"> & {
++    calls?: boolean;
+     lockScreenDetails?: LockScreenDetails;
+   },
+ ): Promise<{ success: boolean; error?: string }> {
+@@ -124,6 +131,7 @@
+     typeof prefs.matches !== "boolean" ||
+     typeof prefs.messages !== "boolean" ||
+     typeof prefs.likes !== "boolean" ||
++    (prefs.calls !== undefined && typeof prefs.calls !== "boolean") ||
+     (prefs.lockScreenDetails !== undefined && !LOCK_SCREEN_DETAILS.includes(prefs.lockScreenDetails))
+   ) {
+     return { success: false, error: "Notification preferences are invalid." };
+@@ -136,6 +144,7 @@
+       matches: prefs.matches,
+       messages: prefs.messages,
+       likes: prefs.likes,
++      ...(prefs.calls !== undefined ? { calls: prefs.calls } : {}),
+       ...(prefs.lockScreenDetails !== undefined
+         ? { lock_screen_details: prefs.lockScreenDetails }
+         : {}),
+diff -u a/__tests__/notificationLifecycle.test.ts b/__tests__/notificationLifecycle.test.ts
+--- a/__tests__/notificationLifecycle.test.ts
++++ b/__tests__/notificationLifecycle.test.ts
+@@ -144,6 +144,7 @@
+       matches: false,
+       messages: true,
+       likes: false,
++      calls: true,
+       lockScreenDetails: "name",
+     });
+     await expect(getNotificationPreferences("user-b")).rejects.toThrow(
+@@ -153,6 +154,7 @@
+       matches: true,
+       messages: true,
+       likes: true,
++      calls: true,
+       lockScreenDetails: "name",
+     });
+   });
+diff -u a/jest.setup.js b/jest.setup.js
+--- a/jest.setup.js
++++ b/jest.setup.js
+@@ -7,3 +7,16 @@
+ if (typeof globalThis.WebSocket === "undefined") {
+   globalThis.WebSocket = class WebSocket {};
+ }
++
++// React Native's jest/setup.js defines rAF using jest.now() inside setTimeout, which throws a ReferenceError
++// if any Animated.timing callback fires after test teardown.
++globalThis.requestAnimationFrame = (callback) => {
++  return globalThis.setTimeout(() => {
++    try {
++      callback(Date.now());
++    } catch {
++      // Ignore callbacks executed after test environment teardown
++    }
++  }, 0);
++};
++globalThis.cancelAnimationFrame = (id) => globalThis.clearTimeout(id);
+diff -u a/__tests__/legalAcceptanceFlow.test.tsx b/__tests__/legalAcceptanceFlow.test.tsx
+--- a/__tests__/legalAcceptanceFlow.test.tsx
++++ b/__tests__/legalAcceptanceFlow.test.tsx
+@@ -30,6 +30,12 @@
+ jest.mock("../mobile/src/services/auth", () => ({
+   signUpUser: (...args: any[]) => mockSignUpUser(...args),
+ }));
++jest.mock("../mobile/src/components/ui/Button", () => {
++  const React = require("react");
++  const MockButton = ({ title, onPress, ...props }: any) =>
++    React.createElement("View", { accessibilityRole: "button", title, onPress, ...props });
++  return { Button: MockButton };
++});
+ 
+ // eslint-disable-next-line @typescript-eslint/no-var-requires
+ const SignupScreen = require("../mobile/app/(auth)/signup").default as React.ComponentType;

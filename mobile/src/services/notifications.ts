@@ -32,6 +32,7 @@ export interface NotificationPreferences {
   matches: boolean;
   messages: boolean;
   likes: boolean;
+  calls: boolean;
   /** What a lock screen may show for matches/messages: nothing, the sender's first name, or a preview. */
   lockScreenDetails: LockScreenDetails;
 }
@@ -52,6 +53,7 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
   matches: true,
   messages: true,
   likes: true,
+  calls: true,
   lockScreenDetails: "name",
 };
 
@@ -86,7 +88,7 @@ export async function getNotificationPreferences(userId: string): Promise<Notifi
   await requireAuthenticatedUser(userId);
   const { data, error } = await supabase
     .from("notification_preferences")
-    .select("matches, messages, likes, lock_screen_details")
+    .select("matches, messages, likes, calls, lock_screen_details")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(`Could not load notification preferences: ${error.message}`);
@@ -94,12 +96,14 @@ export async function getNotificationPreferences(userId: string): Promise<Notifi
     matches?: boolean;
     messages?: boolean;
     likes?: boolean;
+    calls?: boolean;
     lock_screen_details?: string;
   } | null;
   return {
     matches: row?.matches ?? DEFAULT_PREFERENCES.matches,
     messages: row?.messages ?? DEFAULT_PREFERENCES.messages,
     likes: row?.likes ?? DEFAULT_PREFERENCES.likes,
+    calls: row?.calls ?? DEFAULT_PREFERENCES.calls,
     lockScreenDetails: LOCK_SCREEN_DETAILS.includes(row?.lock_screen_details as LockScreenDetails)
       ? (row?.lock_screen_details as LockScreenDetails)
       : DEFAULT_PREFERENCES.lockScreenDetails,
@@ -108,8 +112,9 @@ export async function getNotificationPreferences(userId: string): Promise<Notifi
 
 export async function saveNotificationPreferences(
   userId: string,
-  // lockScreenDetails is optional so a partial update (e.g. a single toggle) never overwrites it.
-  prefs: Omit<NotificationPreferences, "lockScreenDetails"> & {
+  // lockScreenDetails and calls are optional so a partial update never overwrites them.
+  prefs: Omit<NotificationPreferences, "lockScreenDetails" | "calls"> & {
+    calls?: boolean;
     lockScreenDetails?: LockScreenDetails;
   },
 ): Promise<{ success: boolean; error?: string }> {
@@ -117,6 +122,7 @@ export async function saveNotificationPreferences(
     typeof prefs.matches !== "boolean" ||
     typeof prefs.messages !== "boolean" ||
     typeof prefs.likes !== "boolean" ||
+    (prefs.calls !== undefined && typeof prefs.calls !== "boolean") ||
     (prefs.lockScreenDetails !== undefined && !LOCK_SCREEN_DETAILS.includes(prefs.lockScreenDetails))
   ) {
     return { success: false, error: "Notification preferences are invalid." };
@@ -128,6 +134,7 @@ export async function saveNotificationPreferences(
       matches: prefs.matches,
       messages: prefs.messages,
       likes: prefs.likes,
+      ...(prefs.calls !== undefined ? { calls: prefs.calls } : {}),
       ...(prefs.lockScreenDetails !== undefined
         ? { lock_screen_details: prefs.lockScreenDetails }
         : {}),
@@ -252,7 +259,7 @@ export async function registerPushNotificationToken(
     // in-app notice (the server also refuses to activate a push token without it).
     if (!(await hasConsent("push_notifications"))) return { status: "consent_required" };
     const preferences = await getNotificationPreferences(userId);
-    if (!preferences.matches && !preferences.messages && !preferences.likes) {
+    if (!preferences.matches && !preferences.messages && !preferences.likes && !preferences.calls) {
       return { status: "disabled" };
     }
 

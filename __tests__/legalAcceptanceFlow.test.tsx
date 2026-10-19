@@ -15,11 +15,13 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockSignUpUser = jest.fn();
 
+const mockLightColors = require("../mobile/src/constants/theme").LightColors;
+
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace, back: jest.fn() }),
 }));
 jest.mock("../mobile/src/context/ThemeContext", () => ({
-  useTheme: () => ({ colors: require("../mobile/src/constants/theme").LightColors, isDark: false }),
+  useTheme: () => ({ colors: mockLightColors, isDark: false }),
 }));
 jest.mock("lucide-react-native", () => ({ ArrowLeft: () => null, Check: () => null }));
 jest.mock("react-native-safe-area-context", () => ({
@@ -28,13 +30,19 @@ jest.mock("react-native-safe-area-context", () => ({
 jest.mock("../mobile/src/services/auth", () => ({
   signUpUser: (...args: any[]) => mockSignUpUser(...args),
 }));
+jest.mock("../mobile/src/components/ui/Button", () => {
+  const React = require("react");
+  const MockButton = ({ title, onPress, ...props }: any) =>
+    React.createElement("View", { accessibilityRole: "button", title, onPress, ...props });
+  return { Button: MockButton };
+});
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const SignupScreen = require("../mobile/app/(auth)/signup").default as React.ComponentType;
 
-function render() {
+async function render() {
   let tree!: TestRenderer.ReactTestRenderer;
-  act(() => {
+  await act(async () => {
     tree = TestRenderer.create(<SignupScreen />);
   });
   return tree;
@@ -64,8 +72,14 @@ describe("signup Terms/Privacy acceptance", () => {
     mockSignUpUser.mockResolvedValue({ success: true });
   });
 
-  it("shows the checkbox unchecked by default with the required wording", () => {
-    const tree = render();
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  });
+
+  it("shows the checkbox unchecked by default with the required wording", async () => {
+    const tree = await render();
     const [box] = byRole(tree, "checkbox");
     expect(box.props.accessibilityState).toEqual({ checked: false });
     const out = text(tree);
@@ -76,14 +90,14 @@ describe("signup Terms/Privacy acceptance", () => {
   });
 
   it("blocks account creation and shows feedback when the box is not ticked", async () => {
-    const tree = render();
+    const tree = await render();
     await fillAndSubmit(tree);
     expect(mockSignUpUser).not.toHaveBeenCalled();
     expect(text(tree)).toContain(LEGAL_ACCEPTANCE_REQUIRED_MESSAGE);
   });
 
   it("creates the account with the shown versions once the box is ticked, and clears the error", async () => {
-    const tree = render();
+    const tree = await render();
     await fillAndSubmit(tree);
     await act(async () => {
       byRole(tree, "checkbox")[0].props.onPress();
@@ -94,12 +108,14 @@ describe("signup Terms/Privacy acceptance", () => {
     expect(mockSignUpUser).toHaveBeenCalledWith("a@example.test", "passWord1", currentLegalAcceptanceClaim());
   });
 
-  it("opens the Terms and the Privacy Policy from the individual links", () => {
-    const tree = render();
+  it("opens the Terms and the Privacy Policy from the individual links", async () => {
+    const tree = await render();
     const links = byRole(tree, "link");
     expect(links).toHaveLength(2);
-    links[0].props.onPress();
-    links[1].props.onPress();
+    await act(async () => {
+      links[0].props.onPress();
+      links[1].props.onPress();
+    });
     expect(mockPush).toHaveBeenNthCalledWith(1, "/legal/terms");
     expect(mockPush).toHaveBeenNthCalledWith(2, "/legal/privacy");
   });

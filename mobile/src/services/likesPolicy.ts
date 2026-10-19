@@ -46,7 +46,7 @@ export function isUpgradeRequiredError(error: unknown): boolean {
  * or malformed check yields an error, NOT the likes list, so a network failure can never open it.
  */
 export async function resolveLikeTapRoute(
-  fetchAccess: () => Promise<{ data: unknown; error: unknown }>,
+  fetchAccess: () => PromiseLike<{ data: unknown; error: unknown }>,
 ): Promise<LikeTapRoute> {
   try {
     const { data, error } = await fetchAccess();
