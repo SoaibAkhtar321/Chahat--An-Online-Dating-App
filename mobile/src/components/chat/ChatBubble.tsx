@@ -1,28 +1,46 @@
-import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from "react-native";
 import { Image } from "expo-image";
-import { Check, CheckCheck, AlertCircle, Play, Pause, Mic } from "lucide-react-native";
+import { Check, CheckCheck, AlertCircle, Play, Pause, Mic, Ban } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Message } from "../../types";
 import { getAudioPlayerAdapter } from "../../services/voiceMedia";
+import { DELETED_BY_ME_PREVIEW_TEXT, DELETED_PREVIEW_TEXT } from "../../utils/messageState";
 
 interface ChatBubbleProps {
   message: Message;
   showDayHeader?: boolean;
+  /** Long press on the bubble (message actions). Omit to keep the bubble non-interactive. */
+  onLongPress?: (message: Message) => void;
 }
 
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader = false }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({
+  message,
+  showDayHeader = false,
+  onLongPress,
+}) => {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const isMe = message.from === "me";
   const date = new Date(message.at);
   const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  const isVoice = message.messageType === "voice" || !!message.audio;
+  const isDeleted = !!message.deletedAt;
+  const isVoice = !isDeleted && (message.messageType === "voice" || !!message.audio);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const durationSec = message.audioDurationSec || 5;
+
+  // A voice note that gets deleted for everyone while this bubble is playing it must stop at once.
+  useEffect(() => {
+    if (!isDeleted || !isPlaying) return;
+    setIsPlaying(false);
+    setProgress(0);
+    getAudioPlayerAdapter()
+      .stopAsync()
+      .catch(() => {});
+  }, [isDeleted, isPlaying]);
 
   const formatDateHeader = (timestamp: number) => {
     const today = new Date().toDateString();
@@ -60,19 +78,33 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader =
       )}
 
       <View style={[styles.row, isMe ? styles.rowMe : styles.rowThem]}>
-        <View
+        <Pressable
+          testID={`message-bubble-${message.id}`}
+          onLongPress={onLongPress ? () => onLongPress(message) : undefined}
+          delayLongPress={350}
+          accessibilityHint={onLongPress ? "Long press for message options" : undefined}
           style={[
             styles.bubble,
             isMe ? styles.bubbleMe : styles.bubbleThem,
             isVoice && styles.bubbleVoice,
             message.status === "failed" && styles.bubbleFailed,
+            isDeleted && styles.bubbleDeleted,
           ]}
         >
-          {message.image ? (
+          {isDeleted ? (
+            <View style={styles.deletedRow} testID={`message-tombstone-${message.id}`}>
+              <Ban size={14} color={Colors.mutedForeground} />
+              <Text style={styles.deletedText}>
+                {isMe ? DELETED_BY_ME_PREVIEW_TEXT : DELETED_PREVIEW_TEXT}
+              </Text>
+            </View>
+          ) : null}
+
+          {!isDeleted && message.image ? (
             <Image source={{ uri: message.image }} style={styles.image} contentFit="cover" />
           ) : null}
 
-          {isVoice ? (
+          {isDeleted ? null : isVoice ? (
             <View style={styles.voiceContainer}>
               <TouchableOpacity
                 style={[
@@ -140,9 +172,16 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader =
           ) : null}
 
           <View style={styles.footer}>
-            <Text style={[styles.time, isMe ? styles.timeMe : styles.timeThem]}>{timeStr}</Text>
+            <Text
+              style={[
+                styles.time,
+                isMe && !isDeleted ? styles.timeMe : styles.timeThem,
+              ]}
+            >
+              {timeStr}
+            </Text>
 
-            {isMe && message.status !== "failed" && (
+            {isMe && !isDeleted && message.status !== "failed" && (
               <View style={styles.tick}>
                 {message.status === "read" ? (
                   <CheckCheck size={13} color={Colors.primaryForeground} />
@@ -152,13 +191,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, showDayHeader =
               </View>
             )}
 
-            {isMe && message.status === "failed" && (
+            {isMe && !isDeleted && message.status === "failed" && (
               <View style={styles.tick}>
                 <AlertCircle size={13} color={Colors.destructive} />
               </View>
             )}
           </View>
-        </View>
+        </Pressable>
       </View>
     </View>
   );
@@ -207,6 +246,22 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.destructive,
+  },
+  bubbleDeleted: {
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: Colors.border,
+  },
+  deletedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  deletedText: {
+    fontSize: Typography.sizes.sm,
+    fontStyle: "italic",
+    color: Colors.mutedForeground,
   },
   image: {
     width: 220,

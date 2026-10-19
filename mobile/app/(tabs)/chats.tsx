@@ -8,6 +8,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
 import { Button } from "../../src/components/ui/Button";
+import { messagePreviewText } from "../../src/utils/messageState";
 
 export default function ChatsScreen() {
   const { colors: Colors } = useTheme();
@@ -129,8 +130,8 @@ export default function ChatsScreen() {
                         style={[styles.convoSnippet, hasUnread && styles.snippetUnread]}
                         numberOfLines={1}
                       >
-                        {last?.from === "me" ? "You: " : ""}
-                        {last?.text || "Shared an image"}
+                        {last?.from === "me" && !last.deletedAt ? "You: " : ""}
+                        {messagePreviewText(last)}
                       </Text>
                       {hasUnread && (
                         <View style={styles.unreadBadge}>

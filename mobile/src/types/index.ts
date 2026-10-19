@@ -83,6 +83,8 @@ export interface Message {
   messageType?: "text" | "image" | "voice" | "system";
   isViewOnce?: boolean;
   viewedAt?: string | null;
+  /** Set when the sender deleted the message for everyone (Phase 3A tombstone). Content is always empty then. */
+  deletedAt?: string | null;
   at: number;
   status: "sent" | "read" | "failed";
 }

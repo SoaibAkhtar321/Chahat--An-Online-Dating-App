@@ -37,6 +37,7 @@ import {
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ChatBubble } from "../../src/components/chat/ChatBubble";
+import { MessageActionSheet } from "../../src/components/chat/MessageActionSheet";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
@@ -50,6 +51,20 @@ import {
   markChatRead,
   subscribeToMatchMessages,
 } from "../../src/services/chat";
+import {
+  canDeleteForEveryone as canDeleteMessageForEveryone,
+  canDeleteForMe,
+  deleteMessage,
+  type DeleteScope,
+} from "../../src/services/messageDeletion";
+import {
+  applyTombstone,
+  appendIncoming,
+  insertChronologically,
+  reconcileFetched,
+  removeMessage,
+  tombstoneMessage,
+} from "../../src/utils/messageState";
 import { getAudioRecorderAdapter, VOICE_LIMITS } from "../../src/services/voiceMedia";
 import { blockUser, reportUser, unmatchUser } from "../../src/services/moderation";
 import { supabase } from "../../src/services/supabase";
@@ -71,6 +86,18 @@ export default function ChatDetailScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [actionDialog, setActionDialog] = useState<"block" | "report" | "unmatch" | null>(null);
 
+  // Message deletion: long-press sheet, then (for "Delete for everyone") a confirmation dialog.
+  const [actionTarget, setActionTarget] = useState<Message | null>(null);
+  const [confirmEveryone, setConfirmEveryone] = useState<Message | null>(null);
+  // Ids the user deleted for themselves; a stale fetch or late event must never bring them back.
+  const hiddenIdsRef = useRef<Set<string>>(new Set());
+  // id -> deletedAt for messages deleted for everyone; a stale fetch must never show their old content.
+  const tombstonesRef = useRef<Map<string, string>>(new Map());
+  // Tombstones the server has confirmed (RPC success or Realtime UPDATE); these are never rolled back.
+  const confirmedTombstonesRef = useRef<Set<string>>(new Set());
+  const inFlightDeletesRef = useRef<Set<string>>(new Set());
+  const messagesRef = useRef<Message[]>([]);
+
   // Smart Icebreaker & Game & Journey States
   const [showIcebreakers, setShowIcebreakers] = useState(false);
   const [icebreakerLang, setIcebreakerLang] = useState<"hinglish" | "hindi" | "english">("hinglish");
@@ -83,6 +110,12 @@ export default function ChatDetailScreen() {
   const recordingTimerRef = useRef<any>(null);
 
   const flatListRef = useRef<FlatList>(null);
+  messagesRef.current = messages;
+
+  const deletionContext = () => ({
+    hidden: hiddenIdsRef.current,
+    tombstones: tombstonesRef.current,
+  });
 
   // Find match partner
   const matchItem = matches.find((m) => m.id === matchId);
@@ -107,32 +140,141 @@ export default function ChatDetailScreen() {
     }, [matchId]),
   );
 
+  // Deletion bookkeeping belongs to one conversation: reset only when the conversation changes
+  // (not when the auth user object is refreshed), and before the effect below fetches.
+  useEffect(() => {
+    hiddenIdsRef.current = new Set();
+    tombstonesRef.current = new Map();
+    confirmedTombstonesRef.current = new Set();
+    inFlightDeletesRef.current = new Set();
+    setActionTarget(null);
+    setConfirmEveryone(null);
+  }, [matchId]);
+
   useEffect(() => {
     if (!matchId || !user) return;
+    let cancelled = false;
 
     fetchMessagesForMatch(matchId, user.id).then((msgs) => {
-      setMessages(msgs);
+      if (cancelled) return;
+      setMessages(reconcileFetched(msgs, deletionContext()));
       markChatRead(matchId, user.id);
     });
+
+    const handleRemoteTombstone = (id: string, deletedAt: string) => {
+      // Remember it even when the user hid the message: a delete-for-me rollback must not resurrect content.
+      tombstonesRef.current.set(id, deletedAt);
+      confirmedTombstonesRef.current.add(id);
+      setActionTarget((current) => (current?.id === id ? null : current));
+      setConfirmEveryone((current) => (current?.id === id ? null : current));
+      if (hiddenIdsRef.current.has(id)) return;
+      setMessages((prev) => applyTombstone(prev, id, deletedAt));
+      refreshMatches();
+    };
 
     const channel = subscribeToMatchMessages(
       matchId,
       (newMsg) => {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === newMsg.id)) return prev;
-          return [...prev, newMsg];
-        });
-        if (newMsg.fromId !== user.id) {
+        setMessages((prev) => appendIncoming(prev, newMsg, deletionContext()));
+        if (newMsg.from === "them") {
           markChatRead(matchId, user.id);
         }
       },
       user.id,
+      {
+        onMessageDeleted: ({ id, deletedAt }) => handleRemoteTombstone(id, deletedAt),
+        // The channel dropped and came back: deletions may have been missed, so reload the thread.
+        // An empty result is ignored here because fetchMessagesForMatch also returns [] on network errors.
+        onResync: () => {
+          fetchMessagesForMatch(matchId, user.id).then((msgs) => {
+            if (cancelled || msgs.length === 0) return;
+            setMessages(reconcileFetched(msgs, deletionContext()));
+          });
+        },
+      },
     );
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
   }, [matchId, user]);
+
+  const upsertSentMessage = (sent: Message) => {
+    // Realtime may already have delivered this row; replace it (the sent copy carries the signed media URL).
+    setMessages((prev) => insertChronologically(prev, sent));
+  };
+
+  const openMessageActions = (message: Message) => {
+    if (!canDeleteForMe(message)) return;
+    setMenuVisible(false);
+    setActionTarget(message);
+  };
+
+  const runDelete = async (scope: DeleteScope, target: Message): Promise<void> => {
+    const id = target.id;
+    if (!user || inFlightDeletesRef.current.has(id)) return;
+    inFlightDeletesRef.current.add(id);
+
+    // What to restore if the server refuses. Prefer the live copy: its read status may have changed.
+    const snapshot = messagesRef.current.find((m) => m.id === id) ?? target;
+
+    // 1) Update the chat immediately.
+    if (scope === "me") {
+      hiddenIdsRef.current.add(id);
+      setMessages((prev) => removeMessage(prev, id));
+    } else {
+      const optimisticAt = new Date().toISOString();
+      tombstonesRef.current.set(id, optimisticAt);
+      setMessages((prev) => applyTombstone(prev, id, optimisticAt));
+    }
+
+    // 2) Ask the server (retries only on connectivity trouble; both RPCs are idempotent).
+    const res = await deleteMessage(scope, id);
+    inFlightDeletesRef.current.delete(id);
+
+    if (res.ok) {
+      if (scope === "everyone") {
+        confirmedTombstonesRef.current.add(id);
+        if (res.deletedAt) tombstonesRef.current.set(id, res.deletedAt);
+      }
+      refreshMatches();
+      return;
+    }
+
+    // The message no longer exists for this user (for example the match was removed): keep it gone.
+    if (res.reason === "message_not_found") {
+      if (scope === "everyone") {
+        tombstonesRef.current.delete(id);
+        setMessages((prev) => removeMessage(prev, id));
+      }
+      refreshMatches();
+      Alert.alert("Message unavailable", res.message);
+      return;
+    }
+
+    // 3) Roll back the optimistic change, unless the server already confirmed a tombstone meanwhile.
+    if (scope === "me") {
+      hiddenIdsRef.current.delete(id);
+      const knownDeletedAt = tombstonesRef.current.get(id);
+      setMessages((prev) =>
+        insertChronologically(prev, knownDeletedAt ? tombstoneMessage(snapshot, knownDeletedAt) : snapshot),
+      );
+    } else if (!confirmedTombstonesRef.current.has(id)) {
+      tombstonesRef.current.delete(id);
+      setMessages((prev) => insertChronologically(prev, snapshot));
+    }
+
+    const title = scope === "me" ? "Couldn't delete message" : "Couldn't delete for everyone";
+    if (res.retryable) {
+      Alert.alert(title, res.message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Try again", onPress: () => void runDelete(scope, snapshot) },
+      ]);
+    } else {
+      Alert.alert(title, res.message);
+    }
+  };
 
   const handleSend = async () => {
     const text = inputText.trim();
@@ -147,7 +289,7 @@ export default function ChatDetailScreen() {
     setSending(false);
 
     if (res.success && res.message) {
-      setMessages((prev) => [...prev, res.message!]);
+      upsertSentMessage(res.message);
       refreshMatches();
       flatListRef.current?.scrollToEnd({ animated: true });
     } else {
@@ -182,7 +324,7 @@ export default function ChatDetailScreen() {
     if (!user || !matchId) return;
     const res = await sendChatMessage(matchId, user.id, gameText);
     if (res.success && res.message) {
-      setMessages((prev) => [...prev, res.message!]);
+      upsertSentMessage(res.message);
       refreshMatches();
       flatListRef.current?.scrollToEnd({ animated: true });
     }
@@ -248,7 +390,7 @@ export default function ChatDetailScreen() {
     setSending(false);
 
     if (res.success && res.message) {
-      setMessages((prev) => [...prev, res.message!]);
+      upsertSentMessage(res.message);
       refreshMatches();
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } else {
@@ -457,6 +599,7 @@ export default function ChatDetailScreen() {
           renderItem={({ item, index }) => (
             <ChatBubble
               message={item}
+              onLongPress={openMessageActions}
               showDayHeader={
                 index === 0 ||
                 new Date(messages[index - 1]!.at).toDateString() !==
@@ -606,6 +749,39 @@ export default function ChatDetailScreen() {
         partnerName={otherUser.name}
         onClose={() => setShowGamesModal(false)}
         onSendGameAnswer={handleSendGameAnswer}
+      />
+
+      {/* Message actions: Delete for me / Delete for everyone */}
+      <MessageActionSheet
+        visible={actionTarget !== null}
+        canDeleteForEveryone={
+          !!actionTarget && canDeleteMessageForEveryone(actionTarget, user?.id)
+        }
+        onDeleteForMe={() => {
+          const target = actionTarget;
+          setActionTarget(null);
+          if (target) void runDelete("me", target);
+        }}
+        onDeleteForEveryone={() => {
+          const target = actionTarget;
+          setActionTarget(null);
+          if (target) setConfirmEveryone(target);
+        }}
+        onClose={() => setActionTarget(null)}
+      />
+
+      <Dialog
+        visible={confirmEveryone !== null}
+        title="Delete for everyone?"
+        body={`This message will be removed for you and ${otherUser.name}. This can't be undone.`}
+        confirmText="Delete for everyone"
+        danger
+        onConfirm={() => {
+          const target = confirmEveryone;
+          setConfirmEveryone(null);
+          if (target) void runDelete("everyone", target);
+        }}
+        onCancel={() => setConfirmEveryone(null)}
       />
 
       {/* Action Dialogs */}

@@ -10,6 +10,28 @@ import {
 import { DEMO_PROFILES } from "./discovery";
 import { pushNotificationToInbox } from "./notifications";
 import { generateUUID, isValidUUID } from "../utils/validation";
+import { mapMessageRow } from "../utils/messageState";
+
+/**
+ * Unread = messages from the other person that are not read and not deleted for everyone.
+ * Rows the user deleted for themselves are already excluded by the `members read messages` policy.
+ */
+async function countUnreadMessages(matchId: string, currentUserId: string): Promise<number> {
+  const base = () =>
+    supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("match_id", matchId)
+      .neq("sender", currentUserId)
+      .is("read_at", null);
+
+  const filtered = await base().is("deleted_at", null);
+  if (!filtered.error) return filtered.count || 0;
+
+  // `deleted_at` does not exist until the Phase 3A migration is applied; keep the old count rather than showing 0.
+  const legacy = await base();
+  return legacy.count || 0;
+}
 
 export async function fetchUserMatches(currentUserId: string): Promise<MatchItem[]> {
   try {
@@ -80,7 +102,10 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
         const last = lastMsgs?.[0];
         let lastMessage: Message | undefined;
 
-        if (last) {
+        if (last?.deleted_at) {
+          // Deleted for everyone: a content-free tombstone, never a media URL.
+          lastMessage = mapMessageRow(last, currentUserId);
+        } else if (last) {
           lastMessage = {
             id: last.id,
             matchId: m.id,
@@ -100,20 +125,14 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
           };
         }
 
-        // Count unread
-        const { count } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("match_id", m.id)
-          .neq("sender", currentUserId)
-          .is("read_at", null);
+        const unreadCount = await countUnreadMessages(m.id, currentUserId);
 
         items.push({
           id: m.id,
           otherUser: otherProfile,
           createdAt: m.created_at,
           lastMessage,
-          unreadCount: count || 0,
+          unreadCount,
         });
       }
     }
@@ -154,35 +173,22 @@ export async function fetchMessagesForMatch(
 
     if (rows.length === 0) return [];
 
+    // Deleted-for-everyone rows are never signed: they have no media, and a stale path must not get a new URL.
+    const live = rows.filter((m: any) => !m.deleted_at);
     const mediaPaths = [
-      ...rows.map((m: any) => m.image_path),
-      ...rows.map((m: any) => m.audio_path),
+      ...live.map((m: any) => m.image_path),
+      ...live.map((m: any) => m.audio_path),
     ].filter(Boolean) as string[];
 
     const signed = await getSignedUrls(
       "chat",
       mediaPaths.filter((path) => {
         // Do not pre-sign unviewed View Once images for recipient; require explicit openViewOnceMessage
-        const msg = rows.find((r) => r.image_path === path);
+        const msg = live.find((r: any) => r.image_path === path);
         return !(msg?.is_view_once && msg?.sender !== currentUserId && !msg?.viewed_at);
       }),
     );
-    return rows.map((m: any) => ({
-      id: m.id,
-      matchId: m.match_id,
-      sender: m.sender,
-      from: m.sender === currentUserId ? "me" : "them",
-      text: m.body,
-      at: new Date(m.created_at).getTime(),
-      status: m.read_at ? "read" : "sent",
-      image: m.image_path ? signed[m.image_path] : undefined,
-      audio: m.audio_path ? signed[m.audio_path] : undefined,
-      audioDurationSec: m.audio_duration_sec,
-      messageType:
-        m.message_type || (m.audio_path ? "voice" : m.image_path ? "image" : "text"),
-      isViewOnce: !!m.is_view_once,
-      viewedAt: m.viewed_at ?? null,
-    }));
+    return rows.map((m: any) => mapMessageRow(m, currentUserId, signed));
   } catch {
     return [];
   }
@@ -423,11 +429,24 @@ export async function markChatRead(matchId: string, currentUserId: string): Prom
   }
 }
 
+export interface MatchMessageHandlers {
+  /** A message of this match was deleted for everyone (Realtime UPDATE carrying `deleted_at`). */
+  onMessageDeleted?: (event: { id: string; deletedAt: string }) => void;
+  /**
+   * The channel re-subscribed after a drop. Events (including deletions) may have been missed meanwhile,
+   * so the caller should refetch. Not called for the first subscription.
+   */
+  onResync?: () => void;
+}
+
 export function subscribeToMatchMessages(
   matchId: string,
-  onMessageReceived: (msg: any) => void,
+  onMessageReceived: (msg: Message) => void,
   currentUserId?: string,
+  handlers?: MatchMessageHandlers,
 ) {
+  let hasSubscribed = false;
+
   return supabase
     .channel(`match_${matchId}`)
     .on(
@@ -440,10 +459,11 @@ export function subscribeToMatchMessages(
       },
       (payload) => {
         const msg = payload.new;
-        onMessageReceived(msg);
+        if (!msg) return;
+        onMessageReceived(mapMessageRow(msg, currentUserId ?? ""));
 
         // If the incoming message is from the other user, dispatch to in-app notifications
-        if (currentUserId && msg && msg.sender !== currentUserId) {
+        if (currentUserId && msg.sender !== currentUserId) {
           pushNotificationToInbox(currentUserId, {
             kind: "message",
             title: "New Message",
@@ -460,5 +480,25 @@ export function subscribeToMatchMessages(
         }
       },
     )
-    .subscribe();
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+        filter: `match_id=eq.${matchId}`,
+      },
+      (payload) => {
+        // Only tombstones are handled. read_at / viewed_at changes are deliberately ignored here:
+        // read receipts are masked by get_match_messages for non-Plus users and Realtime would bypass that.
+        const row: any = payload.new;
+        if (!row?.id || !row.deleted_at) return;
+        handlers?.onMessageDeleted?.({ id: row.id, deletedAt: row.deleted_at });
+      },
+    )
+    .subscribe((status) => {
+      if (status !== "SUBSCRIBED") return;
+      if (hasSubscribed) handlers?.onResync?.();
+      hasSubscribed = true;
+    });
 }
