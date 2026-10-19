@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from "lucide-react-native";
+import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
+import { useAuth } from "../../src/context/AuthContext";
 import { useCallController } from "../../src/hooks/useCallController";
 import { isCallingAvailable } from "../../src/services/callMedia";
 import {
@@ -27,6 +28,9 @@ export default function CallScreen() {
     type?: CallType;
   }>();
   const { matches } = useMilo();
+  const { user } = useAuth();
+  const [recipientId, setRecipientId] = useState<string | null>(null);
+  const [responding, setResponding] = useState(false);
   const [callId, setCallId] = useState(routeCallId);
   const [status, setStatus] = useState<CallStatus | "creating">(
     routeCallId ? "pending" : "creating",
@@ -51,6 +55,7 @@ export default function CallScreen() {
     }
     setStatus(call.status);
     setCallKind(call.call_type);
+    setRecipientId(call.recipient_id);
     setFreeSeconds(call.free_seconds_remaining);
   }, [callId]);
 
@@ -68,6 +73,7 @@ export default function CallScreen() {
           }
           setStatus(call.status);
           setCallKind(call.call_type);
+          setRecipientId(call.recipient_id);
           setFreeSeconds(call.free_seconds_remaining);
         })
         .catch((cause) => {
@@ -163,6 +169,42 @@ export default function CallScreen() {
     router.back();
   };
 
+  const isRecipient = Boolean(user?.id && recipientId && user.id === recipientId);
+
+  // Recipient actions. The server validates the recipient and the pending state atomically; the screen
+  // only reflects the result. Answering is refused up front when the build cannot connect a call.
+  const handleAnswer = async () => {
+    if (!callId || responding) return;
+    if (!callingAvailable) {
+      setError("Calling is not available yet, so this call was not answered.");
+      return;
+    }
+    setResponding(true);
+    try {
+      setStatus(await transitionVideoCall(callId, "accept"));
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not answer the call.");
+      await refreshCall().catch(() => undefined);
+    } finally {
+      setResponding(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    if (!callId || responding) return;
+    setResponding(true);
+    try {
+      setStatus(await transitionVideoCall(callId, "decline"));
+      router.back();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not decline the call.");
+      await refreshCall().catch(() => undefined);
+    } finally {
+      setResponding(false);
+    }
+  };
+
   if (!partner) {
     return (
       <SafeAreaView style={styles.container}>
@@ -182,7 +224,9 @@ export default function CallScreen() {
     status === "creating"
       ? "Creating a secure call invitation…"
       : status === "pending"
-        ? "Invitation sent. Waiting for the other person to accept."
+        ? isRecipient
+          ? "Incoming call. Answer or decline."
+          : "Invitation sent. Waiting for the other person to accept."
         : status === "accepted"
           ? !callingAvailable
             ? "Invitation accepted. A live audio/video provider is not configured in this build."
@@ -248,7 +292,31 @@ export default function CallScreen() {
             )}
           </View>
         )}
-        {!isTerminal && status !== "creating" && (
+        {status === "pending" && isRecipient && (
+          <View style={styles.mediaControls}>
+            <TouchableOpacity
+              style={styles.endCallBtn}
+              disabled={responding}
+              accessibilityRole="button"
+              accessibilityLabel="Decline call"
+              onPress={() => void handleDecline()}
+            >
+              <PhoneOff size={22} color={Colors.destructiveForeground} />
+              <Text style={styles.endCallText}>Decline</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.endCallBtn, { backgroundColor: Colors.success }]}
+              disabled={responding}
+              accessibilityRole="button"
+              accessibilityLabel="Answer call"
+              onPress={() => void handleAnswer()}
+            >
+              <Phone size={22} color={Colors.successForeground} />
+              <Text style={styles.endCallText}>Answer</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {!isTerminal && status !== "creating" && !(status === "pending" && isRecipient) && (
           <TouchableOpacity style={styles.endCallBtn} onPress={() => void handleEnd()}>
             <PhoneOff size={22} color={Colors.destructiveForeground} />
             <Text style={styles.endCallText}>

@@ -8,6 +8,7 @@ import { resolveNotificationDestination } from "../../services/notificationPolic
 import { checkLikesAccessRaw } from "../../services/likes";
 import { resolveLikeTapRoute } from "../../services/likesPolicy";
 import { isValidUUID } from "../../utils/validation";
+import { useIncomingCallController } from "../../context/IncomingCallContext";
 
 export function NotificationResponseHandler() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export function NotificationResponseHandler() {
   const navigationReady = Boolean(useRootNavigationState()?.key);
   const { user } = useAuth();
   const handled = useRef(new Set<string>());
+  const callController = useIncomingCallController();
 
   useEffect(() => {
     if (!user || !navigationReady) return;
@@ -29,6 +31,19 @@ export function NotificationResponseHandler() {
       if (!data || typeof data !== "object") return;
       const category = data.category;
       const matchId = data.matchId;
+      if (category === "call") {
+        // Incoming call: Answer / Decline / tap. The controller asks the server about the call (it never
+        // trusts this payload) and is started here too, because a cold-start response can reach this
+        // effect before the provider's own effect has run. start() is a no-op for the same account.
+        if (!callController) return;
+        await callController.start(user.id);
+        if (!active) return;
+        await callController.handleNotificationResponse({
+          actionIdentifier: response.actionIdentifier,
+          data,
+        });
+        return;
+      }
       if (category === "like") {
         // Phase 2: never trust the push payload or a cached tier; ask the server on every tap.
         const route = await resolveLikeTapRoute(checkLikesAccessRaw);
@@ -73,7 +88,7 @@ export function NotificationResponseHandler() {
       active = false;
       subscription.remove();
     };
-  }, [router, user, navigationReady]);
+  }, [router, user, navigationReady, callController]);
 
   return null;
 }

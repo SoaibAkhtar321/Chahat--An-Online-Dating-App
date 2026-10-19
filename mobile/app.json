@@ -9,14 +9,14 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-  "image": "./assets/splash-icon.png",
-  "resizeMode": "contain",
-  "backgroundColor": "#FAF7F5",
-  "dark": {
-    "image": "./assets/splash-icon.png",
-    "backgroundColor": "#161014"
-  }
-},
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF7F5",
+      "dark": {
+        "image": "./assets/splash-icon.png",
+        "backgroundColor": "#161014"
+      }
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.chahat.dating"
@@ -34,7 +34,11 @@
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {

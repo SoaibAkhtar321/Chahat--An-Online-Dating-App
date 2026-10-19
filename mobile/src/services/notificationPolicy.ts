@@ -27,8 +27,11 @@ export function resolveNotificationDestination(
  * (the message or match is visible on screen). Everything else is presented normally.
  */
 export function shouldPresentInForeground(data: unknown, activeMatchId: string | null): boolean {
-  if (!activeMatchId || !data || typeof data !== "object") return true;
+  if (!data || typeof data !== "object") return true;
   const { category, matchId } = data as { category?: unknown; matchId?: unknown };
+  // The in-app incoming-call screen already rings; a system notification and sound would double-ring.
+  if (category === "call") return false;
+  if (!activeMatchId) return true;
   if (
     (category === "message" || category === "match") &&
     typeof matchId === "string" &&

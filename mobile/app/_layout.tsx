@@ -12,6 +12,8 @@ import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { legalGateRedirect } from "../src/utils/legalGate";
 import { NotificationResponseHandler } from "../src/components/notifications/NotificationResponseHandler";
 import { MiloProvider } from "../src/context/MiloContext";
+import { IncomingCallProvider } from "../src/context/IncomingCallContext";
+import { IncomingCallOverlay } from "../src/components/calls/IncomingCallOverlay";
 import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 
 // Show a visible error screen (with retry) instead of a blank screen when a route throws
@@ -89,8 +91,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <MiloProvider>
-            <NotificationResponseHandler />
-            <RootNavigation />
+            <IncomingCallProvider>
+              <NotificationResponseHandler />
+              <RootNavigation />
+              <IncomingCallOverlay />
+            </IncomingCallProvider>
           </MiloProvider>
         </AuthProvider>
       </ThemeProvider>

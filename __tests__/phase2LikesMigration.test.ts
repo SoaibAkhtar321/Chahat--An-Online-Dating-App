@@ -6,9 +6,12 @@ const read = (p: string) => fs.readFileSync(path.join(root, p), "utf8");
 const sql = read("supabase/migrations/20260101003800_phase2_premium_likes_flow.sql");
 
 describe("Phase 2 migration (static checks; behaviour is covered by supabase/tests/57_push_phase2_likes.sql)", () => {
-  it("sorts after every earlier migration", () => {
+  it("sorts after every earlier migration (later phases may follow it)", () => {
     const files = fs.readdirSync(path.join(root, "supabase/migrations")).sort();
-    expect(files[files.length - 1]).toBe("20260101003800_phase2_premium_likes_flow.sql");
+    const phase2 = "20260101003800_phase2_premium_likes_flow.sql";
+    expect(files.indexOf(phase2)).toBeGreaterThan(-1);
+    expect(files.slice(files.indexOf(phase2) + 1).every((f) => f > phase2)).toBe(true);
+    expect(files.filter((f) => f < phase2).length).toBe(files.indexOf(phase2));
   });
   it("drops the raw RLS policy so received likes cannot be read directly", () => {
     expect(sql).toMatch(/DROP POLICY IF EXISTS "paid members read received likes" ON public\.swipes/);

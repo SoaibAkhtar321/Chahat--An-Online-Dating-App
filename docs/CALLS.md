@@ -112,6 +112,81 @@ All transitions happen in the database under a row lock (`transition_video_call`
 At most 3 unanswered invitations per caller per match and 6 per caller overall in 10 minutes
 (`call_create_limit_per_match_10min`, `call_create_limit_per_10min`). Accepted calls do not count.
 
+## Android incoming calls (Phase 3)
+
+Migration `20260101003900_phase3_incoming_call_actions.sql` (apply after `...003800`; **not applied to any hosted project**).
+It changes one function, `transition_video_call`: a repeated action by the same participant on a call already in the
+requested state (`decline`/`accept` by the recipient, `cancel` by the caller, `end` by either) now returns
+`{success: true, status, replayed: true}` instead of raising. No row update, no second `call_events` row, no second
+charge. Everything else about the function (row lock, recipient-only checks, expiry, allowance, billing) is unchanged.
+
+### What happens when a call arrives
+
+| App state | What the recipient gets | Where it is handled |
+|---|---|---|
+| Open | In-app incoming-call screen with Answer/Decline and a vibrating ring. A system notification is deliberately **not** shown (`shouldPresentInForeground`). | `IncomingCallContext` + `IncomingCallOverlay` |
+| Background, process alive | Heads-up notification on the `calls` channel with **Answer** (opens the app) and **Decline** buttons. | Android + `NotificationResponseHandler` |
+| Process killed (not force-stopped) | Same notification, delivered by FCM through Expo push. **Answer** launches the app, which reads the launch response and answers. | `getLastNotificationResponseAsync` |
+| Locked | Same notification with the lock-screen content hidden (`lockscreenVisibility: PRIVATE`). | channel config |
+
+Answer, Decline and a tap on the body all go through `incomingCallController`, which calls `transition_video_call`
+(server-validated recipient, atomic) and then `get_call_sync` to learn what really happened. The push payload is only a hint:
+it carries `callId`, `matchId` and `callType` (never a caller name, token, room or credential) and nothing in it decides
+whether a call may be answered. Tokens for joining come from `issue-call-token` as before.
+
+Signaling: `call_events` Realtime subscription filtered to the signed-in user, with `get_call_sync()` on start, on every
+Realtime (re)subscription, on app foreground and when a call push is received in the foreground. Events with
+`id <= last_event_id` and events for already-closed calls are ignored, so duplicate pushes/events never ring twice.
+The ring stops and the notification is dismissed on cancel, decline, answer elsewhere, expiry (server clock) and sign-out.
+
+### Files
+
+| Piece | File |
+|---|---|
+| Channel/category names, payload parsing, action mapping (pure) | `mobile/src/services/callNotificationPolicy.ts` |
+| Snapshot/event reducer, expiry, "which call rings" (pure) | `mobile/src/services/incomingCallState.ts` |
+| Answer/Decline/sync/sign-out state machine (injected side effects) | `mobile/src/services/incomingCallController.ts` |
+| Channel + Answer/Decline category, dismiss, in-app vibration | `mobile/src/services/callNotifications.ts` |
+| `get_call_sync` + Realtime wiring | `mobile/src/services/callSignaling.ts` |
+| Provider, hook, overlay | `mobile/src/context/IncomingCallContext.tsx`, `mobile/src/components/calls/IncomingCallOverlay.tsx` |
+| Recipient Answer/Decline on the call screen | `mobile/app/call/[id].tsx` |
+| Server payload (channel `calls`, category `incoming_call`, ttl 60 s) | `supabase/functions/dispatch-push/policy.ts` |
+
+### Android build, permissions and EAS
+
+- No native module, config plugin or prebuild change was added: this uses `expo-notifications` already in the build.
+  A new development/preview build is needed only because the JavaScript changed (OTA is not configured here).
+- Manifest: `android.permission.VIBRATE` was added to `app.json` (normal permission, no prompt; used for the in-app ring).
+  `POST_NOTIFICATIONS` (Android 13+ runtime permission) is already merged by `expo-notifications`; the existing
+  push registration asks for it once, after the in-app consent notice. **Not** requested: `USE_FULL_SCREEN_INTENT`,
+  `SYSTEM_ALERT_WINDOW`, foreground-service or telecom permissions.
+- Push prerequisites are unchanged (`docs/PUSH_SETUP.md`): Firebase `google-services.json`, FCM V1 key in EAS, deployed
+  `dispatch-push` (**redeploy it**: `policy.ts` changed), `EXPO_PUBLIC_FEATURE_PUSH=true`. Calls additionally need
+  `EXPO_PUBLIC_FEATURE_CALLS=true` and a registered media adapter (still missing, see below).
+- The `calls` channel is created at sign-in. Android freezes a channel's sound/importance once created, so changing
+  those later needs a new channel id. A user who muted "Incoming calls" in system settings will not hear it.
+
+### Android limits (read before promising anything)
+
+- **Force-stop:** if the user force-stops Chahat in Android Settings, Android blocks all background work and FCM delivery
+  until the app is opened manually. Nothing here can ring in that state, and it is not guaranteed anywhere else either:
+  doze, battery optimisation, OEM task killers and Do Not Disturb can delay or silence a push.
+- **No full-screen call UI, no looping ringtone when the app is closed.** Expo's notification API cannot set a
+  full-screen intent or loop a ringtone. The channel plays Android's default notification sound once and vibrates; the
+  in-app screen only appears when the user opens the app (Answer button or tapping the notification). A true
+  lock-screen call experience needs native Android code (a `FirebaseMessagingService` posting a `fullScreenIntent` or
+  a ConnectionService/foreground-service flow), a config plugin and a Google Play "full-screen intent" declaration.
+  That was deliberately not attempted without an Android SDK/device to build and verify it.
+- **Decline from a dead process is best-effort.** The Decline button does not open the app. If the process is dead,
+  expo-notifications can only hand the tap to JavaScript the next time the app starts; until then the server still
+  sees a pending call, which times out after 60 s (the caller sees "no answer", not "declined"). When the app is
+  alive, Decline reaches the server immediately.
+- **A cancelled/expired call's notification can linger** while the process is dead: there is no cancel push. Tapping
+  it is handled gracefully ("This call is no longer available") and the notification is cleared. The push TTL (60 s)
+  stops FCM from delivering it late.
+- **Calls cannot connect yet.** No media adapter ships (`isCallingAvailable()` is false), so this build neither rings
+  nor answers: the controller refuses to accept a call it cannot join and says so. Decline still works.
+
 ## Agora provider (server)
 `_shared/agoraProvider.ts` implements `CallProvider`; `_shared/agoraTokenBuilder.ts` wraps `npm:agora-token@2.0.5`
 (RTC token, user-account form, publisher role, at most 120 s). Channel name is `call_<call id>`, account is the verified
@@ -127,8 +202,8 @@ Agora console: create the project with the App Certificate enabled (secured mode
 for `call_events`.
 
 ## Known limitations
-- Mobile Agora adapter, Realtime subscription, `get_call_sync` wiring, call-push tap routing
-  (`resolveNotificationDestination` returns null for `call`) and an Android ringing channel are not implemented.
+- Mobile Agora adapter is not implemented. The Realtime subscription, `get_call_sync` wiring, call-push tap/Answer/Decline
+  routing and the Android ringing channel were added in Android Phase 3 (see above).
 - `is_blocked_pair()` returns false when `auth.uid()` is NULL (service role). The existing like, match and message push
   paths use it, so they do not suppress for blocked pairs; the call path uses its own direct check. Not changed here.
 - Unmetered calls are capped by duration only; there is no media heartbeat, so an abandoned unmetered call lives until the cap.

@@ -9,9 +9,23 @@ describe("call push payload", () => {
       callId: CALL, matchId: MATCH, callType: "video", token: "secret", roomId: "r",
     });
     expect(p.ttl).toBe(60);
+    expect(p.title).toBe("Incoming video call");
+    expect(p.data).toEqual({
+      category: "call", matchId: MATCH, callId: CALL, callType: "video", notificationId: "n1",
+    });
+    // Phase 3: ringing push uses the dedicated channel and the Answer/Decline action category.
+    expect(p.channelId).toBe("calls");
+    expect(p.categoryId).toBe("incoming_call");
+    expect(p.priority).toBe("high");
+    expect(JSON.stringify(p)).not.toMatch(/secret|roomId|token\":/);
+  });
+  it("never forwards an unknown call type or any caller identity", () => {
+    const p = buildPushPayload("ExponentPushToken[abc]", "n1", "call", {
+      callId: CALL, matchId: MATCH, callType: "<script>", callerName: "Asha", callerId: "u1",
+    }, { senderName: "Asha", preview: "hi" });
     expect(p.title).toBe("Incoming call");
     expect(p.data).toEqual({ category: "call", matchId: MATCH, callId: CALL, notificationId: "n1" });
-    expect(JSON.stringify(p)).not.toMatch(/secret|roomId|callType/);
+    expect(JSON.stringify(p)).not.toMatch(/Asha|u1|script|hi\b/);
   });
   it("drops malformed ids instead of forwarding them", () => {
     const p = buildPushPayload("ExponentPushToken[abc]", "n1", "call", { callId: "x", matchId: "y" });
@@ -21,5 +35,7 @@ describe("call push payload", () => {
     const p = buildPushPayload("ExponentPushToken[abc]", "n1", "message", { matchId: MATCH, callId: CALL });
     expect(p.ttl).toBe(3600);
     expect(p.data).toEqual({ category: "message", matchId: MATCH, notificationId: "n1" });
+    expect(p.channelId).toBe("default");
+    expect(p.categoryId).toBeUndefined();
   });
 });

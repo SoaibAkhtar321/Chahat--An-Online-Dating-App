@@ -65,3 +65,8 @@ Video-call allowance (migration `20260101003200`): a daily allowance that resets
 - The `paid members read received likes` RLS policy on `public.swipes` was dropped, so there is no direct
   table path to incoming likes for any client role.
 - `_like_is_valid(from, to)` is the single validity rule (internal, no client or service-role grant).
+
+
+## Phase 4 pointers
+
+Migrations after `...003700`: `003800` (Premium likes), `003900` (idempotent call actions), `004000` (revoke anon on notification_preferences). None applied to any hosted project. Verified vs unverified items, blockers, env vars and the device checklist: `docs/RELEASE_READINESS.md`.

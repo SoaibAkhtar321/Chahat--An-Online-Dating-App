@@ -9,9 +9,13 @@ export interface PushPayload {
     category: NotificationCategory;
     matchId?: string;
     callId?: string;
+    callType?: "audio" | "video";
     notificationId: string;
   };
-  channelId: "default";
+  // Calls use their own high-importance channel and the Answer/Decline action category the app registers
+  // (mobile/src/services/callNotificationPolicy.ts keeps these names in sync).
+  channelId: "default" | "calls";
+  categoryId?: "incoming_call";
   priority: "high";
   ttl: number;
 }
@@ -73,6 +77,15 @@ export function buildPushPayload(
       ? routeData.matchId
       : undefined;
 
+  // Only the two known call types are ever forwarded; anything else is dropped, never echoed.
+  const callType =
+    category === "call" && (routeData.callType === "audio" || routeData.callType === "video")
+      ? routeData.callType
+      : undefined;
+  if (category === "call" && callType) {
+    copy.title = callType === "video" ? "Incoming video call" : "Incoming audio call";
+  }
+
   return {
     to: token,
     sound: "default",
@@ -82,9 +95,11 @@ export function buildPushPayload(
       category,
       ...(matchId ? { matchId } : {}),
       ...(callId ? { callId } : {}),
+      ...(callType ? { callType } : {}),
       notificationId,
     },
-    channelId: "default",
+    channelId: category === "call" ? "calls" : "default",
+    ...(category === "call" ? { categoryId: "incoming_call" as const } : {}),
     priority: "high",
     // A ringing push is worthless once the invitation expires (60 s), so the provider must drop it.
     ttl: category === "call" ? 60 : 60 * 60,

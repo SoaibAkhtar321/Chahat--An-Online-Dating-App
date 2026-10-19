@@ -8,6 +8,9 @@ INSERT INTO auth.users(id, email) VALUES
   ('57575757-0000-0000-0000-0000000000b1', 'p2-free@x'),
   ('57575757-0000-0000-0000-0000000000b2', 'p2-premium@x'),
   ('57575757-0000-0000-0000-0000000000c1', 'p2-third@x');
+INSERT INTO public.consent_records (user_id, purpose, notice_version, decision, method) VALUES
+  ('57575757-0000-0000-0000-0000000000b1', 'push_notifications', '2026-10-18', 'granted', 'in_app_notice'),
+  ('57575757-0000-0000-0000-0000000000b2', 'push_notifications', '2026-10-18', 'granted', 'in_app_notice');
 CALL public.test_complete_profile('57575757-0000-0000-0000-0000000000a1', 'Liker One', '1995-01-01', 'man', 'woman');
 CALL public.test_complete_profile('57575757-0000-0000-0000-0000000000a2', 'Liker Two', '1995-01-01', 'man', 'woman');
 CALL public.test_complete_profile('57575757-0000-0000-0000-0000000000b1', 'Free Recipient', '1995-01-01', 'woman', 'man');
@@ -129,10 +132,10 @@ INSERT INTO public.t_results SELECT 'p2: reciprocal like enqueues no like event 
 INSERT INTO public.t_results SELECT 'p2: reciprocal pair is not a valid incoming like',
   NOT public._like_is_valid('57575757-0000-0000-0000-0000000000c1','57575757-0000-0000-0000-0000000000b2'), 'mutual';
 
-UPDATE public.profiles SET status = 'suspended' WHERE id = '57575757-0000-0000-0000-0000000000a2';
+SET request.jwt.claim.role='service_role'; UPDATE public.profiles SET status = 'suspended' WHERE id = '57575757-0000-0000-0000-0000000000a2'; RESET request.jwt.claim.role;
 INSERT INTO public.t_results SELECT 'p2: suspended liker is invalid',
   NOT public._like_is_valid('57575757-0000-0000-0000-0000000000a2','57575757-0000-0000-0000-0000000000b1'), 'suspended';
-UPDATE public.profiles SET status = 'active' WHERE id = '57575757-0000-0000-0000-0000000000a2';
+SET request.jwt.claim.role='service_role'; UPDATE public.profiles SET status = 'active' WHERE id = '57575757-0000-0000-0000-0000000000a2'; RESET request.jwt.claim.role;
 
 -- Blocked pair at insert time never enqueues
 INSERT INTO public.blocks (blocker, blocked)

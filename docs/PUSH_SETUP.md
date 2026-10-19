@@ -62,3 +62,14 @@ Emulators cannot receive real pushes.
   navigate. The tap never trusts the push payload or a cached tier.
 - Migration: `20260101003800_phase2_premium_likes_flow.sql` (apply after `...003700`). Not yet applied
   to any hosted project.
+
+## Phase 3: incoming-call ringing push (Android)
+
+- Calls reuse the same outbox/dispatcher. The payload goes out on channel `calls` with category `incoming_call`
+  (Answer/Decline buttons), priority high, TTL 60 s, generic copy ("Incoming video call" / "Someone is calling you on
+  Chahat."), and `data` = `callId`, `matchId`, `callType` only.
+- **Redeploy `dispatch-push`** (policy.ts changed): `supabase functions deploy dispatch-push --no-verify-jwt`.
+- Apply migration `20260101003900_phase3_incoming_call_actions.sql` after `...003800` (not yet applied anywhere).
+- Delivery is suppressed server-side if the call is no longer pending/unexpired, the pair is blocked, or the
+  recipient turned call alerts off; one push per call id (unique outbox key).
+- Limits (force-stop, no full-screen UI, Decline from a dead process): `docs/CALLS.md`, "Android limits".
