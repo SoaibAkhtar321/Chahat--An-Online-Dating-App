@@ -31,6 +31,7 @@ Set with `supabase secrets set NAME=value` against the target project. `SUPABASE
 | `PUBSUB_PUSH_AUDIENCE` | google-play-notifications | Audience the Pub/Sub push subscription signs for |
 | `PUBSUB_PUSH_SERVICE_ACCOUNT_EMAIL` | google-play-notifications | Service account that signs the Pub/Sub push |
 | `PUSH_DISPATCH_SECRET` | dispatch-push | Shared secret the scheduler sends to authorize dispatch |
+| `MEDIA_CLEANUP_SECRET` | cleanup-chat-media | Shared secret (`x-cleanup-secret` header) the scheduler sends to authorize chat-media cleanup |
 | `GOOGLE_VISION_API_KEY` | moderate-photo | Image moderation |
 | `CALL_PROVIDER` | issue-call-token | Name of the registered call adapter to use. Unset means calling is reported as not configured. No adapter ships yet |
 | `COIN_PURCHASE_ADAPTER` | (future coin purchase function) | Name of the registered coin purchase adapter. Unset means coin purchases are not configured. No adapter ships yet; nothing reads it in production today |
