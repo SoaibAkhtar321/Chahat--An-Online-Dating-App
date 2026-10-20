@@ -25,6 +25,19 @@ jest.mock("../mobile/src/components/ui/Chip", () => {
     ),
   };
 });
+jest.mock("../mobile/src/services/supabase", () => ({
+  isSupabaseConfigured: () => true,
+  supabase: { rpc: jest.fn() },
+}));
+jest.mock("expo-location", () => ({
+  Accuracy: { Balanced: 3 },
+  getForegroundPermissionsAsync: jest.fn(),
+  requestForegroundPermissionsAsync: jest.fn(),
+  hasServicesEnabledAsync: jest.fn(),
+  getCurrentPositionAsync: jest.fn(),
+  getLastKnownPositionAsync: jest.fn(),
+  reverseGeocodeAsync: jest.fn(),
+}));
 jest.mock("../mobile/src/services/consent", () => ({ ensureConsent: (...a: unknown[]) => mockConsent(...a) }));
 jest.mock("../mobile/src/services/locationSelection", () => ({
   ...jest.requireActual("../mobile/src/services/locationSelection"),
@@ -87,7 +100,8 @@ describe("LocationPicker", () => {
     mockLoad.mockResolvedValue(sel({ city: null }));
     const { r } = await mount();
     expect(texts(r)).toContain("No city selected yet");
-    expect(texts(r).join(" ")).not.toMatch(/Mumbai/);
+    // "Mumbai" legitimately appears as a popular-city chip; what must never appear is a selected city.
+    expect(texts(r).join(" ")).not.toMatch(/Selected city/);
   });
 
   it("a popular-city chip uses the same manual selection path as search", async () => {
