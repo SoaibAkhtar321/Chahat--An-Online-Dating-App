@@ -44,7 +44,7 @@ The app faithfully preserves the original design identity: warm off-white canvas
 │   ├── verification/index.tsx  # Camera selfie capture & review submission
 │   ├── notifications/index.tsx # In-app notification center
 │   ├── premium/index.tsx       # Free vs Plus vs Pro transparency disclosure
-│   ├── calls/index.tsx         # Audio/video calls rules & log
+│   ├── calls/index.tsx         # Video calls rules & log
 │   ├── call/[id].tsx           # Live call interface with mute/camera toggles
 │   ├── explore/index.tsx       # Passions & interest categories
 │   └── legal/

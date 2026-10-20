@@ -64,7 +64,7 @@ rate-limit table. Idempotency: the migration is safe to re-apply (checked locall
 registered. With the shipped build both are false, so:
 
 - chat call buttons are hidden;
-- the Calls screen shows "Audio and video calling is not available yet" instead of call buttons;
+- the Calls screen shows "Video calling is not available yet" instead of call buttons;
 - the call screen refuses to create an invitation and shows no mute or camera controls.
 
 The chat buttons previously opened the call screen with the other user's id and no call type, which

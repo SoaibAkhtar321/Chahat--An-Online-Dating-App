@@ -68,7 +68,7 @@ export async function requestCallToken(
     typeof data.token !== "string" ||
     data.token.length === 0 ||
     typeof data.expires_at !== "string" ||
-    (data.call_type !== "audio" && data.call_type !== "video")
+    data.call_type !== "video"
   ) {
     throw new CallError("provider_error");
   }

@@ -85,7 +85,7 @@ describe("ringing", () => {
   });
   it("does not ring when another call is already active (second call while busy)", async () => {
     const { controller, deps } = setup(
-      snapshot({ incoming: [incomingEntry(CALL2)], active: [{ callId: CALL, matchId: MATCH, callType: "audio" }] }),
+      snapshot({ incoming: [incomingEntry(CALL2)], active: [{ callId: CALL, matchId: MATCH, callType: "video" }] }),
     );
     await controller.start("user-b");
     expect(controller.getView().ringing).toBeNull();
@@ -291,12 +291,12 @@ describe("notification action routing", () => {
   it("Answer with an incomplete payload recovers the match from the server's active list", async () => {
     const { controller, deps, setSnapshot } = setup(snapshot());
     await controller.start("user-b");
-    setSnapshot(snapshot({ lastEventId: 5, active: [{ callId: CALL, matchId: MATCH, callType: "audio" }] }));
+    setSnapshot(snapshot({ lastEventId: 5, active: [{ callId: CALL, matchId: MATCH, callType: "video" }] }));
     await controller.handleNotificationResponse({
       actionIdentifier: CALL_ACTION_ANSWER,
       data: { category: "call", callId: CALL },
     });
-    expect(deps.openCall).toHaveBeenCalledWith({ callId: CALL, matchId: MATCH, callType: "audio" });
+    expect(deps.openCall).toHaveBeenCalledWith({ callId: CALL, matchId: MATCH, callType: "video" });
   });
   it("Decline from the notification declines on the server without opening the app screen", async () => {
     const { controller, deps } = setup();

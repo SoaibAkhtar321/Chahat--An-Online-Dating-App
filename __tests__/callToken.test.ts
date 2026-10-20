@@ -69,6 +69,7 @@ describe("requestCallToken", () => {
       { ...okBody, token: "" },
       { ...okBody, token: 5 },
       { ...okBody, call_type: "screen" },
+      { ...okBody, call_type: "audio" }, // voice-only calls are not supported
       { ...okBody, room_id: undefined },
     ]) {
       await expect(

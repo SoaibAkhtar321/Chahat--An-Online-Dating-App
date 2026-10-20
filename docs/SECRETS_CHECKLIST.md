@@ -14,7 +14,7 @@ A production build is blocked by `mobile/scripts/check-release-env.js` if the fi
 | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) key | Whole app backend |
 | `EXPO_PUBLIC_FEATURE_BILLING` | `true` shows Google Play purchase flow | Subscriptions |
 | `EXPO_PUBLIC_FEATURE_PUSH` | `true` registers devices for push | Push notifications |
-| `EXPO_PUBLIC_FEATURE_CALLS` | `true` shows call actions | Audio/video calls |
+| `EXPO_PUBLIC_FEATURE_CALLS` | `true` shows call actions | Video calls |
 | `EXPO_PUBLIC_FEATURE_VOICE_MESSAGES` | `true` shows voice notes | Voice messages |
 | `EXPO_PUBLIC_FEATURE_COIN_TOPUP` | `true` shows coin top-up. **Keep `false`**: no purchase adapter or coin pack exists yet (`docs/BILLING.md`) | Coin purchases |
 

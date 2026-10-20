@@ -64,14 +64,14 @@ describe("CallController join", () => {
       requestToken,
       isEnabled: () => true,
     });
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     expect(controller.getState()).toMatchObject({ phase: "failed", error: { code: "provider_not_configured" } });
     expect(requestToken).not.toHaveBeenCalled();
   });
 
   it("fails when the calling flag is off", async () => {
     const { controller, requestToken } = setup({ isEnabled: () => false });
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     expect(controller.getState().error?.code).toBe("calling_disabled");
     expect(requestToken).not.toHaveBeenCalled();
   });
@@ -92,7 +92,7 @@ describe("CallController join", () => {
           throw new CallError(code);
         }),
       });
-      await controller.join("call-1", "audio");
+      await controller.join("call-1", "video");
       expect(controller.getState()).toMatchObject({ phase: "failed", error: { code } });
       expect(provider.join).not.toHaveBeenCalled();
     },
@@ -104,7 +104,7 @@ describe("CallController join", () => {
         throw new Error("SECRET internal sdk detail");
       }),
     });
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     expect(controller.getState().error?.code).toBe("provider_error");
     expect(controller.getState().error?.message).not.toContain("SECRET");
   });
@@ -125,25 +125,16 @@ describe("CallController join", () => {
     });
   });
 
-  it("joins an audio call with the camera off and cannot enable it", async () => {
-    const { controller, session } = setup();
-    await controller.join("call-1", "audio");
-    expect(controller.getState().cameraEnabled).toBe(false);
-    expect(session.setCameraEnabled).not.toHaveBeenCalled();
-    await expect(controller.setCameraEnabled(true)).resolves.toBe(false);
-    expect(session.setCameraEnabled).not.toHaveBeenCalled();
-  });
-
   it("ignores duplicate join requests while joining and after connecting", async () => {
     const gate = deferred<CallJoinGrant>();
     const requestToken = jest.fn(() => gate.promise);
     const { controller, provider } = setup({ requestToken });
-    const first = controller.join("call-1", "audio");
-    const second = controller.join("call-1", "audio");
+    const first = controller.join("call-1", "video");
+    const second = controller.join("call-1", "video");
     expect(second).toBe(first);
     gate.resolve(grant);
     await first;
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     expect(requestToken).toHaveBeenCalledTimes(1);
     expect(provider.join).toHaveBeenCalledTimes(1);
   });
@@ -154,9 +145,9 @@ describe("CallController join", () => {
       .mockRejectedValueOnce(new CallError("network"))
       .mockResolvedValueOnce(grant);
     const { controller } = setup({ requestToken });
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     expect(controller.getState().phase).toBe("failed");
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     expect(controller.getState()).toMatchObject({ phase: "connected", error: null });
   });
 });
@@ -195,19 +186,19 @@ describe("CallController mute, camera and hang up", () => {
 
   it("hangs up once, releases the session and listeners, and survives duplicate taps", async () => {
     const { controller, session, unsubscribe } = setup();
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     await Promise.all([controller.hangUp(), controller.hangUp()]);
     await controller.hangUp();
     expect(session.leave).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(controller.getState().phase).toBe("ended");
-    await controller.join("call-1", "audio"); // cannot rejoin an ended controller
+    await controller.join("call-1", "video"); // cannot rejoin an ended controller
     expect(controller.getState().phase).toBe("ended");
   });
 
   it("does not throw when leaving the provider fails", async () => {
     const { controller, session } = setup();
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     session.leave.mockRejectedValueOnce(new Error("sdk"));
     await expect(controller.hangUp()).resolves.toBeUndefined();
     expect(controller.getState().phase).toBe("ended");
@@ -216,7 +207,7 @@ describe("CallController mute, camera and hang up", () => {
   it("leaves a late session when the user hangs up while joining", async () => {
     const gate = deferred<CallMediaSession>();
     const { controller, session } = setup({}, { join: jest.fn(() => gate.promise) });
-    const joining = controller.join("call-1", "audio");
+    const joining = controller.join("call-1", "video");
     await Promise.resolve();
     await Promise.resolve();
     await controller.hangUp();
@@ -231,13 +222,13 @@ describe("CallController mute, camera and hang up", () => {
     const { controller, requestToken } = setup();
     await controller.hangUp();
     expect(controller.getState().phase).toBe("ended");
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     expect(requestToken).not.toHaveBeenCalled();
   });
 
   it("moves to ended and cleans up when the provider reports the session ended", async () => {
     const { controller, session, fireEnded } = setup();
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     fireEnded();
     expect(controller.getState().phase).toBe("ended");
     expect(session.leave).toHaveBeenCalledTimes(1);
@@ -251,7 +242,7 @@ describe("CallController cleanup", () => {
     const { controller } = setup();
     const listener = jest.fn();
     const unsubscribe = controller.subscribe(listener);
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     const calls = listener.mock.calls.length;
     expect(calls).toBeGreaterThan(0);
     unsubscribe();
@@ -263,13 +254,13 @@ describe("CallController cleanup", () => {
     const { controller, session, unsubscribe } = setup();
     const listener = jest.fn();
     controller.subscribe(listener);
-    await controller.join("call-1", "audio");
+    await controller.join("call-1", "video");
     listener.mockClear();
     await controller.dispose();
     await controller.dispose();
     expect(session.leave).toHaveBeenCalledTimes(1);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
-    await controller.join("call-2", "audio");
+    await controller.join("call-2", "video");
     await controller.hangUp();
     expect(listener).not.toHaveBeenCalled();
   });

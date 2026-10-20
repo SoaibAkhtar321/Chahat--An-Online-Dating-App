@@ -22,7 +22,7 @@ import { CoinPurchaseError, getCoinPurchaseAvailability, purchaseCoins } from ".
 import { CallError } from "../mobile/src/services/callMedia";
 import { requestCallToken } from "../mobile/src/services/callToken";
 
-const wallet = { balance: 12, coin_value_paise: 50, free_call_seconds: 60, audio_coins_per_minute: 4, video_coins_per_minute: 10 };
+const wallet = { balance: 12, coin_value_paise: 50, free_call_seconds: 60, video_coins_per_minute: 10 };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -31,7 +31,7 @@ beforeEach(() => {
 
 describe("wallet parsing", () => {
   it("accepts the server shape", () => {
-    expect(parseWalletSummary(wallet)).toEqual({ balance: 12, coinValuePaise: 50, freeCallSeconds: 60, audioCoinsPerMinute: 4, videoCoinsPerMinute: 10 });
+    expect(parseWalletSummary(wallet)).toEqual({ balance: 12, coinValuePaise: 50, freeCallSeconds: 60, videoCoinsPerMinute: 10 });
   });
   it("rejects anything unexpected instead of guessing", () => {
     for (const bad of [null, "x", {}, { ...wallet, balance: -1 }, { ...wallet, balance: "12" }, { ...wallet, balance: 1.5 }, { ...wallet, video_coins_per_minute: undefined }]) {

@@ -65,14 +65,21 @@ describe("notification action routing", () => {
   });
 });
 
+describe("voice-only calls are not supported", () => {
+  it("a push that names an audio call carries no usable call type", () => {
+    const data = { category: "call", callId: CALL, matchId: MATCH, callType: "audio" };
+    expect(parseCallNotificationData(data)).toEqual({ callId: CALL, matchId: MATCH, callType: null });
+  });
+});
+
 describe("push payload contract between server and app", () => {
-  const payload = buildPushPayload("ExponentPushToken[abc]", "n1", "call", { callId: CALL, matchId: MATCH, callType: "audio" });
+  const payload = buildPushPayload("ExponentPushToken[abc]", "n1", "call", { callId: CALL, matchId: MATCH, callType: "video" });
   it("uses exactly the channel and category the app registers", () => {
     expect(payload.channelId).toBe(CALL_CHANNEL_ID);
     expect(payload.categoryId).toBe(CALL_CATEGORY_ID);
   });
   it("carries data the app's parser accepts, and nothing identifying the caller", () => {
-    expect(parseCallNotificationData(payload.data)).toEqual({ callId: CALL, matchId: MATCH, callType: "audio" });
+    expect(parseCallNotificationData(payload.data)).toEqual({ callId: CALL, matchId: MATCH, callType: "video" });
     expect(Object.keys(payload.data).sort()).toEqual(["callId", "callType", "category", "matchId", "notificationId"]);
     expect(payload.body).toBe("Someone is calling you on Chahat.");
   });

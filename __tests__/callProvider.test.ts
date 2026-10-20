@@ -25,11 +25,11 @@ describe("client call media provider foundation", () => {
   it("fails explicitly rather than simulating a successful join", async () => {
     await expect(
       notConfiguredMediaProvider.join(
-        { provider: "x", roomId: "r", token: "t", expiresAt: "2026-10-16T00:00:00Z", callType: "audio" },
-        { callType: "audio" },
+        { provider: "x", roomId: "r", token: "t", expiresAt: "2026-10-16T00:00:00Z", callType: "video" },
+        { callType: "video" },
       ),
     ).rejects.toMatchObject({ code: "provider_not_configured" });
-    await expect(notConfiguredMediaProvider.requestPermissions("audio")).resolves.toBe(false);
+    await expect(notConfiguredMediaProvider.requestPermissions("video")).resolves.toBe(false);
   });
 
   it("gates calling on BOTH the feature flag and a configured provider", () => {

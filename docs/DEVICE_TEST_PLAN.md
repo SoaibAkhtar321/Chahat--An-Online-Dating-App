@@ -39,7 +39,6 @@ Status values: PASS / FAIL / BLOCKED / NOT TESTED. Fill "Actual" yourself.
 | 25 | Voice: permission denied | Deny mic | Clear message, no crash | | NOT TESTED |
 | 26 | Voice: cancel / send / play | Record, cancel; record, send; B plays | Each works | | NOT TESTED |
 | 27 | Voice: expired URL | Play an old voice message after the signed URL expires | Fresh URL fetched or clear error | | NOT TESTED |
-| 28 | Audio call | A calls B, join, mute/unmute | Audio both ways; toggle works | | NOT TESTED |
 | 29 | Video call | Video call; camera toggle | Video both ways; toggle works | | NOT TESTED |
 | 30 | Hang up | Hang up from A, then repeat from B | Other side ends cleanly | | NOT TESTED |
 | 31 | Token renewal | Stay in a call longer than the first token lifetime | Call continues past renewal | | NOT TESTED |

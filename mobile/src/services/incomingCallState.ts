@@ -2,7 +2,7 @@
 // reducer applies the documented recovery rules (docs/CALLS.md): take the snapshot, then only events
 // newer than the snapshot, and never let a late event ring a call that is already closed.
 
-export type CallKind = "audio" | "video";
+export type CallKind = "video";
 
 export interface IncomingCall {
   callId: string;
@@ -58,7 +58,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CLOSED = 50;
 
 function isKind(value: unknown): value is CallKind {
-  return value === "audio" || value === "video";
+  return value === "video";
 }
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID.test(value);

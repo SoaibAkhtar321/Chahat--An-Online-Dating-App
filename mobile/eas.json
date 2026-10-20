@@ -8,6 +8,10 @@
       "developmentClient": true,
       "distribution": "internal",
       "environment": "development",
+      "env": {
+        "EXPO_PUBLIC_FEATURE_CALLS": "true",
+        "EXPO_PUBLIC_AGORA_APP_ID": "cca3243cc46c465a9081506d0cfbe08f"
+      },
       "android": {
         "gradleCommand": ":app:assembleDebug"
       }
@@ -17,7 +21,9 @@
       "environment": "preview",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://tuptdzbdowqtmbyhazet.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_WZ6MjKenrw6TI6hg0c0JuQ_1JIkJHth"
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_WZ6MjKenrw6TI6hg0c0JuQ_1JIkJHth",
+        "EXPO_PUBLIC_FEATURE_CALLS": "true",
+        "EXPO_PUBLIC_AGORA_APP_ID": "cca3243cc46c465a9081506d0cfbe08f"
       },
       "android": {
         "buildType": "apk",
@@ -27,6 +33,10 @@
     "preview-compat": {
       "distribution": "internal",
       "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_FEATURE_CALLS": "true",
+        "EXPO_PUBLIC_AGORA_APP_ID": "cca3243cc46c465a9081506d0cfbe08f"
+      },
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a"

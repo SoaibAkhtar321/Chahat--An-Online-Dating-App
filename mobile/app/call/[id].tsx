@@ -39,9 +39,7 @@ export default function CallScreen() {
   );
   const [freeSeconds, setFreeSeconds] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [callKind, setCallKind] = useState<CallType | null>(
-    type === "audio" || type === "video" ? type : null,
-  );
+  const [callKind, setCallKind] = useState<CallType | null>(type === "video" ? type : null);
   const callingAvailable = isCallingAvailable();
   const { controller, state: media } = useCallController();
   const partner = matches.find((match) => match.id === id)?.otherUser;
@@ -87,8 +85,8 @@ export default function CallScreen() {
       };
     }
 
-    if (!id || (type !== "audio" && type !== "video")) {
-      setError("A valid match and call type are required.");
+    if (!id || type !== "video") {
+      setError("A valid match is required to start a video call.");
       setStatus("ended");
       return;
     }
@@ -254,7 +252,7 @@ export default function CallScreen() {
           placeholderSize={72}
         />
         <Text style={styles.partnerName}>{partner.name}</Text>
-        <Text style={styles.callType}>{callKind === "audio" ? "Audio call" : "Video call"}</Text>
+        <Text style={styles.callType}>Video call</Text>
         <View style={styles.callState}>
           <Text style={styles.stateTitle}>{statusMessage}</Text>
           {freeSeconds !== null && status === "accepted" && (

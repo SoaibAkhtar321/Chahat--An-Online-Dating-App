@@ -22,7 +22,7 @@ import { parseCallNotificationData, resolveCallNotificationAction } from "./call
 export interface CallRoute {
   callId: string;
   matchId: string;
-  callType: "audio" | "video";
+  callType: "video";
 }
 
 export interface IncomingCallDeps {
@@ -56,7 +56,7 @@ export interface IncomingCallController {
   stop(): void;
   sync(): Promise<void>;
   handleEvent(event: CallEvent): void;
-  answer(callId: string, hint?: { matchId?: string | null; callType?: "audio" | "video" | null }): Promise<AnswerOutcome>;
+  answer(callId: string, hint?: { matchId?: string | null; callType?: "video" | null }): Promise<AnswerOutcome>;
   decline(callId: string): Promise<DeclineOutcome>;
   handleNotificationResponse(response: { actionIdentifier: unknown; data: unknown }): Promise<void>;
   getView(): IncomingCallView;
@@ -127,14 +127,14 @@ export function createIncomingCallController(deps: IncomingCallDeps): IncomingCa
     set(applySnapshot(state, snapshot, deps.now()));
   }
 
-  function routeFor(callId: string, hint?: { matchId?: string | null; callType?: "audio" | "video" | null }): CallRoute | null {
+  function routeFor(callId: string, hint?: { matchId?: string | null; callType?: "video" | null }): CallRoute | null {
     const known: IncomingCall | ActiveCallRef | undefined = state.incoming[callId] ?? state.active[callId];
     const matchId = known?.matchId ?? hint?.matchId ?? null;
     const callType = known?.callType ?? hint?.callType ?? null;
     return matchId && callType ? { callId, matchId, callType } : null;
   }
 
-  async function answer(callId: string, hint?: { matchId?: string | null; callType?: "audio" | "video" | null }): Promise<AnswerOutcome> {
+  async function answer(callId: string, hint?: { matchId?: string | null; callType?: "video" | null }): Promise<AnswerOutcome> {
     if (!userId) return { kind: "gone" };
     if (inflight.has(callId)) return { kind: "busy" };
     if (!deps.isCallingAvailable()) {

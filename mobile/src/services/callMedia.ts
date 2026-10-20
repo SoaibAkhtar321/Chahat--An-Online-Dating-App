@@ -1,9 +1,9 @@
-// Client-side call media abstraction. The app talks only to these interfaces; a real audio/video
-// SDK (Agora, ZEGOCLOUD, ...) is added later as one adapter that implements CallMediaProvider.
+// Client-side call media abstraction. The app talks only to these interfaces; a real video
+// call SDK (Agora, ZEGOCLOUD, ...) is added later as one adapter that implements CallMediaProvider.
 // Until an adapter is registered (and its SDK is present) calling is reported as unavailable instead of being faked.
 import { isServiceConfigured } from "../config/appConfig";
 
-export type CallMediaType = "audio" | "video";
+export type CallMediaType = "video";
 
 export type CallErrorCode =
   | "calling_disabled"

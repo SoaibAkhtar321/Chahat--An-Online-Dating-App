@@ -11,11 +11,10 @@ const read = (file: string) => fs.readFileSync(path.join(__dirname, "..", file),
 
 describe("call entry points pass the right ids", () => {
   it("new calls use the MATCH id and an explicit type", () => {
-    expect(buildNewCallRoute("match-9", "audio")).toEqual({
+    expect(buildNewCallRoute("match-9", "video")).toEqual({
       pathname: "/call/[id]",
-      params: { id: "match-9", type: "audio" },
+      params: { id: "match-9", type: "video" },
     });
-    expect(buildNewCallRoute("match-9", "video").params.type).toBe("video");
   });
 
   it("existing calls carry the match id, the call id and the stored type", () => {
@@ -30,11 +29,13 @@ describe("call entry points pass the right ids", () => {
   it("chat and Calls screens build routes only through the shared helpers", () => {
     const chat = read("mobile/app/chat/[id].tsx");
     const calls = read("mobile/app/calls/index.tsx");
-    expect(chat).toContain('buildNewCallRoute(matchId, "audio")');
+    expect(chat).not.toContain('"audio"');
+    expect(chat).not.toMatch(/audio call/i);
     expect(chat).toContain('buildNewCallRoute(matchId, "video")');
     expect(chat).not.toMatch(/pathname:\s*"\/call\/\[id\]"/);
     expect(calls).toContain("buildExistingCallRoute(call)");
-    expect(calls).toContain('buildNewCallRoute(m.id, "audio")');
+    expect(calls).not.toContain('"audio"');
+    expect(calls).not.toMatch(/voice call|audio call|audio and video|voice or video/i);
     expect(calls).toContain('buildNewCallRoute(m.id, "video")');
     expect(calls).not.toMatch(/pathname:\s*"\/call\/\[id\]"/);
   });

@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { PhoneCall, Video, Info, MessageCircle, ShieldCheck, Clock } from "lucide-react-native";
+import { Video, Info, MessageCircle, ShieldCheck, Clock } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
@@ -69,24 +69,14 @@ export default function CallsScreen() {
             <Info size={20} color={Colors.primary} />
           </View>
           <Text style={styles.infoText}>
-            Audio and video calling requires mutual consent between matched members. The first minute
-            of every call is always free.
+            Video calling requires mutual consent between matched members. The first minute of every
+            call is always free.
           </Text>
         </View>
 
         {/* Feature Overview Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Calling Features</Text>
-
-          <View style={styles.featureRow}>
-            <View style={styles.iconCircle}>
-              <PhoneCall size={18} color={Colors.primary} />
-            </View>
-            <View style={styles.featureContent}>
-              <Text style={styles.featureTitle}>Crystal-Clear Voice Calls</Text>
-              <Text style={styles.featureDesc}>Direct 1-on-1 audio calling with end-call controls and mute options.</Text>
-            </View>
-          </View>
 
           <View style={styles.featureRow}>
             <View style={styles.iconCircle}>
@@ -119,9 +109,7 @@ export default function CallsScreen() {
           {incomingCalls.map((call) => (
             <View key={call.id} style={styles.matchRow}>
               <View style={styles.matchInfo}>
-                <Text style={styles.matchName}>
-                  Incoming {call.call_type} request
-                </Text>
+                <Text style={styles.matchName}>Incoming video call request</Text>
                 <Text style={styles.matchCity}>Invitation expires soon</Text>
               </View>
               <View style={styles.callActions}>
@@ -141,7 +129,7 @@ export default function CallsScreen() {
             <View key={call.id} style={styles.matchRow}>
               <View style={styles.matchInfo}>
                 <Text style={styles.matchName}>Waiting for response</Text>
-                <Text style={styles.matchCity}>{call.call_type} request sent</Text>
+                <Text style={styles.matchCity}>Video call request sent</Text>
               </View>
               <TouchableOpacity style={styles.requestButton} onPress={() => void handleCallAction(call, "cancel")}>
                 <Text style={styles.requestButtonText}>Cancel</Text>
@@ -152,7 +140,7 @@ export default function CallsScreen() {
             <Text style={styles.emptyText}>No pending requests.</Text>
           )}
           <Text style={styles.providerNotice}>
-            A call request is not a live media call. Audio/video provider setup is still required.
+            A call request is not a live video call. Video provider setup is still required.
           </Text>
         </View>
 
@@ -163,7 +151,7 @@ export default function CallsScreen() {
             <View style={styles.emptyWrap}>
               <Info size={32} color={Colors.mutedForeground} />
               <Text style={styles.emptyText}>
-                Audio and video calling is not available yet. We will tell you when it is ready.
+                Video calling is not available yet. We will tell you when it is ready.
               </Text>
             </View>
           ) : matches.length > 0 ? (
@@ -175,13 +163,6 @@ export default function CallsScreen() {
                     <Text style={styles.matchCity}>{m.otherUser.city}</Text>
                   </View>
                   <View style={styles.callActions}>
-                    <TouchableOpacity
-                      style={styles.callBtn}
-                      onPress={() => router.push(buildNewCallRoute(m.id, "audio"))}
-                      activeOpacity={0.7}
-                    >
-                      <PhoneCall size={16} color={Colors.primary} />
-                    </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.callBtn, styles.callBtnPrimary]}
                       onPress={() => router.push(buildNewCallRoute(m.id, "video"))}
@@ -197,7 +178,7 @@ export default function CallsScreen() {
             <View style={styles.emptyWrap}>
               <MessageCircle size={32} color={Colors.mutedForeground} />
               <Text style={styles.emptyText}>
-                No active matches yet. Once you match with someone, you can start voice or video calls directly with them.
+                No active matches yet. Once you match with someone, you can start video calls directly with them.
               </Text>
             </View>
           )}

@@ -48,9 +48,7 @@ export function IncomingCallOverlay() {
             placeholderSize={72}
           />
           <Text style={styles.name}>{partner?.name ?? "Someone"}</Text>
-          <Text style={styles.type}>
-            {ringing.callType === "audio" ? "Incoming audio call" : "Incoming video call"}
-          </Text>
+          <Text style={styles.type}>Incoming video call</Text>
         </View>
         <View style={styles.actions}>
           <TouchableOpacity

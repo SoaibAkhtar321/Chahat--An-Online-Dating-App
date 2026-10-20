@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 
-export type CallType = "audio" | "video";
+// Chahat supports video calls only. There is no voice-only call type on the client.
+export type CallType = "video";
 export type CallStatus =
   | "pending"
   | "accepted"

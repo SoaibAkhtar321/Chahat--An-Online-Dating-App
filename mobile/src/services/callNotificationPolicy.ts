@@ -14,7 +14,7 @@ export type CallNotificationAction = "answer" | "decline" | "open";
 export interface CallNotificationData {
   callId: string;
   matchId: string | null;
-  callType: "audio" | "video" | null;
+  callType: "video" | null;
 }
 
 /**
@@ -29,7 +29,7 @@ export function parseCallNotificationData(data: unknown): CallNotificationData |
   return {
     callId: callId.toLowerCase(),
     matchId: typeof matchId === "string" && isValidUUID(matchId) ? matchId.toLowerCase() : null,
-    callType: callType === "audio" || callType === "video" ? callType : null,
+    callType: callType === "video" ? callType : null,
   };
 }
 

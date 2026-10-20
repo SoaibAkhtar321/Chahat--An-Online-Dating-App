@@ -104,11 +104,21 @@ describe("defensive parsing", () => {
     const parsed = parseCallSync({
       server_time: iso(0),
       last_event_id: 5,
-      incoming: [{ call_id: U(1), match_id: U(2), caller_id: U(3), call_type: "audio", expires_at: iso(60) }],
+      incoming: [{ call_id: U(1), match_id: U(2), caller_id: U(3), call_type: "video", expires_at: iso(60) }],
       active: [{ call_id: U(4), match_id: U(2), call_type: "video" }],
     });
-    expect(parsed?.incoming[0]).toMatchObject({ callId: U(1), callType: "audio" });
+    expect(parsed?.incoming[0]).toMatchObject({ callId: U(1), callType: "video" });
     expect(parsed?.active[0]).toMatchObject({ callId: U(4), callType: "video" });
+  });
+  it("drops audio calls: they are neither rung nor tracked as active", () => {
+    const parsed = parseCallSync({
+      server_time: iso(0),
+      last_event_id: 5,
+      incoming: [{ call_id: U(1), match_id: U(2), caller_id: U(3), call_type: "audio", expires_at: iso(60) }],
+      active: [{ call_id: U(4), match_id: U(2), call_type: "audio" }],
+    });
+    expect(parsed?.incoming).toEqual([]);
+    expect(parsed?.active).toEqual([]);
   });
   it("skips malformed entries and rejects malformed envelopes", () => {
     expect(

@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { MessageCircle, PhoneCall } from "lucide-react-native";
+import { MessageCircle, Video } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
@@ -28,7 +28,7 @@ export default function ChatsScreen() {
           onPress={() => router.push("/calls")}
           activeOpacity={0.7}
         >
-          <PhoneCall size={16} color={Colors.primary} />
+          <Video size={16} color={Colors.primary} />
           <Text style={styles.callsText}>Calls</Text>
         </TouchableOpacity>
       </View>

@@ -8,7 +8,6 @@ export interface WalletSummary {
   /** Value of one coin in paise (50 = INR 0.50). Display only. */
   coinValuePaise: number;
   freeCallSeconds: number;
-  audioCoinsPerMinute: number;
   videoCoinsPerMinute: number;
 }
 
@@ -37,7 +36,6 @@ export function parseWalletSummary(data: unknown): WalletSummary | null {
     !isCount(d.balance) ||
     !isCount(d.coin_value_paise) ||
     !isCount(d.free_call_seconds) ||
-    !isCount(d.audio_coins_per_minute) ||
     !isCount(d.video_coins_per_minute)
   ) {
     return null;
@@ -46,7 +44,6 @@ export function parseWalletSummary(data: unknown): WalletSummary | null {
     balance: d.balance,
     coinValuePaise: d.coin_value_paise,
     freeCallSeconds: d.free_call_seconds,
-    audioCoinsPerMinute: d.audio_coins_per_minute,
     videoCoinsPerMinute: d.video_coins_per_minute,
   };
 }

@@ -23,7 +23,6 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import {
   ArrowLeft,
-  Phone,
   Video,
   MoreVertical,
   ImagePlus,
@@ -521,23 +520,13 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
 
           {callingAvailable && matchId ? (
-            <>
-              <TouchableOpacity
-                style={styles.actionIcon}
-                accessibilityLabel="Start audio call"
-                onPress={() => router.push(buildNewCallRoute(matchId, "audio"))}
-              >
-                <Phone size={18} color={Colors.primary} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionIcon}
-                accessibilityLabel="Start video call"
-                onPress={() => router.push(buildNewCallRoute(matchId, "video"))}
-              >
-                <Video size={20} color={Colors.primary} />
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={styles.actionIcon}
+              accessibilityLabel="Start video call"
+              onPress={() => router.push(buildNewCallRoute(matchId, "video"))}
+            >
+              <Video size={20} color={Colors.primary} />
+            </TouchableOpacity>
           ) : null}
 
           <TouchableOpacity style={styles.actionIcon} onPress={() => setMenuVisible(!menuVisible)}>

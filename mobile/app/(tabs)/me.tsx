@@ -8,7 +8,7 @@ import {
   BadgeCheck,
   Sparkles,
   Bell,
-  PhoneCall,
+  Video,
   Settings,
   ShieldCheck,
   LogOut,
@@ -78,8 +78,8 @@ export default function MeScreen() {
       onPress: () => router.push("/notifications"),
     },
     {
-      icon: PhoneCall,
-      label: "Calls & billing ledger",
+      icon: Video,
+      label: "Video calls & billing ledger",
       onPress: () => router.push("/calls"),
     },
     {

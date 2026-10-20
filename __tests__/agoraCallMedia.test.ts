@@ -77,20 +77,10 @@ describe("Agora call media adapter", () => {
     expect(session.video).toBeDefined();
   });
 
-  test("audio call does not enable video or expose a video surface", async () => {
-    const { sdk, engine } = makeSdk();
-    const session: any = await createAgoraCallProvider(deps(sdk)).join(
-      { ...grant, callType: "audio" },
-      { callType: "audio" },
-    );
-    expect(engine.enableVideo).not.toHaveBeenCalled();
-    expect(session.video).toBeUndefined();
-  });
-
   test("a join that never succeeds is cleaned up and reported", async () => {
     jest.useFakeTimers();
     const { sdk, engine } = makeSdk({ autoJoin: false });
-    const p = createAgoraCallProvider(deps(sdk)).join(grant, { callType: "audio" });
+    const p = createAgoraCallProvider(deps(sdk)).join(grant, { callType: "video" });
     const assertion = expect(p).rejects.toBeInstanceOf(CallError);
     await jest.advanceTimersByTimeAsync(21_000);
     await assertion;
@@ -117,7 +107,7 @@ describe("Agora call media adapter", () => {
   test("token expiry renews through the server; a refused renewal ends the call", async () => {
     const { sdk, engine, getHandler } = makeSdk();
     const d = deps(sdk);
-    const session: any = await createAgoraCallProvider(d).join(grant, { callType: "audio" });
+    const session: any = await createAgoraCallProvider(d).join(grant, { callType: "video" });
     const ended = jest.fn();
     session.onEnded(ended);
     await getHandler().onTokenPrivilegeWillExpire();
