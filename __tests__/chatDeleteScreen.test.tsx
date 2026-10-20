@@ -2,6 +2,10 @@ import React from "react";
 import { Text } from "react-native";
 import TestRenderer, { act } from "react-test-renderer";
 
+// The first test loads and transforms the whole chat screen. On a cold Jest cache (always the case on CI)
+// that alone can exceed the 5 s default, so this suite gets explicit headroom.
+jest.setTimeout(30000);
+
 const ME = "aaaaaaaa-0000-4000-8000-000000000001";
 const THEM = "bbbbbbbb-0000-4000-8000-000000000002";
 const MATCH = "f6c60000-0000-4000-8000-000000000001";
