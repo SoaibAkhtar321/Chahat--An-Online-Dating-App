@@ -45,7 +45,9 @@ describe("appConfig", () => {
 
   it("enables a feature only for the exact value true", () => {
     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "true" })).toBe(true);
-    expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: " TRUE " })).toBe(true);
+    expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: " true " })).toBe(true);
+    expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "TRUE" })).toBe(false);
+    expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "True" })).toBe(false);
     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "1" })).toBe(false);
     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "false" })).toBe(false);
     expect(isServiceConfigured("push", { EXPO_PUBLIC_FEATURE_CALLS: "true" })).toBe(false);

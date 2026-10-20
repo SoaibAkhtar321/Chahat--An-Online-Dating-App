@@ -105,6 +105,8 @@ export interface DiscoveryPage {
   nextCursor: DiscoveryCursor | null;
 }
 
+const RADIUS_FALLBACKS_KM = [250, 100, 50, 25];
+
 /**
  * One page of the feed, nearest first. `filters.distance` is the member's MAXIMUM radius: the server orders by
  * distance (device coordinates, else city centres) and keyset-pages with (distance, id), so a sparse
@@ -128,18 +130,30 @@ export async function fetchDiscoveryPage(
       interests: [],
       languages: [],
     };
-    const { data, error } = await supabase.rpc("get_discovery_feed_page", {
-      _limit: 30,
-      _age_min: safeFilters.ageMin,
-      _age_max: safeFilters.ageMax,
-      _radius_km: Math.min(Math.max(Math.round(safeFilters.distance ?? DEFAULT_FILTERS.distance), 1), MAX_DISCOVERY_RADIUS_KM),
-      _intents: safeFilters.intents,
-      _interests: safeFilters.interests,
-      _languages: safeFilters.languages,
-      _after_distance_m: cursor?.distanceMeters ?? null,
-      _after_id: cursor?.profileId ?? null,
-      _min_radius_km: 0,
-    });
+    const requestedRadius = Math.min(
+      Math.max(Math.round(safeFilters.distance ?? DEFAULT_FILTERS.distance), 1),
+      MAX_DISCOVERY_RADIUS_KM,
+    );
+    const callFeed = (radiusKm: number) =>
+      supabase.rpc("get_discovery_feed_page", {
+        _limit: 30,
+        _age_min: safeFilters.ageMin,
+        _age_max: safeFilters.ageMax,
+        _radius_km: radiusKm,
+        _intents: safeFilters.intents,
+        _interests: safeFilters.interests,
+        _languages: safeFilters.languages,
+        _after_distance_m: cursor?.distanceMeters ?? null,
+        _after_id: cursor?.profileId ?? null,
+        _min_radius_km: 0,
+      });
+    let { data, error } = await callFeed(requestedRadius);
+    // The server ceiling (app_settings.discovery_max_radius_km) is configurable and the client cannot read it.
+    // If it was lowered below the requested radius the RPC rejects the call; step down instead of showing an empty deck.
+    for (const fallback of RADIUS_FALLBACKS_KM) {
+      if (!error || !/Invalid discovery filters/i.test(error.message ?? "") || fallback >= requestedRadius) continue;
+      ({ data, error } = await callFeed(fallback));
+    }
     if (error) throw new Error(error.message);
     if (!Array.isArray(data)) throw new Error("Discovery returned an invalid response.");
 

@@ -56,7 +56,7 @@ function isSet(env: EnvSource, key: string): boolean {
 // A feature flag is on only when explicitly set to "true". Flags default to OFF so that a
 // feature without its provider credentials is never shown to users.
 function isFlagOn(env: EnvSource, key: string): boolean {
-  return clean(env[key]).toLowerCase() === "true";
+  return clean(env[key]) === "true";
 }
 
 function status(missing: string[]): ServiceStatus {
