@@ -9,9 +9,9 @@ This step adds the two docs, two small client fixes and one test file. No migrat
 |---|---|
 | Code exists | Yes |
 | Jest / typecheck / npm ci | Last run on this tree: 83 suites, 865 tests pass, typecheck 0 errors, `npm ci` OK. ESLint printed no errors but ignores `mobile/app` |
-| SQL suite | Last full run covered migrations through `...004400`. Migration `...004500` and test 64 were **not** run in the 6.4 session |
+| SQL suite | Full suite run on a scratch PostgreSQL 16 with all migrations through `...004600` and tests through 65: all passed |
 | GitHub CI on this commit | Not confirmed by me; check the Actions tab |
-| Hosted `milo-dev` | Migrations `...004300`, `...004400`, `...004500` not applied by me |
+| Hosted `milo-dev` | Migrations `...004300` to `...004600` not applied by me |
 | Android build / EAS | Not run |
 | Real device | Nothing tested (see `docs/DEVICE_TEST_PLAN.md`) |
 
@@ -21,7 +21,7 @@ Missing `useCallback` import; locationPicker test mocks; four SQL fixture fixes 
 email-verify back handling with 4 tests; stale calls doc corrected; feature flags now enable only on the exact value `true` (was case-insensitive); discovery steps the radius down (250/100/50/25 km) if the server ceiling was lowered, instead of showing an empty deck (3 new tests).
 
 ## Migrations to apply to staging then production (in order, with your approval)
-`...004300`, `...004400`, `...004500` (plus any earlier ones not yet applied; check `supabase migration list`).
+`...004300` to `...004600` (plus any earlier ones not yet applied; check `supabase migration list`).
 
 ## Dashboard and provider actions (yours)
 - Auth: "Confirm email" setting, Site URL, redirect URLs (`docs/AUTH_SETTINGS_CHECKLIST.md`).
@@ -36,7 +36,8 @@ email-verify back handling with 4 tests; stale calls doc corrected; feature flag
 - Legacy members with unsupported free-text cities show no distance.
 - Client slider max (500 km) is hardcoded; if the server ceiling is lowered the client now falls back to a smaller radius, but the slider still offers values above the ceiling.
 - SQL function default `_radius_km` is 50, client default is 150 (client always passes it).
-- Open 6.3 optional fix: `cursor_distance_m` for members who disabled distance sharing.
+- Closed: `cursor_distance_m` for members who disabled distance sharing is now a coarse 25 km step (`...004600`, test 65). Such members can sort slightly later than their true distance.
+- Added: Help & Support screen (Settings > Help) with support email and postal address (`mobile/src/constants/supportContact.ts`). The postal address is a personal address supplied by the owner; confirm it is meant to be public. Legal operator and grievance details are still unconfirmed placeholders.
 - ESLint config ignores `mobile/app`, so lint does not cover screens. Jest printed "did not exit one second after the test run" (not investigated).
 - Notifications-off alert in settings does not mention calls.
 - Expo dependency versions may mismatch SDK 52 (`npx expo install --check`); `eas.json` preview profile hard-codes Supabase URL/key; confirm need for external-storage permissions.

@@ -522,6 +522,21 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Help */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>HELP</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.navRow}
+              onPress={() => router.push("/support")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.rowLabel}>Help & Support</Text>
+              <ChevronRight size={18} color={Colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Legal */}
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>LEGAL</Text>

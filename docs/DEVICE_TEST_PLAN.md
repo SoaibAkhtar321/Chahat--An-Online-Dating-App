@@ -5,7 +5,7 @@ Nothing here has been executed. Jest, SQL tests and static analysis do not count
 
 Setup: two physical Android devices (A, B; one on Android 13+), two accounts (User A, User B; B is Premium for likes tests),
 a build with `EXPO_PUBLIC_FEATURE_CALLS=true` and `EXPO_PUBLIC_FEATURE_VOICE_MESSAGES=true` pointed at a staging project that has
-all migrations through `20260101004500` applied, Edge Function secrets set (`CALL_PROVIDER=agora`, `AGORA_APP_ID`,
+all migrations through `20260101004600` applied, Edge Function secrets set (`CALL_PROVIDER=agora`, `AGORA_APP_ID`,
 `AGORA_APP_CERTIFICATE`), and `google-services.json` in the build.
 
 Status values: PASS / FAIL / BLOCKED / NOT TESTED. Fill "Actual" yourself.
@@ -51,3 +51,5 @@ Status values: PASS / FAIL / BLOCKED / NOT TESTED. Fill "Actual" yourself.
 | 37 | Logout/login | Log out, log in as other user | No data from previous account | | NOT TESTED |
 | 38 | Delete account | Delete User A | Signed out, data/media cleaned, login fails | | NOT TESTED |
 | 39 | Full journey | Signup, verify, onboarding, location, photo, Discover, like, match, chat, delete messages, voice, video call, logout, login, delete account | All steps succeed | | NOT TESTED |
+| 40 | Help & Support | Settings > Help & Support; tap the email | Screen shows email and address; tap opens the mail app with subject filled | | NOT TESTED |
+| 41 | Hidden distance paging | A hides distance; B scrolls Discover past A | A shows no distance; paging has no repeats or gaps | | NOT TESTED |
