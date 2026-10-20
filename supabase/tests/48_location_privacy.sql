@@ -105,8 +105,11 @@ INSERT INTO public.t_results SELECT 'feed: hidden-distance member shows no dista
   FROM public.get_discovery_feed_page(50,18,99,500,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000004';
 INSERT INTO public.t_results SELECT 'feed: radius sweep cannot pinpoint a hidden member (~11 km granularity, still included at radius 20)',
   EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,20,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000004'), 'probe';
-INSERT INTO public.t_results SELECT 'feed: 80-hour-old fix is ignored (no distance row for it)',
-  NOT EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,500,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000005'), 'stale';
+-- Phase 5: an 80-hour-old fix is never used as a device position. The member may still appear through the coarser
+-- city-centre fallback (their city is Pune), but only with distance_basis = 'city', never as a device distance.
+INSERT INTO public.t_results SELECT 'feed: 80-hour-old fix is ignored (never used as a device position)',
+  NOT EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,500,'{}','{}','{}',NULL,NULL)
+             WHERE id='90000000-0000-0000-0000-000000000005' AND distance_basis = 'device'), 'stale';
 
 -- get_distance_to ---------------------------------------------------------------------------------------------------------
 INSERT INTO public.t_results SELECT 'get_distance_to near is bucketed (4-6 km)',

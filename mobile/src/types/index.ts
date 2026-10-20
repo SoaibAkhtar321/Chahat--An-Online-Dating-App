@@ -20,6 +20,8 @@ export interface Profile {
   city: string;
   /** Server-bucketed distance in km; null when unknown, hidden by the other member, or blocked. */
   distanceKm: number | null;
+  /** "device" = between rounded device positions; "city" = between city centres (approximate, never exact). */
+  distanceBasis?: "device" | "city" | null;
   bio: string;
   photos: string[];
   interests: string[];
@@ -171,10 +173,14 @@ export const LANGUAGES = [
   "Nepali",
 ];
 
+/** Largest radius the server accepts (app_settings.discovery_max_radius_km, default 500). */
+export const MAX_DISCOVERY_RADIUS_KM = 500;
+
+/** Default MAXIMUM distance. Results are ordered nearest first, so this only bounds how far the feed may reach. */
 export const DEFAULT_FILTERS: Filters = {
   ageMin: 18,
   ageMax: 35,
-  distance: 50,
+  distance: 150,
   intents: [],
   interests: [],
   languages: [],

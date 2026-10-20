@@ -120,7 +120,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
             <View style={styles.locationRow}>
               <MapPin size={13} color={Colors.primaryForeground} />
               <Text style={styles.locationText}>
-                {[profile.city, formatDistanceLabel(profile.distanceKm)].filter(Boolean).join(" · ")}
+                {[profile.city, formatDistanceLabel(profile.distanceKm, profile.distanceBasis)].filter(Boolean).join(" · ")}
               </Text>
             </View>
 

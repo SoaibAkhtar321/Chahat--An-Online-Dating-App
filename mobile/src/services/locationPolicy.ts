@@ -41,12 +41,16 @@ export type ServerLocationError =
   | "profile_required"
   | "consent_required"
   | "authentication_required"
+  | "unknown_city"
+  | "city_mismatch"
   | "unknown";
 
 /** Maps a server error message from the location RPCs to a typed code (never echoes coordinates). */
 export function classifyServerError(message: string | undefined | null): ServerLocationError {
   const m = (message ?? "").toLowerCase();
   if (m.includes("consent_required")) return "consent_required";
+  if (m.includes("unknown_city")) return "unknown_city";
+  if (m.includes("city_mismatch")) return "city_mismatch";
   if (m.includes("rate_limited")) return "rate_limited";
   if (m.includes("implausible_movement")) return "implausible_movement";
   if (m.includes("location_too_imprecise")) return "location_too_imprecise";
@@ -72,6 +76,10 @@ export function describeServerError(code: ServerLocationError): string {
       return "Finish setting up your profile before sharing your location.";
     case "authentication_required":
       return "Please sign in again to update your location.";
+    case "unknown_city":
+      return "That city isn't supported yet. Pick one from the list.";
+    case "city_mismatch":
+      return "Your device location doesn't match that city. Choose the city you are in, or search for one.";
     default:
       return "We couldn't save your location. Please try again.";
   }
@@ -81,8 +89,13 @@ export function describeServerError(code: ServerLocationError): string {
  * Distance label shown to members. Values are already bucketed by the server; null means unknown, hidden by the
  * other member, or blocked, in which case no distance is shown.
  */
-export function formatDistanceLabel(km: number | null | undefined): string | null {
+export function formatDistanceLabel(
+  km: number | null | undefined,
+  basis: "device" | "city" | null | undefined = "device",
+): string | null {
   if (km == null || !Number.isFinite(km) || km < 0) return null;
+  // City-level distances are measured between city centres, so they are never presented as exact.
+  if (basis === "city") return km <= 5 ? "In your area" : `About ${Math.round(km)} km away (city to city)`;
   if (km <= 2) return "Less than 2 km away";
   return `~${Math.round(km)} km away`;
 }

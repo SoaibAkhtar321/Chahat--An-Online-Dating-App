@@ -2,7 +2,7 @@ import React, { useRef, useState, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -14,12 +14,8 @@ import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
 import { deleteUserAccount } from "../../src/services/auth";
 import { runAccountDeletion } from "../../src/utils/deletionFlow";
-import {
-  describeLocationResult,
-  enableLocationSharing,
-  getMyLocationStatus,
-  setDistanceSharing,
-} from "../../src/services/location";
+import { getMyLocationStatus, setDistanceSharing } from "../../src/services/location";
+import { loadLocationSelection } from "../../src/services/locationSelection";
 import { ensureConsent, fetchMyConsents, setConsent } from "../../src/services/consent";
 import {
   getNotificationPreferences,
@@ -41,7 +37,6 @@ export default function SettingsScreen() {
   // Settings state
   const [showInDiscover, setShowInDiscover] = useState(true);
   const [showDistance, setShowDistance] = useState(true);
-  const [locBusy, setLocBusy] = useState(false);
   const [locSummary, setLocSummary] = useState("");
   const [showOnline, setShowOnline] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
@@ -58,15 +53,26 @@ export default function SettingsScreen() {
   const [lockScreenDetails, setLockScreenDetails] = useState<LockScreenDetails>("name");
 
   const refreshLocationStatus = React.useCallback(async () => {
-    const st = await getMyLocationStatus().catch(() => null);
-    if (!st) return;
-    setShowDistance(st.shareDistance);
-    setLocSummary(!st.hasLocation ? (st.stale ? "Out of date" : "Not set") : "On");
+    const [st, selection] = await Promise.all([
+      getMyLocationStatus().catch(() => null),
+      loadLocationSelection().catch(() => null),
+    ]);
+    if (st) setShowDistance(st.shareDistance);
+    if (selection) {
+      setLocSummary(
+        selection.city
+          ? `${selection.city}${selection.mode === "current" ? " · current location" : ""}`
+          : "Not set",
+      );
+    }
   }, []);
 
-  React.useEffect(() => {
-    void refreshLocationStatus();
-  }, [refreshLocationStatus]);
+  // Re-read when returning from the location screen so the summary is never stale.
+  useFocusEffect(
+    React.useCallback(() => {
+      void refreshLocationStatus();
+    }, [refreshLocationStatus]),
+  );
 
   const handleToggleShowDistance = async (val: boolean) => {
     const previous = showDistance;
@@ -76,15 +82,6 @@ export default function SettingsScreen() {
       setShowDistance(previous);
       Alert.alert("Couldn't update", "Your distance setting was not changed. Please try again.");
     }
-  };
-
-  const handleUpdateLocation = async () => {
-    if (locBusy) return;
-    setLocBusy(true);
-    const result = await enableLocationSharing();
-    setLocBusy(false);
-    Alert.alert("Location", describeLocationResult(result));
-    void refreshLocationStatus();
   };
 
   const refreshConsents = React.useCallback(async () => {
@@ -102,11 +99,11 @@ export default function SettingsScreen() {
   }, [refreshConsents]);
 
   const handleToggleLocationConsent = async (val: boolean) => {
-    if (locBusy) return;
     if (val) {
       if (!(await ensureConsent("location_discovery"))) return;
       setLocationConsent(true);
-      await handleUpdateLocation();
+      // Detecting the location happens on the Location screen, which saves city and coordinates together.
+      router.push("/settings/location");
       return;
     }
     Alert.alert(
@@ -421,17 +418,16 @@ export default function SettingsScreen() {
               value={locationConsent}
               onValueChange={handleToggleLocationConsent}
             />
-            {locationConsent ? (
-              <TouchableOpacity
-                style={styles.navRow}
-                onPress={handleUpdateLocation}
-                activeOpacity={0.7}
-                disabled={locBusy}
-              >
-                <Text style={styles.rowLabel}>{locBusy ? "Updating location…" : "Update my location"}</Text>
-                <Text style={styles.rowValue}>{locSummary}</Text>
-              </TouchableOpacity>
-            ) : null}
+            <TouchableOpacity
+              style={styles.navRow}
+              onPress={() => router.push("/settings/location")}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Change your location"
+            >
+              <Text style={styles.rowLabel}>Your location</Text>
+              <Text style={styles.rowValue}>{locSummary || "…"}</Text>
+            </TouchableOpacity>
             <Toggle
               label="Show online status"
               hint="Others won't see when you were last active."

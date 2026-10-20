@@ -236,16 +236,23 @@ describe("screen wiring (static)", () => {
     return ia >= 0 && ib >= 0 && ia < ib;
   };
 
-  it("onboarding and Discover ask for location consent before the OS permission flow", () => {
-    for (const f of ["mobile/app/onboarding/index.tsx", "mobile/app/(tabs)/discover.tsx"]) {
-      const src = read(f);
-      expect(before(src, 'ensureConsent("location_discovery")', "await enableLocationSharing()")).toBe(true);
-    }
+  it("the location picker, Discover and Settings ask for location consent before the OS permission flow", () => {
+    // Onboarding and the Location screen embed LocationPicker, which asks consent before detecting anything.
+    const picker = read("mobile/src/components/location/LocationPicker.tsx");
+    expect(before(picker, 'ensureConsent("location_discovery")', "selectCurrentLocation()")).toBe(true);
+    expect(read("mobile/app/onboarding/index.tsx")).toMatch(/<LocationPicker/);
+    expect(read("mobile/app/settings/location.tsx")).toMatch(/<LocationPicker/);
+    // Discover only routes to that screen, and only after consent.
+    const discover = read("mobile/app/(tabs)/discover.tsx");
+    expect(before(discover, 'ensureConsent("location_discovery")', 'router.push("/settings/location")')).toBe(true);
+    // The service itself refuses to read the device position without an active grant.
+    const service = read("mobile/src/services/locationSelection.ts");
+    expect(before(service, 'hasConsent("location_discovery")', "getForegroundPermissionsAsync")).toBe(true);
   });
 
   it("Settings uses consent for both optional purposes and withdraws through the server", () => {
     const src = read("mobile/app/settings/index.tsx");
-    expect(before(src, 'ensureConsent("location_discovery")', "await handleUpdateLocation()")).toBe(true);
+    expect(before(src, 'ensureConsent("location_discovery")', 'router.push("/settings/location")')).toBe(true);
     expect(src).toMatch(/ensureConsent\("push_notifications"\)/);
     expect(src).toMatch(/setConsent\("location_discovery", "withdrawn"\)/);
     expect(src).toMatch(/setConsent\("push_notifications", "withdrawn"\)/);

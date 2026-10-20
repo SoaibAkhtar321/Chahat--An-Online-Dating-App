@@ -209,7 +209,17 @@ describe("static privacy guarantees", () => {
     expect(onboarding).not.toMatch(/nominatim/i);
     expect(onboarding).not.toMatch(/navigator\.geolocation/);
     expect(onboarding).not.toMatch(/Location permission granted\./);
-    expect(onboarding).toMatch(/enableLocationSharing/);
+    expect(onboarding).toMatch(/LocationPicker/);
+    expect(onboarding).not.toMatch(/useState\(profile\?\.city \|\| "Mumbai"\)/);
+  });
+
+  it("the Phase 5 selection service stores nothing on the device, logs nothing and uses no network geocoder", () => {
+    const src = read("mobile/src/services/locationSelection.ts");
+    expect(src).not.toMatch(/AsyncStorage|localStorage|SecureStore/);
+    expect(src).not.toMatch(/console\.(log|warn|error|info)/);
+    expect(src).not.toMatch(/nominatim|googleapis|mapbox|here\.com|fetch\(/i);
+    expect(src).not.toMatch(/requestBackgroundPermissionsAsync|watchPositionAsync/);
+    expect(src).toMatch(/reverseGeocodeAsync/);
   });
 
   it("Expo config requests foreground-only location without a paid API key", () => {

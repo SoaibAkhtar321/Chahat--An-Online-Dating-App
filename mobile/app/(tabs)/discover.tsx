@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Linking } from "react-native";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   Bell,
   SlidersHorizontal,
@@ -20,11 +20,8 @@ import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
 import { FilterModal } from "../../src/components/discovery/FilterModal";
 import { useMilo } from "../../src/context/MiloContext";
 import { hasEntitlement } from "../../src/services/subscription";
-import {
-  describeLocationResult,
-  enableLocationSharing,
-  isLocationSharingEnabled,
-} from "../../src/services/location";
+import { isLocationSharingEnabled } from "../../src/services/location";
+import { loadLocationSelection } from "../../src/services/locationSelection";
 import { ensureConsent, setConsent } from "../../src/services/consent";
 import type { Filters } from "../../src/types";
 
@@ -60,6 +57,25 @@ export default function DiscoverScreen() {
       .catch((error) => console.warn("Could not load location-sharing status:", error));
   }, []);
 
+  // When the member comes back from the Location screen, reload the deck only if their selection changed.
+  const lastSelection = useRef<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadLocationSelection().then((selection) => {
+        if (!active || !selection) return;
+        const signature = `${selection.mode}|${selection.city ?? ""}|${selection.hasLocation}`;
+        const previous = lastSelection.current;
+        lastSelection.current = signature;
+        setLocationSharing(selection.mode === "current");
+        if (previous !== null && previous !== signature) void refreshDeck();
+      });
+      return () => {
+        active = false;
+      };
+    }, [refreshDeck]),
+  );
+
   const toggleLocationSharing = () => {
     if (locationSharing) {
       Alert.alert(
@@ -87,27 +103,10 @@ export default function DiscoverScreen() {
     }
 
     void (async () => {
-      // Purpose-specific notice and consent first; the OS permission prompt only follows an explicit agree.
+      // Purpose-specific notice and consent first; detection itself happens on the Location screen, which saves
+      // the city and the rounded coordinates together so Discover never sees a mismatched pair.
       if (!(await ensureConsent("location_discovery"))) return;
-      const result = await enableLocationSharing();
-      if (result.status === "enabled") {
-        setLocationSharing(true);
-        await refreshDeck();
-      } else if (result.status === "permission_denied") {
-        Alert.alert(
-          "Location permission unavailable",
-          "Enable foreground location permission in your device settings to use nearby discovery.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => void Linking.openSettings() },
-          ],
-        );
-      } else if (result.status !== "unsupported") {
-        Alert.alert(
-          result.status === "services_disabled" ? "Location services are off" : "Location unavailable",
-          describeLocationResult(result),
-        );
-      }
+      router.push("/settings/location");
     })();
   };
 
@@ -284,8 +283,12 @@ export default function DiscoverScreen() {
             </View>
             <Text style={styles.emptyTitle}>No one new right now</Text>
             <Text style={styles.emptySubtitle}>
-              Try widening your age, distance or interests in filters, or check back later.
+              Nobody new is within your maximum distance. Try a larger distance, wider age or fewer interests in
+              filters, change your location, or check back later.
             </Text>
+            <TouchableOpacity style={styles.resetBtn} onPress={() => router.push("/settings/location")}>
+              <Text style={styles.resetBtnText}>Change location</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.emptyBtn} onPress={() => setFilterModalVisible(true)}>
               <Text style={styles.emptyBtnText}>Adjust filters</Text>
             </TouchableOpacity>

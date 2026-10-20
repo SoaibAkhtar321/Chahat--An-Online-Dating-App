@@ -11,7 +11,8 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
+import { loadLocationSelection } from "../../src/services/locationSelection";
 import {
   ArrowLeft,
   Check,
@@ -63,7 +64,19 @@ export default function CompleteProfileScreen() {
 
   // Editable profile state initialized from current profile
   const [name, setName] = useState(profile?.name || "");
-  const [city, setCity] = useState(profile?.city || "");
+  // Display only: the location is changed on the Location screen (server-authoritative), never edited as free text here.
+  const [locationLabel, setLocationLabel] = useState(profile?.city || "");
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadLocationSelection().then((selection) => {
+        if (active && selection?.city) setLocationLabel(selection.city);
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
   const [bio, setBio] = useState(profile?.bio || "");
   const [promptQ, setPromptQ] = useState(profile?.prompt?.q || PROMPTS[0]!);
   const [promptA, setPromptA] = useState(profile?.prompt?.a || "");
@@ -79,7 +92,7 @@ export default function CompleteProfileScreen() {
   // Unsaved-changes guard shared by the header arrow and Android hardware/gesture back.
   const initialSnapshot = useRef<string | null>(null);
   const currentSnapshot = () => ({
-    name, city, bio, promptQ, promptA, intents, selectedInterests, work, education, languages, lifestyle,
+    name, bio, promptQ, promptA, intents, selectedInterests, work, education, languages, lifestyle,
     photos: photos.map((ph) => ph.id || ph.uri),
   });
   useEffect(() => {
@@ -101,7 +114,7 @@ export default function CompleteProfileScreen() {
     ]);
     return true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saving, router, name, city, bio, promptQ, promptA, intents, selectedInterests, work, education, languages, lifestyle, photos]);
+  }, [saving, router, name, bio, promptQ, promptA, intents, selectedInterests, work, education, languages, lifestyle, photos]);
   useHardwareBack(requestExit);
   const uploadedPhotoCache = useRef(new Map<string, PhotoItem>());
 
@@ -110,7 +123,6 @@ export default function CompleteProfileScreen() {
     () => ({
       ...profile,
       name,
-      city,
       bio,
       intents,
       interests: selectedInterests,
@@ -120,7 +132,7 @@ export default function CompleteProfileScreen() {
       languages,
       photos,
     }),
-    [profile, name, city, bio, intents, selectedInterests, work, education, lifestyle, languages, photos],
+    [profile, name, bio, intents, selectedInterests, work, education, lifestyle, languages, photos],
   );
 
   const completeness = useMemo(
@@ -216,7 +228,8 @@ export default function CompleteProfileScreen() {
           dob: profile?.dob,
           gender: profile?.gender,
           seeking: profile?.seeking,
-          city: city.trim() || profile?.city,
+          // Authoritative city from the server, so a stale cached profile can never overwrite a newer location choice.
+          city: (await loadLocationSelection().catch(() => null))?.city ?? profile?.city,
           bio: bio.trim(),
           prompt: { q: promptQ, a: promptA.trim() },
           intents,
@@ -387,12 +400,16 @@ export default function CompleteProfileScreen() {
             </View>
             <View style={[styles.basicFieldGroup, { marginTop: 12 }]}>
               <Text style={styles.fieldLabel}>City / Location</Text>
-              <Input
-                value={city}
-                onChangeText={setCity}
-                placeholder="e.g. Mumbai, Delhi, Bengaluru"
-                maxLength={80}
-              />
+              <TouchableOpacity
+                onPress={() => router.push("/settings/location")}
+                accessibilityRole="button"
+                accessibilityLabel="Change your location"
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: Colors.foreground, fontSize: Typography.sizes.base, paddingVertical: 12 }}>
+                  {locationLabel || "Not set"}  ·  <Text style={{ color: Colors.primary }}>Change</Text>
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 

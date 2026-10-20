@@ -4,7 +4,7 @@ import { X, Check } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Filters } from "../../types";
-import { INTERESTS, LANGUAGES, DEFAULT_FILTERS } from "../../types";
+import { INTERESTS, LANGUAGES, DEFAULT_FILTERS, MAX_DISCOVERY_RADIUS_KM } from "../../types";
 import { Chip } from "../ui/Chip";
 import { Button } from "../ui/Button";
 import { Slider, RangeSlider } from "../ui/Slider";
@@ -113,7 +113,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
               label="Maximum Distance"
               value={localFilters.distance}
               min={5}
-              max={150}
+              max={MAX_DISCOVERY_RADIUS_KM}
               step={5}
               unit="km"
               prefix="Up to "

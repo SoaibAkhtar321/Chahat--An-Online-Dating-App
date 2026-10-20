@@ -199,7 +199,8 @@ describe("Onboarding and Complete Profile Architecture & Navigation", () => {
   test("complete.tsx includes essential fields in handleSave to ensure profile validation succeeds", () => {
     const completeSrc = read("mobile/app/profile/complete.tsx");
     expect(completeSrc).toMatch(/name:\s*name\.trim\(\)\s*\|\|\s*profile\?\.name/);
-    expect(completeSrc).toMatch(/city:\s*city\.trim\(\)\s*\|\|\s*profile\?\.city/);
+    // Phase 5: the city is no longer free text here; it is the server-authoritative selection (falling back to the profile).
+    expect(completeSrc).toMatch(/city:\s*\(await loadLocationSelection\(\)\.catch\(\(\) => null\)\)\?\.city\s*\?\?\s*profile\?\.city/);
     expect(completeSrc).toMatch(/dob:\s*profile\?\.dob/);
     expect(completeSrc).toMatch(/gender:\s*profile\?\.gender/);
     expect(completeSrc).toMatch(/seeking:\s*profile\?\.seeking/);

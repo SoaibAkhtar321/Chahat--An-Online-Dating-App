@@ -10,11 +10,11 @@ import {
   Platform,
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
-import { enableLocationSharing, describeLocationResult } from "../../src/services/location";
-import { ensureConsent } from "../../src/services/consent";
+import { LocationPicker } from "../../src/components/location/LocationPicker";
+import type { LocationSelection } from "../../src/services/locationSelectionPolicy";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Plus, MapPin, Compass } from "lucide-react-native";
+import { ArrowLeft } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
@@ -30,7 +30,7 @@ import {
   uploadProfilePhoto,
   requestPhotoModeration,
 } from "../../src/services/profile";
-import { CITIES, PhotoItem } from "../../src/types";
+import { PhotoItem } from "../../src/types";
 
 // Streamlined essential onboarding: Name, DOB (18+), Gender/Seeking, Location, and Primary Photo.
 // Optional details (Bio, Prompts, Interests, Work, Education, Languages, Lifestyle) are moved to
@@ -57,10 +57,10 @@ export default function OnboardingScreen() {
   const [dob, setDob] = useState(profile?.dob || ""); // YYYY-MM-DD
   const [gender, setGender] = useState<"man" | "woman" | "">(profile?.gender || "");
   const [seeking, setSeeking] = useState<"man" | "woman" | "">(profile?.seeking || "");
-  const [city, setCity] = useState(profile?.city || "Mumbai");
-  const [customCity, setCustomCity] = useState("");
-  const [locStatus, setLocStatus] = useState<"idle" | "requesting" | "granted" | "denied" | "blocked" | "error">("idle");
-  const [locMessage, setLocMessage] = useState("");
+  // The authoritative location selection comes from the server via LocationPicker. There is deliberately no default
+  // city: until the member picks one (or uses their current location) this stays null and the step cannot continue.
+  const [selection, setSelection] = useState<LocationSelection | null>(null);
+  const city = selection?.city ?? "";
   const [photos, setPhotos] = useState<PhotoItem[]>(profile?.photos || []);
   const uploadedPhotoCache = useRef(new Map<string, PhotoItem>());
 
@@ -73,34 +73,6 @@ export default function OnboardingScreen() {
       router.replace("/profile/complete");
     }
   }, [profile?.onboarded, router]);
-
-  const handleRequestCurrentLocation = async () => {
-    // Optional purpose-specific consent first; declining simply leaves the city choice below as the way forward.
-    if (!(await ensureConsent("location_discovery"))) return;
-    setLocStatus("requesting");
-    setLocMessage("Detecting your location…");
-    // Real device location via the location service: permission prompt, GPS fix, then server-side storage.
-    // Coordinates are never kept in this screen's state and no third-party geocoder is contacted.
-    const result = await enableLocationSharing();
-    if (result.status === "enabled") {
-      setLocStatus("granted");
-      setLocMessage("Location enabled. Pick your city below so others can find you by city too.");
-      setError("");
-    } else {
-      setLocMessage(describeLocationResult(result));
-      setLocStatus(
-        result.status === "permission_denied" || result.status === "services_disabled" ? "blocked" : "error",
-      );
-    }
-  };
-
-  const handleAddCustomCity = () => {
-    const trimmed = customCity.trim();
-    if (!trimmed) return;
-    setCity(trimmed);
-    setCustomCity("");
-    setError("");
-  };
 
   const validateStep = (): boolean => {
     setError("");
@@ -126,8 +98,8 @@ export default function OnboardingScreen() {
         }
         return true;
       case "location":
-        if (!city || city.trim().length < 1) {
-          setError("Please choose your city");
+        if (!selection?.city) {
+          setError("Please choose your city or use your current location");
           return false;
         }
         return true;
@@ -374,98 +346,10 @@ export default function OnboardingScreen() {
       case "location":
         return (
           <View>
-            <Text style={styles.stepTitle}>Where are you located?</Text>
             <Text style={styles.stepSubtitle}>
               People are shown nearest first. Others only ever see an approximate distance, never your exact location.
             </Text>
-
-            {/* Current Location Permission Card */}
-            <View style={styles.locationPermissionCard}>
-              <View style={styles.locationIconWrap}>
-                <Compass size={24} color={Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.locationCardTitle}>Use Current Location</Text>
-                <Text style={styles.locationCardDesc}>
-                  We'll automatically detect your approximate area. Your exact address is never shared.
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.locDetectBtn,
-                locStatus === "requesting" && styles.locDetectBtnDisabled,
-              ]}
-              onPress={handleRequestCurrentLocation}
-              disabled={locStatus === "requesting"}
-              activeOpacity={0.8}
-            >
-              <MapPin size={18} color={Colors.primaryForeground} style={{ marginRight: 8 }} />
-              <Text style={styles.locDetectBtnText}>
-                {locStatus === "requesting"
-                  ? "Detecting location…"
-                  : locStatus === "granted"
-                    ? "Update Location"
-                    : "Enable Location"}
-              </Text>
-            </TouchableOpacity>
-
-            {locMessage ? (
-              <View
-                style={[
-                  styles.locMessageBadge,
-                  locStatus === "granted"
-                    ? styles.locMessageBadgeSuccess
-                    : styles.locMessageBadgeWarn,
-                ]}
-              >
-                <MapPin
-                  size={15}
-                  color={locStatus === "granted" ? Colors.primary : Colors.mutedForeground}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  style={[
-                    styles.locMessageText,
-                    locStatus === "granted" && { color: Colors.primary, fontWeight: "600" },
-                  ]}
-                >
-                  {locMessage}
-                </Text>
-              </View>
-            ) : null}
-
-            {/* Current Selected City display */}
-            <View style={styles.selectedCityRow}>
-              <Text style={styles.selectedCityLabel}>Selected location:</Text>
-              <View style={styles.selectedCityBadge}>
-                <MapPin size={14} color={Colors.primary} style={{ marginRight: 4 }} />
-                <Text style={styles.selectedCityText}>{city || "None selected"}</Text>
-              </View>
-            </View>
-
-            {/* Custom City Input */}
-            <Text style={styles.locationSubheading}>Or enter your city / town</Text>
-            <View style={styles.customRow}>
-              <Input
-                placeholder="e.g. Gurugram, Chandigarh, Goa…"
-                value={customCity}
-                onChangeText={setCustomCity}
-                containerStyle={{ flex: 1, marginBottom: 0 }}
-              />
-              <TouchableOpacity onPress={handleAddCustomCity} style={styles.addBtn}>
-                <Plus size={20} color={Colors.primaryForeground} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Popular Cities Grid */}
-            <Text style={[styles.locationSubheading, { marginTop: 16 }]}>Popular cities</Text>
-            <View style={styles.chipWrap}>
-              {CITIES.map((c) => (
-                <Chip key={c} label={c} active={city === c} onPress={() => setCity(c)} />
-              ))}
-            </View>
+            <LocationPicker onSelectionChange={setSelection} />
           </View>
         );
 

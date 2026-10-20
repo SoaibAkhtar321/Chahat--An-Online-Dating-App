@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
-import type { Profile, SwipeResponse } from "../types";
+import { DEFAULT_FILTERS, MAX_DISCOVERY_RADIUS_KM, type Profile, type SwipeResponse } from "../types";
 import { getSignedUrls } from "./storage";
 import { pushNotificationToInbox } from "./notifications";
 
@@ -95,51 +95,6 @@ export const DEMO_PROFILES: Profile[] = [
   },
 ];
 
-export const PROGRESSIVE_RADIUS_BANDS = [3, 5, 10, 25, 50, 100] as const;
-
-export async function fetchDiscoveryDeck(
-  currentUserId: string,
-  userCity: string,
-  seekingGender: string,
-  filters?: import("../types").Filters,
-): Promise<Profile[]> {
-  void currentUserId;
-  void userCity;
-  void seekingGender;
-
-  if (!isSupabaseConfigured()) {
-    return filterDemoProfiles(filters);
-  }
-
-  // Progressive radius expansion: 3 km -> 5 km -> 10 km -> farther bands
-  const targetMaxRadius = filters?.distance ?? 50;
-  const bands = PROGRESSIVE_RADIUS_BANDS.filter((b) => b <= Math.max(targetMaxRadius, 3));
-  if (bands.length === 0 || bands[bands.length - 1] < targetMaxRadius) {
-    bands.push(targetMaxRadius as any);
-  }
-
-  const allProfiles: Profile[] = [];
-  const seenIds = new Set<string>();
-
-  let minBandKm = 0;
-  for (const maxBandKm of bands) {
-    const page = await fetchDiscoveryPage(filters, null, minBandKm, maxBandKm);
-    for (const p of page.profiles) {
-      if (!seenIds.has(p.id)) {
-        seenIds.add(p.id);
-        allProfiles.push(p);
-      }
-    }
-    // If nearer band returned profiles, present them first without mixing farther profiles
-    if (allProfiles.length >= 10) {
-      break;
-    }
-    minBandKm = maxBandKm;
-  }
-
-  return allProfiles;
-}
-
 export interface DiscoveryCursor {
   distanceMeters: number;
   profileId: string;
@@ -150,11 +105,15 @@ export interface DiscoveryPage {
   nextCursor: DiscoveryCursor | null;
 }
 
+/**
+ * One page of the feed, nearest first. `filters.distance` is the member's MAXIMUM radius: the server orders by
+ * distance (device coordinates, else city centres) and keyset-pages with (distance, id), so a sparse
+ * neighbourhood naturally continues into neighbouring and farther cities up to that maximum, with no
+ * duplicates across pages. The deck is only empty when nobody eligible is within the maximum radius.
+ */
 export async function fetchDiscoveryPage(
   filters?: import("../types").Filters,
   cursor?: DiscoveryCursor | null,
-  minRadiusKm = 0,
-  maxRadiusKm?: number,
 ): Promise<DiscoveryPage> {
   if (!isSupabaseConfigured()) {
     return { profiles: filterDemoProfiles(filters), nextCursor: null };
@@ -164,23 +123,22 @@ export async function fetchDiscoveryPage(
     const safeFilters = filters ?? {
       ageMin: 18,
       ageMax: 99,
-      distance: 50,
+      distance: DEFAULT_FILTERS.distance,
       intents: [],
       interests: [],
       languages: [],
     };
-    const effectiveRadius = maxRadiusKm ?? safeFilters.distance ?? 50;
     const { data, error } = await supabase.rpc("get_discovery_feed_page", {
       _limit: 30,
       _age_min: safeFilters.ageMin,
       _age_max: safeFilters.ageMax,
-      _radius_km: effectiveRadius,
+      _radius_km: Math.min(Math.max(Math.round(safeFilters.distance ?? DEFAULT_FILTERS.distance), 1), MAX_DISCOVERY_RADIUS_KM),
       _intents: safeFilters.intents,
       _interests: safeFilters.interests,
       _languages: safeFilters.languages,
       _after_distance_m: cursor?.distanceMeters ?? null,
       _after_id: cursor?.profileId ?? null,
-      _min_radius_km: minRadiusKm,
+      _min_radius_km: 0,
     });
     if (error) throw new Error(error.message);
     if (!Array.isArray(data)) throw new Error("Discovery returned an invalid response.");
@@ -242,6 +200,7 @@ function formatProfileRow(r: any, signed: Record<string, string>): Profile {
     age: r.age || 25,
     city: r.city || "",
     distanceKm: typeof r.distance_km === "number" ? r.distance_km : null,
+    distanceBasis: r.distance_basis === "device" || r.distance_basis === "city" ? r.distance_basis : null,
     bio: r.bio || "",
     photos: photosArray,
     interests: r.interests || [],
