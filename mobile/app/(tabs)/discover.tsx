@@ -17,6 +17,11 @@ import {
 import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
+import {
+  SwipeableCard,
+  type SwipeableCardHandle,
+  type SwipeAction,
+} from "../../src/components/discovery/SwipeableCard";
 import { FilterModal } from "../../src/components/discovery/FilterModal";
 import { useMilo } from "../../src/context/MiloContext";
 import { hasEntitlement } from "../../src/services/subscription";
@@ -49,6 +54,7 @@ export default function DiscoverScreen() {
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [swiping, setSwiping] = useState(false);
+  const cardRef = useRef<SwipeableCardHandle>(null);
   const [locationSharing, setLocationSharing] = useState(false);
 
   useEffect(() => {
@@ -110,7 +116,7 @@ export default function DiscoverScreen() {
     })();
   };
 
-  const handleSwipe = async (dir: "like" | "pass" | "priority") => {
+  const handleSwipe = async (dir: SwipeAction) => {
     if (swiping || !currentProfile) return;
     setSwiping(true);
     const targetId = currentProfile.id;
@@ -131,6 +137,12 @@ export default function DiscoverScreen() {
         params: { id: targetId },
       });
     }
+  };
+
+  // Buttons and drags share one path: the card animates away first, then handleSwipe runs.
+  const triggerSwipe = (dir: SwipeAction) => {
+    const started = cardRef.current?.swipe(dir);
+    if (started === undefined) void handleSwipe(dir); // no card mounted to animate
   };
 
   const handleUndo = async () => {
@@ -267,15 +279,22 @@ export default function DiscoverScreen() {
         {loadingDeck ? (
           <ActivityIndicator size="large" color={Colors.primary} />
         ) : currentProfile ? (
-          <DiscoveryCard
-            profile={currentProfile}
-            onPressDetails={() =>
-              router.push({
-                pathname: "/profile/[id]",
-                params: { id: currentProfile.id },
-              })
-            }
-          />
+          <SwipeableCard
+            key={currentProfile.id}
+            ref={cardRef}
+            disabled={swiping}
+            onSwipe={handleSwipe}
+          >
+            <DiscoveryCard
+              profile={currentProfile}
+              onPressDetails={() =>
+                router.push({
+                  pathname: "/profile/[id]",
+                  params: { id: currentProfile.id },
+                })
+              }
+            />
+          </SwipeableCard>
         ) : (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
@@ -314,8 +333,10 @@ export default function DiscoverScreen() {
 
           {/* Pass */}
           <TouchableOpacity
-            onPress={() => handleSwipe("pass")}
+            onPress={() => triggerSwipe("pass")}
             style={styles.mediumBtn}
+            testID="discover-pass-button"
+            accessibilityLabel="Pass"
             activeOpacity={0.7}
           >
             <X size={28} color={Colors.mutedForeground} strokeWidth={2.5} />
@@ -323,8 +344,10 @@ export default function DiscoverScreen() {
 
           {/* Like */}
           <TouchableOpacity
-            onPress={() => handleSwipe("like")}
+            onPress={() => triggerSwipe("like")}
             style={styles.likeBtn}
+            testID="discover-like-button"
+            accessibilityLabel="Like"
             activeOpacity={0.8}
           >
             <Heart size={34} color={Colors.primaryForeground} fill={Colors.primaryForeground} />
@@ -332,8 +355,10 @@ export default function DiscoverScreen() {
 
           {/* Priority Like */}
           <TouchableOpacity
-            onPress={() => handleSwipe("priority")}
+            onPress={() => triggerSwipe("priority")}
             style={styles.smallBtn}
+            testID="discover-priority-button"
+            accessibilityLabel="Priority like"
             activeOpacity={0.7}
           >
             <Gem size={20} color={Colors.accent} />

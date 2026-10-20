@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Pressable } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { MapPin, Info, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
+import { MapPin, ChevronUp, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { AvatarPlaceholder } from "../ui/AvatarPlaceholder";
@@ -149,8 +149,11 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
               onPress={onPressDetails}
               style={styles.infoButton}
               activeOpacity={0.8}
+              testID="discovery-details-button"
+              accessibilityRole="button"
+              accessibilityLabel="View profile details"
             >
-              <Info size={22} color={Colors.primaryForeground} />
+              <ChevronUp size={26} color={Colors.primaryForeground} strokeWidth={2.5} />
             </TouchableOpacity>
           )}
         </View>

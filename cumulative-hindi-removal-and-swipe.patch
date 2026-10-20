@@ -1,0 +1,1066 @@
+diff --git a/__tests__/discoverSwipeActions.test.tsx b/__tests__/discoverSwipeActions.test.tsx
+new file mode 100644
+index 0000000..d6cb541
+--- /dev/null
++++ b/__tests__/discoverSwipeActions.test.tsx
+@@ -0,0 +1,179 @@
++import React from "react";
++import { PanResponder } from "react-native";
++import TestRenderer, { act } from "react-test-renderer";
++
++const mockLightColors = require("../mobile/src/constants/theme").LightColors;
++const mockPush = jest.fn();
++const mockSwipeCard = jest.fn();
++const mockAlert = jest.fn();
++const mockMilo: any = {};
++
++jest.mock("expo-router", () => ({
++  useRouter: () => ({ push: mockPush, back: jest.fn() }),
++  useFocusEffect: () => undefined,
++}));
++jest.mock("lucide-react-native", () => new Proxy({ __esModule: true }, { get: (t: any, k: string) => (k in t ? t[k] : () => null) }));
++jest.mock("react-native-safe-area-context", () => ({
++  SafeAreaView: ({ children }: any) => require("react").createElement("View", null, children),
++}));
++jest.mock("../mobile/src/context/ThemeContext", () => ({
++  useTheme: () => ({ colors: mockLightColors, isDark: false }),
++}));
++jest.mock("../mobile/src/context/MiloContext", () => ({ useMilo: () => mockMilo }));
++jest.mock("../mobile/src/components/discovery/FilterModal", () => ({ FilterModal: () => null }));
++jest.mock("../mobile/src/components/discovery/DiscoveryCard", () => ({
++  DiscoveryCard: ({ profile, onPressDetails }: any) =>
++    require("react").createElement(
++      "View",
++      { testID: "card" },
++      require("react").createElement("View", { testID: "discovery-details-button", onPress: onPressDetails, profileId: profile.id }),
++    ),
++}));
++jest.mock("../mobile/src/services/subscription", () => ({ hasEntitlement: () => true }));
++jest.mock("../mobile/src/services/location", () => ({ isLocationSharingEnabled: () => Promise.resolve(false) }));
++jest.mock("../mobile/src/services/locationSelection", () => ({ loadLocationSelection: () => Promise.resolve(null) }));
++jest.mock("../mobile/src/services/consent", () => ({ ensureConsent: jest.fn(), setConsent: jest.fn() }));
++jest.mock("../mobile/src/utils/alert", () => ({ Alert: { alert: (...a: any[]) => mockAlert(...a) } }));
++
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const DiscoverScreen = require("../mobile/app/(tabs)/discover").default as React.ComponentType;
++
++let panConfig: any;
++let tree: TestRenderer.ReactTestRenderer | undefined;
++
++const PROFILE = { id: "p1", name: "Asha", age: 27, photos: [], interests: [] };
++
++beforeEach(() => {
++  jest.useFakeTimers();
++  mockPush.mockClear();
++  mockAlert.mockClear();
++  mockSwipeCard.mockReset().mockResolvedValue({ success: true, isMatch: false, likesRemaining: 10 });
++  Object.assign(mockMilo, {
++    currentProfile: PROFILE,
++    deck: [PROFILE],
++    likesRemaining: 10,
++    dailyLikeLimit: 50,
++    lastPassedId: null,
++    filters: { interests: [] },
++    loadingDeck: false,
++    isBoosting: false,
++    boostTimeRemaining: 0,
++    subscription: null,
++    swipeCard: mockSwipeCard,
++    undoPass: jest.fn(),
++    triggerBoost: jest.fn(),
++    setFilters: jest.fn(),
++    refreshDeck: jest.fn(),
++  });
++  jest.spyOn(PanResponder, "create").mockImplementation(((cfg: any) => {
++    panConfig = cfg;
++    return { panHandlers: {} };
++  }) as never);
++});
++
++afterEach(async () => {
++  await act(async () => tree?.unmount());
++  tree = undefined;
++  jest.restoreAllMocks();
++  jest.useRealTimers();
++});
++
++async function render() {
++  await act(async () => {
++    tree = TestRenderer.create(<DiscoverScreen />);
++  });
++}
++const byTestId = (id: string) =>
++  tree!.root.findAll((n) => n.props?.testID === id && typeof n.props?.onPress === "function")[0]!;
++const settle = () =>
++  act(async () => {
++    jest.advanceTimersByTime(600);
++    await Promise.resolve();
++    await Promise.resolve();
++  });
++const press = (id: string) => act(async () => byTestId(id).props.onPress());
++
++describe("Discover: swipe gestures and action buttons", () => {
++  it.each([
++    ["discover-like-button", "like"],
++    ["discover-pass-button", "pass"],
++    ["discover-priority-button", "priority"],
++  ])("%s animates the card away and then swipes '%s'", async (testId, direction) => {
++    await render();
++    await press(testId);
++    expect(mockSwipeCard).not.toHaveBeenCalled(); // the card is still on its way out
++    await settle();
++    expect(mockSwipeCard).toHaveBeenCalledTimes(1);
++    expect(mockSwipeCard).toHaveBeenCalledWith(direction);
++  });
++
++  it("dragging the card right likes and dragging it left passes", async () => {
++    await render();
++    await act(async () => panConfig.onPanResponderRelease({}, { dx: 320, dy: 0, vx: 0 }));
++    await settle();
++    expect(mockSwipeCard).toHaveBeenLastCalledWith("like");
++    await act(async () => tree!.unmount());
++
++    mockSwipeCard.mockClear();
++    await render();
++    await act(async () => panConfig.onPanResponderRelease({}, { dx: -320, dy: 0, vx: 0 }));
++    await settle();
++    expect(mockSwipeCard).toHaveBeenLastCalledWith("pass");
++  });
++
++  it("a short drag does not swipe", async () => {
++    await render();
++    await act(async () => panConfig.onPanResponderRelease({}, { dx: 30, dy: 0, vx: 0.05 }));
++    await settle();
++    expect(mockSwipeCard).not.toHaveBeenCalled();
++  });
++
++  it("a match opens the match screen for the person who was just liked", async () => {
++    mockSwipeCard.mockResolvedValue({ success: true, isMatch: true, likesRemaining: 9 });
++    await render();
++    await press("discover-like-button");
++    await settle();
++    expect(mockPush).toHaveBeenCalledWith({ pathname: "/match/[id]", params: { id: "p1" } });
++  });
++
++  it("shows the out-of-likes message when the server refuses the like", async () => {
++    mockSwipeCard.mockResolvedValue({ success: false, isMatch: false, likesRemaining: 0, error: "daily_like_limit_reached" });
++    await render();
++    await press("discover-like-button");
++    await settle();
++    expect(mockAlert).toHaveBeenCalledWith("Out of likes", expect.stringContaining("50"));
++  });
++
++  it("a second tap while the first swipe is in flight is ignored", async () => {
++    mockSwipeCard.mockReturnValue(new Promise(() => undefined));
++    await render();
++    await press("discover-like-button");
++    await press("discover-pass-button");
++    await settle();
++    expect(mockSwipeCard).toHaveBeenCalledTimes(1);
++    expect(mockSwipeCard).toHaveBeenCalledWith("like");
++  });
++
++  it("never strands the card off-screen if the deck did not advance", async () => {
++    await render();
++    await press("discover-like-button");
++    await settle();
++    await press("discover-like-button"); // same profile is still current: the card came back
++    await settle();
++    expect(mockSwipeCard).toHaveBeenCalledTimes(2);
++  });
++
++  it("the details arrow opens the profile of the card on screen", async () => {
++    await render();
++    await press("discovery-details-button");
++    expect(mockPush).toHaveBeenCalledWith({ pathname: "/profile/[id]", params: { id: "p1" } });
++  });
++
++  it("shows no card, buttons or swipe handling when the deck is empty", async () => {
++    mockMilo.currentProfile = null;
++    mockMilo.deck = [];
++    await render();
++    expect(tree!.root.findAll((n) => n.props?.testID === "swipeable-card")).toHaveLength(0);
++    expect(tree!.root.findAll((n) => n.props?.testID === "discover-like-button")).toHaveLength(0);
++  });
++});
+diff --git a/__tests__/discoveryCardDetailsButton.test.tsx b/__tests__/discoveryCardDetailsButton.test.tsx
+new file mode 100644
+index 0000000..4d1d4ba
+--- /dev/null
++++ b/__tests__/discoveryCardDetailsButton.test.tsx
+@@ -0,0 +1,55 @@
++import React from "react";
++import TestRenderer, { act } from "react-test-renderer";
++
++const mockLightColors = require("../mobile/src/constants/theme").LightColors;
++const mockIcons: string[] = [];
++
++jest.mock("../mobile/src/context/ThemeContext", () => ({
++  useTheme: () => ({ colors: mockLightColors, isDark: false }),
++}));
++jest.mock("lucide-react-native", () =>
++  new Proxy({ __esModule: true }, {
++    get: (t: any, k: string) => (k in t ? t[k] : () => { mockIcons.push(k); return null; }),
++  }),
++);
++jest.mock("expo-linear-gradient", () => ({
++  LinearGradient: ({ children }: any) => require("react").createElement("View", null, children),
++}));
++jest.mock("../mobile/src/components/profile/ProfilePhoto", () => ({ ProfilePhoto: () => null }));
++jest.mock("../mobile/src/components/ui/AvatarPlaceholder", () => ({ AvatarPlaceholder: () => null }));
++
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const { DiscoveryCard } = require("../mobile/src/components/discovery/DiscoveryCard");
++
++const profile: any = { id: "p1", name: "Asha", age: 27, photos: [], interests: [], city: "Pune" };
++
++async function render(onPressDetails?: () => void) {
++  let tree!: TestRenderer.ReactTestRenderer;
++  await act(async () => {
++    tree = TestRenderer.create(<DiscoveryCard profile={profile} onPressDetails={onPressDetails} />);
++  });
++  return tree;
++}
++const button = (tree: TestRenderer.ReactTestRenderer) =>
++  tree.root.findAll((n) => n.props?.testID === "discovery-details-button" && typeof n.props?.onPress === "function");
++
++describe("DiscoveryCard details arrow", () => {
++  beforeEach(() => (mockIcons.length = 0));
++
++  it("shows an up-arrow button that opens the details, with an accessible label", async () => {
++    const onPressDetails = jest.fn();
++    const tree = await render(onPressDetails);
++    const [btn] = button(tree);
++    expect(btn!.props.accessibilityLabel).toBe("View profile details");
++    expect(btn!.props.accessibilityRole).toBe("button");
++    expect(mockIcons).toContain("ChevronUp");
++    expect(mockIcons).not.toContain("Info");
++    await act(async () => btn!.props.onPress());
++    expect(onPressDetails).toHaveBeenCalledTimes(1);
++  });
++
++  it("has no arrow when there is nothing to open", async () => {
++    const tree = await render(undefined);
++    expect(button(tree)).toHaveLength(0);
++  });
++});
+diff --git a/__tests__/swipeableCard.test.tsx b/__tests__/swipeableCard.test.tsx
+new file mode 100644
+index 0000000..4f87f30
+--- /dev/null
++++ b/__tests__/swipeableCard.test.tsx
+@@ -0,0 +1,184 @@
++import React from "react";
++import { PanResponder, Text } from "react-native";
++import TestRenderer, { act } from "react-test-renderer";
++
++const mockLightColors = require("../mobile/src/constants/theme").LightColors;
++jest.mock("../mobile/src/context/ThemeContext", () => ({
++  useTheme: () => ({ colors: mockLightColors, isDark: false }),
++}));
++
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const {
++  SwipeableCard,
++  resolveSwipeDirection,
++} = require("../mobile/src/components/discovery/SwipeableCard");
++
++type Handle = { swipe: (a: "like" | "pass" | "priority") => boolean };
++
++let panConfig: any;
++let tree: TestRenderer.ReactTestRenderer | undefined;
++
++beforeEach(() => {
++  jest.useFakeTimers();
++  panConfig = undefined;
++  jest.spyOn(PanResponder, "create").mockImplementation(((cfg: any) => {
++    panConfig = cfg;
++    return { panHandlers: {} };
++  }) as never);
++});
++
++afterEach(async () => {
++  await act(async () => {
++    tree?.unmount();
++  });
++  tree = undefined;
++  jest.restoreAllMocks();
++  jest.useRealTimers();
++});
++
++async function render(props: { onSwipe: jest.Mock; disabled?: boolean }) {
++  const ref = React.createRef<Handle>();
++  await act(async () => {
++    tree = TestRenderer.create(
++      <SwipeableCard ref={ref} {...props}>
++        <Text>profile</Text>
++      </SwipeableCard>,
++    );
++  });
++  return ref;
++}
++
++/** Runs the exit animation and the awaited onSwipe callback. */
++const settle = () =>
++  act(async () => {
++    jest.advanceTimersByTime(600);
++    await Promise.resolve();
++    await Promise.resolve();
++  });
++
++describe("resolveSwipeDirection", () => {
++  it.each([
++    [200, 0, "like"],
++    [-200, 0, "pass"],
++    [60, 0.9, "like"], // short but fast flick right
++    [-60, -0.9, "pass"], // short but fast flick left
++    [60, 0.1, null], // short and slow: springs back
++    [-60, -0.1, null],
++    [10, 2, null], // a fast twitch that barely moved is not a swipe
++    [0, 0, null],
++  ])("dx=%d vx=%d -> %s", (dx, vx, expected) => {
++    expect(resolveSwipeDirection(dx as number, vx as number, 400)).toBe(expected);
++  });
++});
++
++describe("SwipeableCard: drag gestures", () => {
++  it("only claims clear horizontal drags, never taps, vertical drags or while disabled", async () => {
++    await render({ onSwipe: jest.fn() });
++    const claim = panConfig.onMoveShouldSetPanResponder;
++    expect(claim({}, { dx: 30, dy: 2 })).toBe(true);
++    expect(claim({}, { dx: -30, dy: 2 })).toBe(true);
++    expect(claim({}, { dx: 4, dy: 0 })).toBe(false); // a tap
++    expect(claim({}, { dx: 30, dy: 60 })).toBe(false); // mostly vertical
++
++    await act(async () => {
++      tree!.update(
++        <SwipeableCard onSwipe={jest.fn()} disabled>
++          <Text>profile</Text>
++        </SwipeableCard>,
++      );
++    });
++    expect(panConfig.onMoveShouldSetPanResponder({}, { dx: 80, dy: 0 })).toBe(false);
++  });
++
++  it("a long drag right is a like and a long drag left is a pass", async () => {
++    const onSwipe = jest.fn();
++    await render({ onSwipe });
++    await act(async () => panConfig.onPanResponderRelease({}, { dx: 300, dy: 0, vx: 0 }));
++    await settle();
++    expect(onSwipe).toHaveBeenCalledWith("like");
++    await act(async () => tree!.unmount());
++
++    const onSwipe2 = jest.fn();
++    await render({ onSwipe: onSwipe2 });
++    await act(async () => panConfig.onPanResponderRelease({}, { dx: -300, dy: 0, vx: 0 }));
++    await settle();
++    expect(onSwipe2).toHaveBeenCalledWith("pass");
++  });
++
++  it("a short, slow drag springs back without swiping and the card stays usable", async () => {
++    const onSwipe = jest.fn();
++    const ref = await render({ onSwipe });
++    await act(async () => panConfig.onPanResponderRelease({}, { dx: 40, dy: 0, vx: 0.05 }));
++    await settle();
++    expect(onSwipe).not.toHaveBeenCalled();
++    expect(ref.current!.swipe("like")).toBe(true);
++  });
++
++  it("springs back when the system takes the gesture away", async () => {
++    const onSwipe = jest.fn();
++    await render({ onSwipe });
++    await act(async () => panConfig.onPanResponderTerminate());
++    await settle();
++    expect(onSwipe).not.toHaveBeenCalled();
++  });
++});
++
++describe("SwipeableCard: button-driven swipes", () => {
++  it.each(["like", "pass", "priority"] as const)("swipe(%s) animates away, then reports once", async (action) => {
++    const onSwipe = jest.fn();
++    const ref = await render({ onSwipe });
++    expect(ref.current!.swipe(action)).toBe(true);
++    expect(onSwipe).not.toHaveBeenCalled(); // not before the card has left
++    await settle();
++    expect(onSwipe).toHaveBeenCalledTimes(1);
++    expect(onSwipe).toHaveBeenCalledWith(action);
++  });
++
++  it("ignores a second swipe while the first is in flight", async () => {
++    const onSwipe = jest.fn(() => new Promise<void>(() => undefined)); // never resolves
++    const ref = await render({ onSwipe });
++    expect(ref.current!.swipe("like")).toBe(true);
++    expect(ref.current!.swipe("pass")).toBe(false);
++    await settle();
++    expect(onSwipe).toHaveBeenCalledTimes(1);
++    expect(ref.current!.swipe("pass")).toBe(false);
++  });
++
++  it("does nothing while disabled", async () => {
++    const onSwipe = jest.fn();
++    const ref = await render({ onSwipe, disabled: true });
++    expect(ref.current!.swipe("like")).toBe(false);
++    await settle();
++    expect(onSwipe).not.toHaveBeenCalled();
++  });
++
++  it("brings the card back, never stranded off-screen, when the caller does not replace it", async () => {
++    const onSwipe = jest.fn().mockResolvedValue(undefined); // resolves but the card stays mounted
++    const ref = await render({ onSwipe });
++    expect(ref.current!.swipe("like")).toBe(true);
++    await settle();
++    expect(onSwipe).toHaveBeenCalledTimes(1);
++    expect(ref.current!.swipe("like")).toBe(true); // usable again
++  });
++
++  it("survives a rejecting handler", async () => {
++    const onSwipe = jest.fn().mockRejectedValue(new Error("network"));
++    const ref = await render({ onSwipe });
++    expect(ref.current!.swipe("like")).toBe(true);
++    await settle();
++    expect(ref.current!.swipe("like")).toBe(true);
++  });
++
++  it("does not report a swipe if the card is removed mid-animation", async () => {
++    const onSwipe = jest.fn();
++    const ref = await render({ onSwipe });
++    ref.current!.swipe("like");
++    await act(async () => tree!.unmount());
++    tree = undefined;
++    await act(async () => {
++      jest.advanceTimersByTime(600);
++      await Promise.resolve();
++    });
++    expect(onSwipe).not.toHaveBeenCalled();
++  });
++});
+diff --git a/mobile/app/(tabs)/discover.tsx b/mobile/app/(tabs)/discover.tsx
+index 62487a6..a071a6a 100644
+--- a/mobile/app/(tabs)/discover.tsx
++++ b/mobile/app/(tabs)/discover.tsx
+@@ -17,6 +17,11 @@ import {
+ import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+ import { useTheme } from "../../src/context/ThemeContext";
+ import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
++import {
++  SwipeableCard,
++  type SwipeableCardHandle,
++  type SwipeAction,
++} from "../../src/components/discovery/SwipeableCard";
+ import { FilterModal } from "../../src/components/discovery/FilterModal";
+ import { useMilo } from "../../src/context/MiloContext";
+ import { hasEntitlement } from "../../src/services/subscription";
+@@ -49,6 +54,7 @@ export default function DiscoverScreen() {
+ 
+   const [filterModalVisible, setFilterModalVisible] = useState(false);
+   const [swiping, setSwiping] = useState(false);
++  const cardRef = useRef<SwipeableCardHandle>(null);
+   const [locationSharing, setLocationSharing] = useState(false);
+ 
+   useEffect(() => {
+@@ -110,7 +116,7 @@ export default function DiscoverScreen() {
+     })();
+   };
+ 
+-  const handleSwipe = async (dir: "like" | "pass" | "priority") => {
++  const handleSwipe = async (dir: SwipeAction) => {
+     if (swiping || !currentProfile) return;
+     setSwiping(true);
+     const targetId = currentProfile.id;
+@@ -133,6 +139,12 @@ export default function DiscoverScreen() {
+     }
+   };
+ 
++  // Buttons and drags share one path: the card animates away first, then handleSwipe runs.
++  const triggerSwipe = (dir: SwipeAction) => {
++    const started = cardRef.current?.swipe(dir);
++    if (started === undefined) void handleSwipe(dir); // no card mounted to animate
++  };
++
+   const handleUndo = async () => {
+     if (!hasEntitlement(subscription?.tier || "free", "undoPass")) {
+       Alert.alert(
+@@ -267,15 +279,22 @@ export default function DiscoverScreen() {
+         {loadingDeck ? (
+           <ActivityIndicator size="large" color={Colors.primary} />
+         ) : currentProfile ? (
+-          <DiscoveryCard
+-            profile={currentProfile}
+-            onPressDetails={() =>
+-              router.push({
+-                pathname: "/profile/[id]",
+-                params: { id: currentProfile.id },
+-              })
+-            }
+-          />
++          <SwipeableCard
++            key={currentProfile.id}
++            ref={cardRef}
++            disabled={swiping}
++            onSwipe={handleSwipe}
++          >
++            <DiscoveryCard
++              profile={currentProfile}
++              onPressDetails={() =>
++                router.push({
++                  pathname: "/profile/[id]",
++                  params: { id: currentProfile.id },
++                })
++              }
++            />
++          </SwipeableCard>
+         ) : (
+           <View style={styles.emptyContainer}>
+             <View style={styles.emptyIconCircle}>
+@@ -314,8 +333,10 @@ export default function DiscoverScreen() {
+ 
+           {/* Pass */}
+           <TouchableOpacity
+-            onPress={() => handleSwipe("pass")}
++            onPress={() => triggerSwipe("pass")}
+             style={styles.mediumBtn}
++            testID="discover-pass-button"
++            accessibilityLabel="Pass"
+             activeOpacity={0.7}
+           >
+             <X size={28} color={Colors.mutedForeground} strokeWidth={2.5} />
+@@ -323,8 +344,10 @@ export default function DiscoverScreen() {
+ 
+           {/* Like */}
+           <TouchableOpacity
+-            onPress={() => handleSwipe("like")}
++            onPress={() => triggerSwipe("like")}
+             style={styles.likeBtn}
++            testID="discover-like-button"
++            accessibilityLabel="Like"
+             activeOpacity={0.8}
+           >
+             <Heart size={34} color={Colors.primaryForeground} fill={Colors.primaryForeground} />
+@@ -332,8 +355,10 @@ export default function DiscoverScreen() {
+ 
+           {/* Priority Like */}
+           <TouchableOpacity
+-            onPress={() => handleSwipe("priority")}
++            onPress={() => triggerSwipe("priority")}
+             style={styles.smallBtn}
++            testID="discover-priority-button"
++            accessibilityLabel="Priority like"
+             activeOpacity={0.7}
+           >
+             <Gem size={20} color={Colors.accent} />
+diff --git a/mobile/app/premium/index.tsx b/mobile/app/premium/index.tsx
+index a283e2c..4c2f8ee 100644
+--- a/mobile/app/premium/index.tsx
++++ b/mobile/app/premium/index.tsx
+@@ -142,7 +142,7 @@ export default function PremiumScreen() {
+   const handleSelectOrPurchase = async () => {
+     if (selectedTier === "free") {
+       Alert.alert(
+-        "Free Plan Active / मुफ़्त प्लान सक्रिय",
++        "Free Plan Active",
+         `Your server-configured limit is ${dailyLikeLimit ?? "currently unavailable"} likes per IST day, with basic chat and free identity verification.`,
+       );
+       return;
+@@ -261,9 +261,9 @@ export default function PremiumScreen() {
+           </View>
+         </View>
+ 
+-        {/* What You Get With Each Plan Section (Preserving Hindi headings & text) */}
++        {/* What You Get With Each Plan Section */}
+         <Text style={[styles.sectionHeading, { color: colors.mutedForeground }]}>
+-          WHAT YOU GET WITH EACH PLAN / प्रत्येक प्लान में क्या मिलता है
++          WHAT YOU GET WITH EACH PLAN
+         </Text>
+ 
+         <View
+@@ -274,7 +274,7 @@ export default function PremiumScreen() {
+         >
+           <View style={[styles.matrixHeaderRow, { borderBottomColor: colors.border }]}>
+             <Text style={[styles.matrixColFeature, { color: colors.mutedForeground }]}>
+-              Feature / सुविधा
++              Feature
+             </Text>
+             <Text style={[styles.matrixColPlan, { color: colors.foreground }]}>Free</Text>
+             <Text
+@@ -305,49 +305,49 @@ export default function PremiumScreen() {
+ 
+           {[
+             {
+-              name: "Daily Likes (प्रतिदिन लाइक्स)",
++              name: "Daily Likes",
+               free: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+               prem: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+               plus: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+               vip: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+             },
+             {
+-              name: "See Who Liked You (किसने Like किया)",
++              name: "See Who Liked You",
+               free: "—",
+               prem: "✓",
+               plus: "✓",
+               vip: "✓",
+             },
+-            { name: "Rewind Pass (अनडू स्वाइप)", free: "—", prem: "✓", plus: "✓", vip: "✓" },
++            { name: "Rewind Pass", free: "—", prem: "✓", plus: "✓", vip: "✓" },
+             {
+-              name: "Smart Icebreakers (बातचीत की शुरुआत)",
++              name: "Smart Icebreakers",
+               free: "—",
+               prem: "✓",
+               plus: "✓",
+               vip: "✓",
+             },
+-            { name: "Read Receipts (मैसेज सीन)", free: "—", prem: "—", plus: "✓", vip: "✓" },
++            { name: "Read Receipts", free: "—", prem: "—", plus: "✓", vip: "✓" },
+             {
+-              name: "Priority Recommendations (प्राथमिकता)",
++              name: "Priority Recommendations",
+               free: "—",
+               prem: "—",
+               plus: "✓",
+               vip: "✓",
+             },
+-            { name: "Incognito Mode (पूर्ण गोपनीयता)", free: "—", prem: "—", plus: "—", vip: "✓" },
++            { name: "Incognito Mode", free: "—", prem: "—", plus: "—", vip: "✓" },
+             {
+               name: "Profile Verification Badge",
+-              free: "मुफ़्त (Free)",
+-              prem: "मुफ़्त",
+-              plus: "मुफ़्त",
+-              vip: "मुफ़्त",
++              free: "Free",
++              prem: "Free",
++              plus: "Free",
++              vip: "Free",
+             },
+             {
+               name: "Safety, Block & Report",
+-              free: "मुफ़्त (Free)",
+-              prem: "मुफ़्त",
+-              plus: "मुफ़्त",
+-              vip: "मुफ़्त",
++              free: "Free",
++              prem: "Free",
++              plus: "Free",
++              vip: "Free",
+             },
+           ].map((row, idx) => (
+             <View key={idx} style={[styles.matrixRow, { borderBottomColor: colors.border }]}>
+@@ -387,7 +387,7 @@ export default function PremiumScreen() {
+         {selectedTier === "premium" ? (
+           <>
+             <Text style={[styles.sectionHeading, { color: colors.mutedForeground, marginTop: 24 }]}>
+-              1. SELECT PREMIUM DURATION / अवधि चुनें
++              1. SELECT PREMIUM DURATION
+             </Text>
+             <View style={styles.durationGrid}>
+               {PREMIUM_BILLING_DURATIONS.map((dur) => {
+@@ -461,7 +461,7 @@ export default function PremiumScreen() {
+             { color: colors.mutedForeground, marginTop: selectedTier === "free" ? 24 : 12 },
+           ]}
+         >
+-          2. CHOOSE YOUR PLAN / प्लान चुनें
++          2. CHOOSE YOUR PLAN
+         </Text>
+         <View style={styles.plansContainer}>
+           {(["premium", "plus", "vip", "free"] as PlanTier[]).map((tierKey) => {
+@@ -502,9 +502,6 @@ export default function PremiumScreen() {
+                         </View>
+                       )}
+                     </View>
+-                    <Text style={[styles.planHindi, { color: colors.primary }]}>
+-                      {plan.hindiName}
+-                    </Text>
+                     <Text style={[styles.planTagline, { color: colors.mutedForeground }]}>
+                       {plan.tagline}
+                     </Text>
+@@ -623,7 +620,7 @@ export default function PremiumScreen() {
+           >
+             <RefreshCw size={13} color={colors.mutedForeground} />
+             <Text style={[styles.restoreBtnText, { color: colors.mutedForeground }]}>
+-              {restoring ? "Checking purchases..." : "Restore purchases / पहले से खरीदी गई सदस्यता"}
++              {restoring ? "Checking purchases..." : "Restore purchases"}
+             </Text>
+           </TouchableOpacity>
+         </View>
+@@ -860,11 +857,6 @@ const styles = StyleSheet.create({
+     fontSize: 10,
+     fontWeight: Typography.weights.bold,
+   },
+-  planHindi: {
+-    fontSize: Typography.sizes.xs,
+-    fontWeight: Typography.weights.medium,
+-    marginTop: 2,
+-  },
+   planTagline: {
+     fontSize: 11,
+     marginTop: 4,
+diff --git a/mobile/src/components/discovery/DiscoveryCard.tsx b/mobile/src/components/discovery/DiscoveryCard.tsx
+index 609a12f..5eac3e2 100644
+--- a/mobile/src/components/discovery/DiscoveryCard.tsx
++++ b/mobile/src/components/discovery/DiscoveryCard.tsx
+@@ -1,7 +1,7 @@
+ import React, { useMemo, useState } from "react";
+ import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Pressable } from "react-native";
+ import { LinearGradient } from "expo-linear-gradient";
+-import { MapPin, Info, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
++import { MapPin, ChevronUp, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
+ import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+ import { useTheme } from "../../context/ThemeContext";
+ import { AvatarPlaceholder } from "../ui/AvatarPlaceholder";
+@@ -149,8 +149,11 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
+               onPress={onPressDetails}
+               style={styles.infoButton}
+               activeOpacity={0.8}
++              testID="discovery-details-button"
++              accessibilityRole="button"
++              accessibilityLabel="View profile details"
+             >
+-              <Info size={22} color={Colors.primaryForeground} />
++              <ChevronUp size={26} color={Colors.primaryForeground} strokeWidth={2.5} />
+             </TouchableOpacity>
+           )}
+         </View>
+diff --git a/mobile/src/components/discovery/SwipeableCard.tsx b/mobile/src/components/discovery/SwipeableCard.tsx
+new file mode 100644
+index 0000000..23f4402
+--- /dev/null
++++ b/mobile/src/components/discovery/SwipeableCard.tsx
+@@ -0,0 +1,204 @@
++import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
++import { Animated, Dimensions, PanResponder, StyleSheet, Text, View } from "react-native";
++import { Radii, Typography, ThemeColors } from "../../constants/theme";
++import { useTheme } from "../../context/ThemeContext";
++
++export type SwipeAction = "like" | "pass" | "priority";
++
++export interface SwipeableCardHandle {
++  /**
++   * Animates the card away and then reports the action through `onSwipe`.
++   * Returns false when the card is busy or disabled (nothing happens), true when the swipe started.
++   */
++  swipe: (action: SwipeAction) => boolean;
++}
++
++const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
++
++/** Dragging past this share of the screen width commits the swipe. */
++export const SWIPE_DISTANCE_RATIO = 0.28;
++/** A quick flick commits sooner: at least this far and at least this fast (px per ms). */
++export const FLING_MIN_DISTANCE = 40;
++export const FLING_MIN_VELOCITY = 0.6;
++const EXIT_DURATION_MS = 220;
++
++/** Decides what a finished drag means: right = like, left = pass, anything shorter springs back (null). */
++export function resolveSwipeDirection(
++  dx: number,
++  vx: number,
++  screenWidth: number = SCREEN_WIDTH,
++): "like" | "pass" | null {
++  const distance = screenWidth * SWIPE_DISTANCE_RATIO;
++  if (dx >= distance || (dx > FLING_MIN_DISTANCE && vx >= FLING_MIN_VELOCITY)) return "like";
++  if (dx <= -distance || (dx < -FLING_MIN_DISTANCE && vx <= -FLING_MIN_VELOCITY)) return "pass";
++  return null;
++}
++
++interface SwipeableCardProps {
++  children: React.ReactNode;
++  /** While true the card ignores drags and button-triggered swipes (for example while a swipe is being saved). */
++  disabled?: boolean;
++  /**
++   * Called once the card has left the screen. If the caller does not replace this card (the deck did not
++   * advance), the card springs back so it can never be stranded off-screen.
++   */
++  onSwipe: (action: SwipeAction) => void | Promise<void>;
++}
++
++export const SwipeableCard = forwardRef<SwipeableCardHandle, SwipeableCardProps>(function SwipeableCard(
++  { children, disabled = false, onSwipe },
++  ref,
++) {
++  const { colors } = useTheme();
++  const styles = useMemo(() => createStyles(colors), [colors]);
++  const position = useRef(new Animated.ValueXY()).current;
++  const committed = useRef(false);
++  const mounted = useRef(true);
++  const disabledRef = useRef(disabled);
++  const onSwipeRef = useRef(onSwipe);
++  disabledRef.current = disabled;
++  onSwipeRef.current = onSwipe;
++
++  useEffect(() => {
++    mounted.current = true;
++    return () => {
++      mounted.current = false;
++      position.stopAnimation();
++    };
++  }, [position]);
++
++  const springBack = useCallback(() => {
++    Animated.spring(position, {
++      toValue: { x: 0, y: 0 },
++      friction: 6,
++      useNativeDriver: false,
++    }).start();
++  }, [position]);
++
++  const commit = useCallback(
++    (action: SwipeAction): boolean => {
++      if (committed.current || disabledRef.current) return false;
++      committed.current = true;
++      const target =
++        action === "priority"
++          ? { x: 0, y: -SCREEN_HEIGHT }
++          : { x: (action === "like" ? 1 : -1) * SCREEN_WIDTH * 1.4, y: 30 };
++      Animated.timing(position, {
++        toValue: target,
++        duration: EXIT_DURATION_MS,
++        useNativeDriver: false,
++      }).start(async ({ finished }) => {
++        if (!finished) return;
++        try {
++          await onSwipeRef.current(action);
++        } catch {
++          // The caller reports its own errors; this card only has to stay usable.
++        }
++        // Normal case: the deck advanced and this card is already unmounted. Otherwise bring it back.
++        if (mounted.current) {
++          committed.current = false;
++          springBack();
++        }
++      });
++      return true;
++    },
++    [position, springBack],
++  );
++
++  useImperativeHandle(ref, () => ({ swipe: commit }), [commit]);
++
++  const panResponder = useMemo(
++    () =>
++      PanResponder.create({
++        // Only claim clearly horizontal drags so taps on the photo zones and the details button still work.
++        onMoveShouldSetPanResponder: (_event, g) =>
++          !disabledRef.current &&
++          !committed.current &&
++          Math.abs(g.dx) > 10 &&
++          Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
++        onPanResponderMove: (_event, g) => {
++          position.setValue({ x: g.dx, y: g.dy * 0.3 });
++        },
++        onPanResponderRelease: (_event, g) => {
++          const action = resolveSwipeDirection(g.dx, g.vx);
++          if (action) commit(action);
++          else springBack();
++        },
++        onPanResponderTerminate: () => springBack(),
++        onPanResponderTerminationRequest: () => false,
++      }),
++    [commit, position, springBack],
++  );
++
++  const rotate = position.x.interpolate({
++    inputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
++    outputRange: ["-12deg", "0deg", "12deg"],
++  });
++  const likeOpacity = position.x.interpolate({
++    inputRange: [0, SCREEN_WIDTH * SWIPE_DISTANCE_RATIO],
++    outputRange: [0, 1],
++    extrapolate: "clamp",
++  });
++  const nopeOpacity = position.x.interpolate({
++    inputRange: [-SCREEN_WIDTH * SWIPE_DISTANCE_RATIO, 0],
++    outputRange: [1, 0],
++    extrapolate: "clamp",
++  });
++
++  return (
++    <Animated.View
++      testID="swipeable-card"
++      {...panResponder.panHandlers}
++      style={[
++        styles.wrapper,
++        { transform: [{ translateX: position.x }, { translateY: position.y }, { rotate }] },
++      ]}
++    >
++      {children}
++      <Animated.View
++        pointerEvents="none"
++        importantForAccessibility="no-hide-descendants"
++        style={[styles.stamp, styles.likeStamp, { opacity: likeOpacity }]}
++      >
++        <Text style={[styles.stampText, { color: colors.success }]}>LIKE</Text>
++      </Animated.View>
++      <Animated.View
++        pointerEvents="none"
++        importantForAccessibility="no-hide-descendants"
++        style={[styles.stamp, styles.nopeStamp, { opacity: nopeOpacity }]}
++      >
++        <Text style={[styles.stampText, { color: colors.destructive }]}>NOPE</Text>
++      </Animated.View>
++    </Animated.View>
++  );
++});
++
++const createStyles = (colors: ThemeColors) =>
++  StyleSheet.create({
++    wrapper: {
++      alignSelf: "center",
++    },
++    stamp: {
++      position: "absolute",
++      top: 36,
++      paddingHorizontal: 12,
++      paddingVertical: 4,
++      borderWidth: 4,
++      borderRadius: Radii.md,
++    },
++    likeStamp: {
++      left: 24,
++      borderColor: colors.success,
++      transform: [{ rotate: "-14deg" }],
++    },
++    nopeStamp: {
++      right: 24,
++      borderColor: colors.destructive,
++      transform: [{ rotate: "14deg" }],
++    },
++    stampText: {
++      fontSize: 32,
++      fontWeight: Typography.weights.bold,
++      letterSpacing: 2,
++    },
++  });
+diff --git a/mobile/src/services/subscription.ts b/mobile/src/services/subscription.ts
+index ff86eab..e3231e2 100644
+--- a/mobile/src/services/subscription.ts
++++ b/mobile/src/services/subscription.ts
+@@ -14,7 +14,6 @@ export type PlanTier = "free" | "premium" | "plus" | "vip";
+ export interface PlanConfig {
+   id: PlanTier;
+   name: string;
+-  hindiName: string;
+   tagline: string;
+   monthlyPrice: number;
+   badge?: string;
+@@ -37,27 +36,27 @@ export const PREMIUM_BILLING_DURATIONS: BillingDuration[] = [
+   {
+     id: "1m",
+     months: 1,
+-    label: "1 महीना (1 Month)",
++    label: "1 Month",
+     totalPrice: 99,
+   },
+   {
+     id: "3m",
+     months: 3,
+-    label: "3 महीने (3 Months)",
++    label: "3 Months",
+     totalPrice: 249,
+     savings: "Save ₹48 (16% Off)",
+   },
+   {
+     id: "6m",
+     months: 6,
+-    label: "6 महीने (6 Months)",
++    label: "6 Months",
+     totalPrice: 449,
+     savings: "Save ₹145 (24% Off)",
+   },
+   {
+     id: "12m",
+     months: 12,
+-    label: "12 महीने (1 Year)",
++    label: "1 Year",
+     totalPrice: 799,
+     savings: "Save ₹389 (33% Off)",
+     popular: true,
+@@ -68,15 +67,14 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
+   free: {
+     id: "free",
+     name: "Free Plan",
+-    hindiName: "मुफ़्त प्लान",
+-    tagline: "मूल सुविधाएं हमेशा मुफ़्त (Always Free)",
++    tagline: "Core features always free",
+     monthlyPrice: 0,
+     features: [
+-      "Profile बनाना (Create Profile)",
+-      "50 likes per day (server-configured daily limit - प्रति दिन 50 लाइक्स - IST रीसेट)",
+-      "15s complimentary video call per allowance (24 घंटे में नवीनीकरण)",
++      "Create Profile",
++      "50 likes per day (server-configured daily limit, resets daily in IST)",
++      "15s complimentary video call per allowance (renews every 24 hours)",
+       "Limited Matching & Discover Deck",
+-      "Basic Chat — Match होने के बाद",
++      "Basic Chat — after you match",
+       "Free Selfie/Profile Verification Badge",
+       "Safety Centre & Block/Report",
+     ],
+@@ -84,34 +82,32 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
+   premium: {
+     id: "premium",
+     name: "₹149 Plan (7 Days)",
+-    hindiName: "₹149 प्लान (7 दिन)",
+     tagline: "Unlimited Likes & 5 Min/Day Video Calling",
+     monthlyPrice: 99,
+     popular: true,
+     badge: "7 Days",
+     features: [
+-      "Unlimited Likes (असीमित लाइक्स)",
+-      "5 minutes/day video calling (5 मिनट/दिन वीडियो कॉलिंग)",
+-      "7 days validity (7 दिनों की वैधता)",
+-      "किसने Like किया देखें (See Who Liked You)",
++      "Unlimited Likes",
++      "5 minutes/day video calling",
++      "7 days validity",
++      "See Who Liked You",
+       "Undo Last Swipe (Rewind Pass)",
+-      "Smart Icebreakers (Hindi, English, Hinglish)",
++      "Smart Icebreakers",
+       "Compatibility Score Summary",
+     ],
+   },
+   plus: {
+     id: "plus",
+     name: "₹299 Plan (15 Days)",
+-    hindiName: "₹299 प्लान (15 दिन)",
+     tagline: "Popular Value · 15 Days Validity",
+     monthlyPrice: 199,
+     badge: "15 Days",
+     features: [
+-      "Unlimited Likes (असीमित लाइक्स)",
+-      "5 minutes/day video calling (5 मिनट/दिन वीडियो कॉलिंग)",
+-      "15 days validity (15 दिनों की वैधता)",
+-      "Premium के सभी Features",
+-      "Read Receipts Control (प्लस और वीआईपी केवल)",
++      "Unlimited Likes",
++      "5 minutes/day video calling",
++      "15 days validity",
++      "All Premium features",
++      "Read Receipts Control (Plus and VIP only)",
+       "Priority Profile Visibility",
+       "Advanced Search Filters",
+     ],
+@@ -119,16 +115,15 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
+   vip: {
+     id: "vip",
+     name: "₹499 Plan (1 Month)",
+-    hindiName: "₹499 प्लान (1 महीना)",
+     tagline: "Full Month VIP Experience",
+     monthlyPrice: 399,
+     badge: "1 Month VIP",
+     features: [
+-      "Unlimited Likes (असीमित लाइक्स)",
+-      "5 minutes/day video calling (5 मिनट/दिन वीडियो कॉलिंग)",
+-      "1 month validity (1 महीने की वैधता)",
+-      "Plus के सभी Features",
+-      "Incognito Mode (पूर्ण गोपनीयता)",
++      "Unlimited Likes",
++      "5 minutes/day video calling",
++      "1 month validity",
++      "All Plus features",
++      "Incognito Mode (full privacy)",
+       "Exclusive VIP Badge",
+       "Priority Match Distribution",
+     ],

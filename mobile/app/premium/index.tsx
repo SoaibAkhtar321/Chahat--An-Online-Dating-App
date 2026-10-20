@@ -142,7 +142,7 @@ export default function PremiumScreen() {
   const handleSelectOrPurchase = async () => {
     if (selectedTier === "free") {
       Alert.alert(
-        "Free Plan Active / मुफ़्त प्लान सक्रिय",
+        "Free Plan Active",
         `Your server-configured limit is ${dailyLikeLimit ?? "currently unavailable"} likes per IST day, with basic chat and free identity verification.`,
       );
       return;
@@ -261,9 +261,9 @@ export default function PremiumScreen() {
           </View>
         </View>
 
-        {/* What You Get With Each Plan Section (Preserving Hindi headings & text) */}
+        {/* What You Get With Each Plan Section */}
         <Text style={[styles.sectionHeading, { color: colors.mutedForeground }]}>
-          WHAT YOU GET WITH EACH PLAN / प्रत्येक प्लान में क्या मिलता है
+          WHAT YOU GET WITH EACH PLAN
         </Text>
 
         <View
@@ -274,7 +274,7 @@ export default function PremiumScreen() {
         >
           <View style={[styles.matrixHeaderRow, { borderBottomColor: colors.border }]}>
             <Text style={[styles.matrixColFeature, { color: colors.mutedForeground }]}>
-              Feature / सुविधा
+              Feature
             </Text>
             <Text style={[styles.matrixColPlan, { color: colors.foreground }]}>Free</Text>
             <Text
@@ -305,49 +305,49 @@ export default function PremiumScreen() {
 
           {[
             {
-              name: "Daily Likes (प्रतिदिन लाइक्स)",
+              name: "Daily Likes",
               free: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
               prem: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
               plus: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
               vip: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
             },
             {
-              name: "See Who Liked You (किसने Like किया)",
+              name: "See Who Liked You",
               free: "—",
               prem: "✓",
               plus: "✓",
               vip: "✓",
             },
-            { name: "Rewind Pass (अनडू स्वाइप)", free: "—", prem: "✓", plus: "✓", vip: "✓" },
+            { name: "Rewind Pass", free: "—", prem: "✓", plus: "✓", vip: "✓" },
             {
-              name: "Smart Icebreakers (बातचीत की शुरुआत)",
+              name: "Smart Icebreakers",
               free: "—",
               prem: "✓",
               plus: "✓",
               vip: "✓",
             },
-            { name: "Read Receipts (मैसेज सीन)", free: "—", prem: "—", plus: "✓", vip: "✓" },
+            { name: "Read Receipts", free: "—", prem: "—", plus: "✓", vip: "✓" },
             {
-              name: "Priority Recommendations (प्राथमिकता)",
+              name: "Priority Recommendations",
               free: "—",
               prem: "—",
               plus: "✓",
               vip: "✓",
             },
-            { name: "Incognito Mode (पूर्ण गोपनीयता)", free: "—", prem: "—", plus: "—", vip: "✓" },
+            { name: "Incognito Mode", free: "—", prem: "—", plus: "—", vip: "✓" },
             {
               name: "Profile Verification Badge",
-              free: "मुफ़्त (Free)",
-              prem: "मुफ़्त",
-              plus: "मुफ़्त",
-              vip: "मुफ़्त",
+              free: "Free",
+              prem: "Free",
+              plus: "Free",
+              vip: "Free",
             },
             {
               name: "Safety, Block & Report",
-              free: "मुफ़्त (Free)",
-              prem: "मुफ़्त",
-              plus: "मुफ़्त",
-              vip: "मुफ़्त",
+              free: "Free",
+              prem: "Free",
+              plus: "Free",
+              vip: "Free",
             },
           ].map((row, idx) => (
             <View key={idx} style={[styles.matrixRow, { borderBottomColor: colors.border }]}>
@@ -387,7 +387,7 @@ export default function PremiumScreen() {
         {selectedTier === "premium" ? (
           <>
             <Text style={[styles.sectionHeading, { color: colors.mutedForeground, marginTop: 24 }]}>
-              1. SELECT PREMIUM DURATION / अवधि चुनें
+              1. SELECT PREMIUM DURATION
             </Text>
             <View style={styles.durationGrid}>
               {PREMIUM_BILLING_DURATIONS.map((dur) => {
@@ -461,7 +461,7 @@ export default function PremiumScreen() {
             { color: colors.mutedForeground, marginTop: selectedTier === "free" ? 24 : 12 },
           ]}
         >
-          2. CHOOSE YOUR PLAN / प्लान चुनें
+          2. CHOOSE YOUR PLAN
         </Text>
         <View style={styles.plansContainer}>
           {(["premium", "plus", "vip", "free"] as PlanTier[]).map((tierKey) => {
@@ -502,9 +502,6 @@ export default function PremiumScreen() {
                         </View>
                       )}
                     </View>
-                    <Text style={[styles.planHindi, { color: colors.primary }]}>
-                      {plan.hindiName}
-                    </Text>
                     <Text style={[styles.planTagline, { color: colors.mutedForeground }]}>
                       {plan.tagline}
                     </Text>
@@ -623,7 +620,7 @@ export default function PremiumScreen() {
           >
             <RefreshCw size={13} color={colors.mutedForeground} />
             <Text style={[styles.restoreBtnText, { color: colors.mutedForeground }]}>
-              {restoring ? "Checking purchases..." : "Restore purchases / पहले से खरीदी गई सदस्यता"}
+              {restoring ? "Checking purchases..." : "Restore purchases"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -859,11 +856,6 @@ const styles = StyleSheet.create({
   currentPillText: {
     fontSize: 10,
     fontWeight: Typography.weights.bold,
-  },
-  planHindi: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.medium,
-    marginTop: 2,
   },
   planTagline: {
     fontSize: 11,
