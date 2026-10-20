@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { BadgeCheck, Camera, Clock } from "lucide-react-native";
@@ -12,6 +13,8 @@ import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
 import { saveProfile, uploadVerificationSelfie } from "../../src/services/profile";
 import { pushNotificationToInbox } from "../../src/services/notifications";
+import { useHardwareBack } from "../../src/hooks/useHardwareBack";
+import { safeBack } from "../../src/utils/navigation";
 
 export default function VerificationScreen() {
   const { colors: Colors } = useTheme();
@@ -21,6 +24,22 @@ export default function VerificationScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const status = profile?.verificationStatus || "none";
+  const router = useRouter();
+
+  // Header back and hardware/gesture back share this: blocked while uploading, and a taken-but-unsent selfie asks first.
+  const requestExit = useCallback((): boolean => {
+    if (submitting) return true;
+    if (selfieUri && status !== "pending" && status !== "approved") {
+      Alert.alert("Discard selfie?", "Your selfie has not been submitted for review.", [
+        { text: "Keep editing", style: "cancel" },
+        { text: "Discard", style: "destructive", onPress: () => safeBack(router, "/(tabs)/me") },
+      ]);
+      return true;
+    }
+    safeBack(router, "/(tabs)/me");
+    return true;
+  }, [submitting, selfieUri, status, router]);
+  useHardwareBack(requestExit);
 
   const handleTakeSelfie = async () => {
     try {
@@ -118,7 +137,7 @@ export default function VerificationScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Photo Verification" />
+      <Header title="Photo Verification" onBackPress={requestExit} />
 
       <View style={styles.content}>
         {status === "approved" ? (

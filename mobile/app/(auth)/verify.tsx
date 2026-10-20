@@ -13,6 +13,7 @@ import {
   verifySignupCode,
 } from "../../src/services/auth";
 import { clearPendingSignup, getPendingSignup } from "../../src/services/pendingSignup";
+import { useHardwareBack } from "../../src/hooks/useHardwareBack";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 const POLL_INTERVAL_MS = 8000;
@@ -95,10 +96,18 @@ export default function VerifyScreen() {
     }
   };
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     clearPendingSignup();
     router.replace("/(auth)/login");
-  };
+  }, [router]);
+
+  // Hardware/gesture back does exactly what "Back to log in" does (drops the in-memory credentials used for polling).
+  const onHardwareBack = useCallback(() => {
+    if (verifying) return true;
+    handleBack();
+    return true;
+  }, [verifying, handleBack]);
+  useHardwareBack(onHardwareBack);
 
   return (
     <SafeAreaView style={styles.container}>

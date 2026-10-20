@@ -184,8 +184,10 @@ The ring stops and the notification is dismissed on cancel, decline, answer else
 - **A cancelled/expired call's notification can linger** while the process is dead: there is no cancel push. Tapping
   it is handled gracefully ("This call is no longer available") and the notification is cleared. The push TTL (60 s)
   stops FCM from delivering it late.
-- **Calls cannot connect yet.** No media adapter ships (`isCallingAvailable()` is false), so this build neither rings
-  nor answers: the controller refuses to accept a call it cannot join and says so. Decline still works.
+- **Calling is gated twice.** `isCallingAvailable()` is true only when `EXPO_PUBLIC_FEATURE_CALLS` is exactly `"true"` AND a
+  media adapter is registered (`registerCallProvider.ts` registers the Agora adapter only when the SDK and
+  `EXPO_PUBLIC_AGORA_APP_ID` are present). Otherwise this build neither rings nor answers: the controller refuses to accept
+  a call it cannot join and says so. Decline still works. Connecting a real call has not been verified on a device.
 
 ## Agora provider (server)
 `_shared/agoraProvider.ts` implements `CallProvider`; `_shared/agoraTokenBuilder.ts` wraps `npm:agora-token@2.0.5`
