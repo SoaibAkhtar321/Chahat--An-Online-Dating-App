@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Pressable, Alert } from "react-native";
 import { Image } from "expo-image";
-import { Check, CheckCheck, AlertCircle, Play, Pause, Mic, Ban } from "lucide-react-native";
+import { Check, CheckCheck, AlertCircle, Play, Pause, Mic, Ban, Camera } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Message } from "../../types";
 import { getAudioPlayerAdapter } from "../../services/voiceMedia";
 import { DELETED_BY_ME_PREVIEW_TEXT, DELETED_PREVIEW_TEXT } from "../../utils/messageState";
 import type { ReactionSummary } from "../../utils/reactions";
+import { replyAuthorLabel, replySnippet } from "../../utils/replies";
 
 interface ChatBubbleProps {
   message: Message;
@@ -18,6 +19,12 @@ interface ChatBubbleProps {
   reactions?: ReactionSummary[];
   /** Tap on a chip: toggles the current user's reaction with that emoji. */
   onReactionPress?: (message: Message, emoji: string) => void;
+  /** Name shown on the quote of a reply to the partner's message. */
+  partnerName?: string;
+  /** The quoted original was deleted (for everyone or for me): the quote shows no content. */
+  replyUnavailable?: boolean;
+  /** Tap on the quote: jump to the original message. Ignored while the original is unavailable. */
+  onReplyPress?: (replyToId: string) => void;
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
@@ -26,6 +33,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onLongPress,
   reactions,
   onReactionPress,
+  partnerName = "",
+  replyUnavailable = false,
+  onReplyPress,
 }) => {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
@@ -35,6 +45,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   const isDeleted = !!message.deletedAt;
   const isVoice = !isDeleted && (message.messageType === "voice" || !!message.audio);
+  // Quoted original of a reply. Never shown on a message deleted for everyone.
+  const quote = !isDeleted && message.replyTo ? message.replyTo : null;
+  const quoteUnavailable = !!quote && (quote.unavailable || replyUnavailable);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const durationSec = message.audioDurationSec || 5;
@@ -113,6 +126,55 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 {isMe ? DELETED_BY_ME_PREVIEW_TEXT : DELETED_PREVIEW_TEXT}
               </Text>
             </View>
+          ) : null}
+
+          {quote ? (
+            <Pressable
+              testID={`message-reply-quote-${message.id}`}
+              onPress={!quoteUnavailable && onReplyPress ? () => onReplyPress(quote.id) : undefined}
+              disabled={quoteUnavailable || !onReplyPress}
+              accessibilityRole="button"
+              accessibilityLabel={
+                quoteUnavailable
+                  ? "Reply to a message that is no longer available"
+                  : `Reply to ${replyAuthorLabel(quote, partnerName)}: ${replySnippet(quote)}`
+              }
+              style={[styles.quote, isMe ? styles.quoteMe : styles.quoteThem]}
+            >
+              {quoteUnavailable ? (
+                <View style={styles.quoteLine}>
+                  <Ban size={12} color={isMe ? "rgba(255,255,255,0.8)" : Colors.mutedForeground} />
+                  <Text
+                    style={[styles.quoteText, styles.quoteTextUnavailable, isMe ? styles.quoteTextMe : styles.quoteTextThem]}
+                    numberOfLines={1}
+                  >
+                    {replySnippet({ ...quote, unavailable: true })}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text
+                    style={[styles.quoteAuthor, isMe ? styles.quoteAuthorMe : styles.quoteAuthorThem]}
+                    numberOfLines={1}
+                  >
+                    {replyAuthorLabel(quote, partnerName)}
+                  </Text>
+                  <View style={styles.quoteLine}>
+                    {quote.kind === "image" ? (
+                      <Camera size={12} color={isMe ? "rgba(255,255,255,0.8)" : Colors.mutedForeground} />
+                    ) : quote.kind === "voice" ? (
+                      <Mic size={12} color={isMe ? "rgba(255,255,255,0.8)" : Colors.mutedForeground} />
+                    ) : null}
+                    <Text
+                      style={[styles.quoteText, isMe ? styles.quoteTextMe : styles.quoteTextThem]}
+                      numberOfLines={2}
+                    >
+                      {replySnippet(quote)}
+                    </Text>
+                  </View>
+                </>
+              )}
+            </Pressable>
           ) : null}
 
           {!isDeleted && message.image ? (
@@ -311,6 +373,50 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.sm,
     fontStyle: "italic",
     color: Colors.mutedForeground,
+  },
+  quote: {
+    borderLeftWidth: 3,
+    borderRadius: Radii.md,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 6,
+  },
+  quoteMe: {
+    backgroundColor: "rgba(0, 0, 0, 0.15)",
+    borderLeftColor: Colors.primaryForeground,
+  },
+  quoteThem: {
+    backgroundColor: Colors.muted,
+    borderLeftColor: Colors.primary,
+  },
+  quoteAuthor: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    marginBottom: 1,
+  },
+  quoteAuthorMe: {
+    color: Colors.primaryForeground,
+  },
+  quoteAuthorThem: {
+    color: Colors.primary,
+  },
+  quoteLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  quoteText: {
+    flexShrink: 1,
+    fontSize: Typography.sizes.sm,
+  },
+  quoteTextMe: {
+    color: "rgba(255, 255, 255, 0.85)",
+  },
+  quoteTextThem: {
+    color: Colors.mutedForeground,
+  },
+  quoteTextUnavailable: {
+    fontStyle: "italic",
   },
   image: {
     width: 220,

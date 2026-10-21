@@ -12,6 +12,11 @@ import { pushNotificationToInbox } from "./notifications";
 import { generateUUID, isValidUUID } from "../utils/validation";
 import { mapMessageRow } from "../utils/messageState";
 import { mapReactionRow, type ReactionRow } from "../utils/reactions";
+import { fillReplyPreviews, REPLY_TARGET_UNAVAILABLE } from "../utils/replies";
+
+function isReplyTargetError(message: string | undefined): boolean {
+  return !!message && message.includes(REPLY_TARGET_UNAVAILABLE);
+}
 
 /**
  * Unread = messages from the other person that are not read and not deleted for everyone.
@@ -192,7 +197,8 @@ export async function fetchMessagesForMatch(
         return !(msg?.is_view_once && msg?.sender !== currentUserId && !msg?.viewed_at);
       }),
     );
-    return rows.map((m: any) => mapMessageRow(m, currentUserId, signed));
+    // Replies whose preview columns are missing (table fallback) are quoted from originals inside this page.
+    return fillReplyPreviews(rows.map((m: any) => mapMessageRow(m, currentUserId, signed)));
   } catch {
     return [];
   }
@@ -204,6 +210,7 @@ export async function sendChatMessage(
   text: string,
   imageUri?: string,
   isViewOnce = false,
+  replyToId?: string | null,
 ): Promise<{ success: boolean; message?: Message; error?: string }> {
   try {
     if (!matchId || !senderId) {
@@ -254,10 +261,19 @@ export async function sendChatMessage(
       is_view_once: isViewOnce,
       expires_at: isViewOnce ? new Date(Date.now() + 14 * 86400 * 1000).toISOString() : null,
       created_at: new Date().toISOString(),
+      ...(replyToId ? { reply_to_id: replyToId } : {}),
     });
 
     if (error) {
-      return { success: false, error: error.message };
+      if (imagePath) {
+        // The photo was uploaded before the insert: do not leave an orphan behind.
+        try {
+          await supabase.storage.from("chat").remove([imagePath]);
+        } catch {
+          // Non-fatal cleanup error
+        }
+      }
+      return { success: false, error: isReplyTargetError(error.message) ? REPLY_TARGET_UNAVAILABLE : error.message };
     }
 
     const newMsg: Message = {
@@ -272,6 +288,7 @@ export async function sendChatMessage(
       viewedAt: null,
       at: Date.now(),
       status: "sent",
+      ...(replyToId ? { replyToId } : {}),
     };
 
     return { success: true, message: newMsg };
@@ -335,6 +352,7 @@ export async function sendVoiceMessage(
   audioUri: string,
   durationSec: number,
   declaredMimeType = "audio/m4a",
+  replyToId?: string | null,
 ): Promise<{ success: boolean; message?: Message; error?: string }> {
   try {
     if (!matchId || !senderId || !audioUri) {
@@ -387,6 +405,7 @@ export async function sendVoiceMessage(
       audio_duration_sec: Math.max(1, Math.min(300, Math.round(durationSec))),
       message_type: "voice",
       created_at: new Date().toISOString(),
+      ...(replyToId ? { reply_to_id: replyToId } : {}),
     });
 
     if (insertErr) {
@@ -396,7 +415,10 @@ export async function sendVoiceMessage(
       } catch {
         // Log non-fatal cleanup error
       }
-      return { success: false, error: insertErr.message };
+      return {
+        success: false,
+        error: isReplyTargetError(insertErr.message) ? REPLY_TARGET_UNAVAILABLE : insertErr.message,
+      };
     }
 
     const signedUrl = (await getSignedUrl("chat", audioPath)) ?? audioUri;
@@ -411,6 +433,7 @@ export async function sendVoiceMessage(
       messageType: "voice",
       at: Date.now(),
       status: "sent",
+      ...(replyToId ? { replyToId } : {}),
     };
 
     return { success: true, message: newMsg };

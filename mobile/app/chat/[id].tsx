@@ -35,6 +35,7 @@ import {
   ChevronUp,
   Mic,
   Trash2,
+  X,
 } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -89,6 +90,15 @@ import {
   summarizeReactions,
   type ReactionMap,
 } from "../../src/utils/reactions";
+import {
+  buildReplyPreview,
+  canReplyTo,
+  isReplyUnavailable,
+  mergeReplyPreviews,
+  REPLY_TARGET_UNAVAILABLE,
+  replyAuthorLabel,
+  replySnippet,
+} from "../../src/utils/replies";
 import type { Message, Profile } from "../../src/types";
 
 export default function ChatDetailScreen() {
@@ -110,6 +120,8 @@ export default function ChatDetailScreen() {
   // Emoji reactions: messageId -> (userId -> emoji). Loaded with the thread, kept live through Realtime.
   const [reactions, setReactions] = useState<ReactionMap>({});
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  // The message the next send replies to (shown as a bar above the input).
+  const [replyDraft, setReplyDraft] = useState<Message | null>(null);
   const [sending, setSending] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [actionDialog, setActionDialog] = useState<"block" | "report" | "unmatch" | null>(null);
@@ -140,7 +152,15 @@ export default function ChatDetailScreen() {
   const recordingActiveRef = useRef(false);
 
   const flatListRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
+  // Replies whose quote could not be built locally are resolved from the server once per message.
+  const replyResolveTriedRef = useRef<Set<string>>(new Set());
+  const matchIdRef = useRef<string | undefined>(matchId);
+  matchIdRef.current = matchId;
   messagesRef.current = messages;
+  // The recording timer can stop a voice note from a stale closure, so it reads the draft through a ref.
+  const replyDraftRef = useRef<Message | null>(null);
+  replyDraftRef.current = replyDraft;
 
   const deletionContext = () => ({
     hidden: hiddenIdsRef.current,
@@ -181,9 +201,25 @@ export default function ChatDetailScreen() {
     tombstonesRef.current = new Map();
     confirmedTombstonesRef.current = new Set();
     inFlightDeletesRef.current = new Set();
+    replyResolveTriedRef.current = new Set();
     setActionTarget(null);
     setConfirmEveryone(null);
+    setReplyDraft(null);
   }, [matchId]);
+
+  // A reply that arrived live without its quote (original older than what is loaded) gets it from the server.
+  useEffect(() => {
+    if (!matchId || !user) return;
+    const pending = messages.filter(
+      (m) => !m.deletedAt && !!m.replyToId && !m.replyTo && !replyResolveTriedRef.current.has(m.id),
+    );
+    if (pending.length === 0) return;
+    pending.forEach((m) => replyResolveTriedRef.current.add(m.id));
+    fetchMessagesForMatch(matchId, user.id).then((fresh) => {
+      if (matchIdRef.current !== matchId || fresh.length === 0) return;
+      setMessages((prev) => mergeReplyPreviews(prev, fresh));
+    });
+  }, [messages, matchId, user]);
 
   useEffect(() => {
     if (!matchId || !user) return;
@@ -204,6 +240,7 @@ export default function ChatDetailScreen() {
       confirmedTombstonesRef.current.add(id);
       setActionTarget((current) => (current?.id === id ? null : current));
       setConfirmEveryone((current) => (current?.id === id ? null : current));
+      setReplyDraft((current) => (current?.id === id ? null : current));
       setReactions((prev) => clearMessageReactions(prev, id));
       if (hiddenIdsRef.current.has(id)) return;
       setMessages((prev) => applyTombstone(prev, id, deletedAt));
@@ -313,6 +350,9 @@ export default function ChatDetailScreen() {
     // What to restore if the server refuses. Prefer the live copy: its read status may have changed.
     const snapshot = messagesRef.current.find((m) => m.id === id) ?? target;
 
+    // A message that is being deleted can no longer be replied to.
+    setReplyDraft((current) => (current?.id === id ? null : current));
+
     // 1) Update the chat immediately.
     if (scope === "me") {
       hiddenIdsRef.current.add(id);
@@ -370,23 +410,50 @@ export default function ChatDetailScreen() {
     }
   };
 
+  // Tap on a quote: scroll to the original if it is loaded.
+  const scrollToMessage = (id: string) => {
+    const index = messagesRef.current.findIndex((m) => m.id === id);
+    if (index === -1) {
+      Alert.alert("Message not loaded", "That message is further back in the conversation.");
+      return;
+    }
+    flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.4 });
+  };
+
+  const startReply = (message: Message) => {
+    if (!canReplyTo(message)) return;
+    setReplyDraft(message);
+    // Let the action sheet close first, then bring up the keyboard.
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
     if ((!text && !selectedImageUri) || !user || !matchId) return;
 
     setSending(true);
     const img = selectedImageUri || undefined;
+    const replyTarget = replyDraft;
     setSelectedImageUri(null);
     setInputText("");
+    setReplyDraft(null);
     presenceRef.current?.notifyStopped();
 
-    const res = await sendChatMessage(matchId, user.id, text, img);
+    const res = await sendChatMessage(matchId, user.id, text, img, false, replyTarget?.id);
     setSending(false);
 
     if (res.success && res.message) {
-      upsertSentMessage(res.message);
+      upsertSentMessage(replyTarget ? { ...res.message, replyTo: buildReplyPreview(replyTarget) } : res.message);
       refreshMatches();
       flatListRef.current?.scrollToEnd({ animated: true });
+    } else if (res.error === REPLY_TARGET_UNAVAILABLE) {
+      // The original disappeared meanwhile: keep what the person wrote so it can be sent as a normal message.
+      setInputText(text);
+      setSelectedImageUri(img ?? null);
+      Alert.alert(
+        "Message unavailable",
+        "The message you were replying to is no longer available. Your message was not sent.",
+      );
     } else {
       Alert.alert("Error", res.error || "Could not send message");
     }
@@ -486,21 +553,29 @@ export default function ChatDetailScreen() {
 
     setSending(true);
     const durationSec = Math.max(1, Math.round(stopRes.result.durationMs / 1000));
+    const replyTarget = replyDraftRef.current;
+    setReplyDraft(null);
     const res = await sendVoiceMessage(
       matchId,
       user.id,
       stopRes.result.uri,
       durationSec,
       stopRes.result.mimeType,
+      replyTarget?.id,
     );
     setSending(false);
     // The local copy is no longer needed whether or not the upload worked.
     await cleanupAbandonedVoiceFile(stopRes.result.uri);
 
     if (res.success && res.message) {
-      upsertSentMessage(res.message);
+      upsertSentMessage(replyTarget ? { ...res.message, replyTo: buildReplyPreview(replyTarget) } : res.message);
       refreshMatches();
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } else if (res.error === REPLY_TARGET_UNAVAILABLE) {
+      Alert.alert(
+        "Message unavailable",
+        "The message you were replying to is no longer available. Your voice message was not sent.",
+      );
     } else {
       Alert.alert("Couldn't send voice message", res.error || "Please check your connection and try again.");
     }
@@ -719,6 +794,9 @@ export default function ChatDetailScreen() {
               onReactionPress={(m, emoji) =>
                 void reactToMessage(m, nextReaction(reactions[m.id]?.[user?.id ?? ""] ?? null, emoji))
               }
+              partnerName={otherUser.name}
+              replyUnavailable={isReplyUnavailable(item, messages, deletionContext())}
+              onReplyPress={scrollToMessage}
               showDayHeader={
                 index === 0 ||
                 new Date(messages[index - 1]!.at).toDateString() !==
@@ -727,6 +805,14 @@ export default function ChatDetailScreen() {
             />
           )}
           contentContainerStyle={styles.messageList}
+          onScrollToIndexFailed={(info) => {
+            // Rows are not measured yet: get close first, then jump exactly.
+            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+            setTimeout(
+              () => flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.4 }),
+              250,
+            );
+          }}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={styles.emptyMessages}>
@@ -816,6 +902,30 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
+        {/* Reply draft: the message the next send quotes */}
+        {replyDraft && (
+          <View style={styles.replyBar} testID="reply-draft-bar">
+            <View style={styles.replyBarAccent} />
+            <View style={styles.replyBarBody}>
+              <Text style={styles.replyBarTitle} numberOfLines={1}>
+                Replying to {replyAuthorLabel(buildReplyPreview(replyDraft), otherUser.name) || "message"}
+              </Text>
+              <Text style={styles.replyBarText} numberOfLines={1}>
+                {replySnippet(buildReplyPreview(replyDraft))}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setReplyDraft(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel reply"
+              testID="reply-draft-cancel"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={18} color={Colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Input Bar */}
         {isRecording ? (
           <View style={styles.inputBar} testID="voice-recording-bar">
@@ -867,6 +977,7 @@ export default function ChatDetailScreen() {
           </TouchableOpacity>
 
           <TextInput
+            ref={inputRef}
             style={styles.textInput}
             placeholder="Type a message or use icebreaker…"
             placeholderTextColor={Colors.mutedForeground}
@@ -895,6 +1006,8 @@ export default function ChatDetailScreen() {
               ]}
               onPress={handleSend}
               disabled={(!inputText.trim() && !selectedImageUri) || sending}
+              accessibilityLabel="Send message"
+              testID="chat-send"
               activeOpacity={0.8}
             >
               <Send size={18} color={Colors.primaryForeground} />
@@ -919,6 +1032,12 @@ export default function ChatDetailScreen() {
           !!actionTarget && canDeleteMessageForEveryone(actionTarget, user?.id)
         }
         canReact={!!actionTarget && !actionTarget.deletedAt}
+        canReply={canReplyTo(actionTarget)}
+        onReply={() => {
+          const target = actionTarget;
+          setActionTarget(null);
+          if (target) startReply(target);
+        }}
         currentReaction={actionTarget && user ? (reactions[actionTarget.id]?.[user.id] ?? null) : null}
         onReact={(emoji) => {
           const target = actionTarget;
@@ -1171,6 +1290,35 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     fontSize: Typography.sizes.sm,
     color: Colors.foreground,
+  },
+  replyBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 10,
+  },
+  replyBarAccent: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 2,
+    backgroundColor: Colors.primary,
+  },
+  replyBarBody: {
+    flex: 1,
+  },
+  replyBarTitle: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primary,
+  },
+  replyBarText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.mutedForeground,
+    marginTop: 1,
   },
   removePreview: {
     fontSize: Typography.sizes.sm,

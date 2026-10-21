@@ -158,7 +158,7 @@ describe("chat composer voice messages", () => {
 
     await press("voice-send");
     expect(mockRecorder.stopRecordingAsync).toHaveBeenCalledTimes(1);
-    expect(mockSendVoice).toHaveBeenCalledWith(MATCH, ME, RESULT.uri, 4, "audio/m4a");
+    expect(mockSendVoice).toHaveBeenCalledWith(MATCH, ME, RESULT.uri, 4, "audio/m4a", undefined);
     expect(mockCleanup).toHaveBeenCalledWith(RESULT.uri);
     expect(anyId("voice-recording-bar")).toBe(false);
   });

@@ -1,4 +1,5 @@
 import type { Message } from "../types";
+import { fillReplyPreviews, replyPreviewFromRow } from "./replies";
 
 /**
  * Pure helpers for chat message state. No React, no network: everything here is unit-testable.
@@ -89,6 +90,10 @@ export function mapMessageRow(row: any, currentUserId: string, signed: Signed = 
     isViewOnce: !!row.is_view_once,
     viewedAt: row.viewed_at ?? null,
     deletedAt: null,
+    // Reply link + quoted preview. A row without preview columns (Realtime, table fallback) keeps only the link.
+    ...(row.reply_to_id
+      ? { replyToId: row.reply_to_id as string, replyTo: replyPreviewFromRow(row, currentUserId) }
+      : {}),
   };
 }
 
@@ -141,7 +146,9 @@ export function appendIncoming(list: Message[], incoming: Message, ctx: Deletion
   if (list.some((m) => m.id === incoming.id)) return list;
   const knownDeletedAt = ctx.tombstones.get(incoming.id);
   const message = knownDeletedAt && !incoming.deletedAt ? tombstoneMessage(incoming, knownDeletedAt) : incoming;
-  return [...list, message];
+  // A reply that arrived without its preview is quoted from the original when that is already in the chat.
+  const [resolved] = fillReplyPreviews([message], list);
+  return [...list, resolved!];
 }
 
 /**

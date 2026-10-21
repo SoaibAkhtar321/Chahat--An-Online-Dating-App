@@ -78,6 +78,19 @@ export interface Filters {
   languages: string[];
 }
 
+/** The quoted original shown at the top of a reply. Built by the server (get_match_messages) or from the local list. */
+export interface ReplyPreview {
+  /** Id of the original message. */
+  id: string;
+  /** Who wrote the original, from the current user's point of view. null when it is unavailable. */
+  from: "me" | "them" | null;
+  /** Short text snippet. Empty for photos and voice notes, and always empty when unavailable. */
+  text: string;
+  kind: "text" | "image" | "voice";
+  /** The original is gone, deleted for everyone, or deleted for me: no content is shown. */
+  unavailable: boolean;
+}
+
 export interface Message {
   id: string;
   matchId: string;
@@ -92,6 +105,10 @@ export interface Message {
   viewedAt?: string | null;
   /** Set when the sender deleted the message for everyone (Phase 3A tombstone). Content is always empty then. */
   deletedAt?: string | null;
+  /** Id of the message this one replies to (set when it is a reply, even before the preview is known). */
+  replyToId?: string | null;
+  /** Quoted preview of the original. Missing while it is still unknown (for example a fresh Realtime insert). */
+  replyTo?: ReplyPreview | null;
   at: number;
   /** sent = stored on the server, delivered = reached the recipient's app, read = recipient opened the chat. */
   status: "sent" | "delivered" | "read" | "failed";

@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
 } from "react-native";
-import { Trash2, Users } from "lucide-react-native";
+import { Reply, Trash2, Users } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { REACTION_EMOJIS } from "../../utils/reactions";
@@ -21,6 +21,9 @@ interface MessageActionSheetProps {
   /** The current user's reaction on this message, highlighted in the row. */
   currentReaction?: string | null;
   onReact?: (emoji: string) => void;
+  /** Reply to this message. Hidden for a message that was deleted for everyone. */
+  canReply?: boolean;
+  onReply?: () => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
   onClose: () => void;
@@ -32,6 +35,8 @@ export const MessageActionSheet: React.FC<MessageActionSheetProps> = ({
   canReact = false,
   currentReaction = null,
   onReact,
+  canReply = false,
+  onReply,
   onDeleteForMe,
   onDeleteForEveryone,
   onClose,
@@ -63,6 +68,23 @@ export const MessageActionSheet: React.FC<MessageActionSheetProps> = ({
                     </TouchableOpacity>
                   ))}
                 </View>
+              ) : null}
+
+              {canReply && onReply ? (
+                <TouchableOpacity
+                  style={styles.option}
+                  onPress={onReply}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reply"
+                  testID="message-action-reply"
+                >
+                  <Reply size={18} color={Colors.foreground} />
+                  <View style={styles.optionTextWrap}>
+                    <Text style={styles.optionText}>Reply</Text>
+                    <Text style={styles.optionHint}>Quote this message in your answer.</Text>
+                  </View>
+                </TouchableOpacity>
               ) : null}
 
               <TouchableOpacity
