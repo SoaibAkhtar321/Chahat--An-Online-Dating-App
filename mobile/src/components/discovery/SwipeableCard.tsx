@@ -1,6 +1,6 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { Animated, Dimensions, PanResponder, StyleSheet, Text, View } from "react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 export type SwipeAction = "like" | "pass" | "priority";
@@ -181,8 +181,8 @@ const createStyles = (colors: ThemeColors) =>
     stamp: {
       position: "absolute",
       top: 36,
-      paddingHorizontal: 12,
-      paddingVertical: 4,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
       borderWidth: 4,
       borderRadius: Radii.md,
     },

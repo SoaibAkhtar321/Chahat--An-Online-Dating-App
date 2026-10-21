@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Check } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 interface Props {
@@ -58,8 +58,8 @@ export const LegalAcceptanceCheckbox: React.FC<Props> = ({ checked, onChange, er
 
 const createStyles = (Colors: ThemeColors) =>
   StyleSheet.create({
-    wrapper: { marginBottom: 20 },
-    row: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+    wrapper: { marginBottom: Layout.sectionGap },
+    row: { flexDirection: "row", alignItems: "flex-start", gap: Spacing.md },
     box: {
       width: 24,
       height: 24,
@@ -69,7 +69,7 @@ const createStyles = (Colors: ThemeColors) =>
       backgroundColor: Colors.card,
       alignItems: "center",
       justifyContent: "center",
-      marginTop: 1,
+      marginTop: Spacing.xs / 2,
     },
     boxChecked: { backgroundColor: Colors.primary, borderColor: Colors.primary },
     boxError: { borderColor: Colors.destructive },
@@ -78,7 +78,8 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.sm,
       color: Colors.foreground,
       lineHeight: 20,
+      paddingTop: Spacing.xs,
     },
     link: { color: Colors.primary, fontWeight: Typography.weights.bold, textDecorationLine: "underline" },
-    errorText: { marginTop: 6, fontSize: Typography.sizes.xs, color: Colors.destructive },
+    errorText: { marginTop: Spacing.sm, fontSize: Typography.sizes.sm, color: Colors.destructive },
   });

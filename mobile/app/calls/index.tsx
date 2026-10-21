@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Video, Info, MessageCircle, ShieldCheck, Clock } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { useMilo } from "../../src/context/MiloContext";
@@ -167,6 +167,8 @@ export default function CallsScreen() {
                       style={[styles.callBtn, styles.callBtnPrimary]}
                       onPress={() => router.push(buildNewCallRoute(m.id, "video"))}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Video call ${m.otherUser.name}`}
                     >
                       <Video size={16} color={Colors.primaryForeground} />
                     </TouchableOpacity>
@@ -194,22 +196,22 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    padding: 20,
-    gap: 16,
-    paddingBottom: 40,
+    padding: Spacing.lg,
+    gap: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
   infoBox: {
     flexDirection: "row",
     backgroundColor: Colors.secondary,
-    padding: 16,
+    padding: Spacing.lg,
     borderRadius: Radii.lg,
-    gap: 12,
+    gap: Spacing.md,
     alignItems: "flex-start",
     borderWidth: 1,
     borderColor: Colors.border,
   },
   infoIconWrap: {
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   infoText: {
     flex: 1,
@@ -220,7 +222,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   card: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 20,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -228,13 +230,13 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   featureRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 16,
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   iconCircle: {
     width: 36,
@@ -255,11 +257,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   featureDesc: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 2,
+    marginTop: Spacing.xs,
     lineHeight: 16,
   },
   matchList: {
-    gap: 12,
+    gap: Spacing.md,
   },
   callRequestHeader: {
     flexDirection: "row",
@@ -275,8 +277,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radii.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   requestButtonText: {
     color: Colors.foreground,
@@ -291,7 +293,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.primaryForeground,
   },
   providerNotice: {
-    marginTop: 10,
+    marginTop: Spacing.md,
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     lineHeight: 16,
@@ -300,7 +302,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 10,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -315,16 +317,16 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   matchCity: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   callActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: Spacing.sm,
   },
   callBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: Layout.minTap,
+    height: Layout.minTap,
+    borderRadius: Radii.full,
     backgroundColor: Colors.secondary,
     alignItems: "center",
     justifyContent: "center",
@@ -337,8 +339,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   emptyWrap: {
     alignItems: "center",
-    paddingVertical: 16,
-    gap: 8,
+    paddingVertical: Spacing.lg,
+    gap: Spacing.sm,
   },
   emptyText: {
     fontSize: Typography.sizes.sm,

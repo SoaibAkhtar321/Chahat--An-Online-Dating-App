@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, Switch, StyleSheet, ViewStyle } from "react-native";
-import { Typography, ThemeColors } from "../../constants/theme";
+import { Layout, Spacing, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 interface ToggleProps {
@@ -24,6 +24,7 @@ export const Toggle: React.FC<ToggleProps> = ({ label, hint, value, onValueChang
       <Switch
         value={value}
         onValueChange={onValueChange}
+        accessibilityLabel={label}
         trackColor={{ false: Colors.muted, true: Colors.primary }}
         thumbColor={Colors.card}
       />
@@ -36,14 +37,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
+    minHeight: Layout.minTap + Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
   textContainer: {
     flex: 1,
-    paddingRight: 16,
+    paddingRight: Spacing.lg,
   },
   label: {
     fontSize: Typography.sizes.base,
@@ -53,6 +55,6 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   hint: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
 });

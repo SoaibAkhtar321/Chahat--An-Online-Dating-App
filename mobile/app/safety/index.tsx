@@ -13,7 +13,7 @@ import {
   Search,
   Lock,
 } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 
@@ -162,14 +162,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 16,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
+    gap: Spacing.lg,
   },
   heroBox: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xxl,
-    padding: 24,
+    padding: Spacing.xl,
     alignItems: "center",
     borderWidth: 1,
     borderColor: Colors.border,
@@ -179,28 +179,28 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.bold,
     fontFamily: Typography.fontDisplay,
     color: Colors.foreground,
-    marginTop: 10,
+    marginTop: Spacing.md,
     textAlign: "center",
   },
   heroSubtitle: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     textAlign: "center",
-    marginTop: 6,
+    marginTop: Spacing.sm,
     lineHeight: 18,
   },
   freeSafetyCard: {
     backgroundColor: Colors.secondary,
     borderRadius: Radii.xl,
-    padding: 14,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
+    gap: Spacing.sm,
   },
   guaranteeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   guaranteeTitle: {
     fontSize: Typography.sizes.sm,
@@ -215,15 +215,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   card: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 18,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 12,
+    gap: Spacing.md,
   },
   cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   cardTitle: {
     fontSize: Typography.sizes.base,
@@ -232,8 +232,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   tipItem: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 4,
+    gap: Spacing.md,
+    marginTop: Spacing.xs,
   },
   tipContent: {
     flex: 1,
@@ -246,7 +246,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   tipBody: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 2,
+    marginTop: Spacing.xs,
     lineHeight: 18,
   },
   verifyCtaCard: {
@@ -254,10 +254,10 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     alignItems: "center",
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 16,
+    padding: Spacing.lg,
     borderWidth: 1.5,
     borderColor: Colors.accent,
-    gap: 14,
+    gap: Spacing.lg,
   },
   verifyCtaTitle: {
     fontSize: Typography.sizes.sm,
@@ -267,13 +267,13 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   verifyCtaDesc: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   helplineRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
   },
   helplineLabel: {
     fontSize: Typography.sizes.xs,
@@ -286,9 +286,9 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.bold,
   },
   helplineDisclaimer: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 6,
+    marginTop: Spacing.sm,
     fontStyle: "italic",
   },
 });

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Layout, Spacing, Typography } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Button } from "../../src/components/ui/Button";
 import { completeAuthLink } from "../../src/services/auth";
@@ -38,11 +40,17 @@ export default function AuthCallbackScreen() {
   }, [url, router]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {error ? (
         <>
-          <Text style={[styles.message, { color: colors.foreground }]}>{error}</Text>
-          <Button title="Back to sign in" onPress={() => router.replace("/(auth)/login")} />
+          <Text style={[styles.title, { color: colors.foreground }]}>Link problem</Text>
+          <Text style={[styles.message, { color: colors.mutedForeground }]}>{error}</Text>
+          <Button
+            title="Back to sign in"
+            onPress={() => router.replace("/(auth)/login")}
+            size="lg"
+            style={styles.action}
+          />
         </>
       ) : (
         <>
@@ -52,11 +60,31 @@ export default function AuthCallbackScreen() {
           </Text>
         </>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 20 },
-  message: { fontSize: 16, lineHeight: 24, textAlign: "center" },
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPadding,
+    gap: Spacing.lg,
+  },
+  title: {
+    fontSize: Typography.sizes.xxl,
+    fontWeight: Typography.weights.bold,
+    fontFamily: Typography.fontDisplay,
+    textAlign: "center",
+  },
+  message: {
+    fontSize: Typography.sizes.base,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  action: {
+    alignSelf: "stretch",
+    marginTop: Spacing.sm,
+  },
 });

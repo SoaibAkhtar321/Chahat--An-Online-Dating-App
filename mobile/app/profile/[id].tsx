@@ -20,7 +20,7 @@ import {
 } from "lucide-react-native";
 import { VoiceIntroPlayer } from "../../src/components/profile/VoiceIntroPlayer";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Layout, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
@@ -171,6 +171,8 @@ export default function ProfileDetailScreen() {
             style={styles.backButton}
             onPress={() => safeBack(router)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <ArrowLeft size={20} color={Colors.foreground} />
           </TouchableOpacity>
@@ -318,6 +320,8 @@ export default function ProfileDetailScreen() {
           style={styles.passButton}
           onPress={() => handleAction("pass")}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Pass"
         >
           <X size={28} color={Colors.mutedForeground} strokeWidth={2.5} />
         </TouchableOpacity>
@@ -326,6 +330,8 @@ export default function ProfileDetailScreen() {
           style={styles.likeButton}
           onPress={() => handleAction("like")}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Like"
         >
           <Heart size={32} color={Colors.primaryForeground} fill={Colors.primaryForeground} />
         </TouchableOpacity>
@@ -392,8 +398,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     position: "absolute",
     top: 16,
     left: 16,
-    width: 40,
-    height: 40,
+    width: Layout.minTap,
+    height: Layout.minTap,
     borderRadius: Radii.full,
     backgroundColor: Colors.card,
     alignItems: "center",
@@ -405,8 +411,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     bottom: 16,
     right: 16,
     backgroundColor: "rgba(35, 20, 30, 0.7)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
   },
   photoCountText: {
@@ -415,12 +421,12 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.bold,
   },
   detailsBody: {
-    padding: 24,
+    padding: Spacing.xl,
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   name: {
     fontSize: Typography.sizes.title,
@@ -431,8 +437,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 4,
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   metaText: {
     fontSize: Typography.sizes.base,
@@ -441,11 +447,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   intentCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: Spacing.md,
     backgroundColor: Colors.secondary,
-    padding: 14,
+    padding: Spacing.lg,
     borderRadius: Radii.xl,
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   intentIconBox: {
     width: 38,
@@ -459,7 +465,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   intentHeading: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     fontWeight: Typography.weights.semibold,
   },
@@ -467,21 +473,21 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   compatCard: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 16,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginVertical: 12,
+    marginVertical: Spacing.md,
   },
   compatHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   compatTitle: {
     fontSize: Typography.sizes.base,
@@ -497,23 +503,23 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
     lineHeight: 20,
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   compatDisclaimer: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     fontStyle: "italic",
-    marginTop: 8,
+    marginTop: Spacing.sm,
     lineHeight: 14,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   sectionTitle: {
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   bioText: {
     fontSize: Typography.sizes.base,
@@ -522,9 +528,9 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   promptCard: {
     backgroundColor: Colors.secondary,
-    padding: 16,
+    padding: Spacing.lg,
     borderRadius: Radii.xl,
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   promptQ: {
     fontSize: Typography.sizes.xs,
@@ -535,13 +541,13 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.lg,
     fontFamily: Typography.fontDisplay,
     color: Colors.foreground,
-    marginTop: 6,
+    marginTop: Spacing.sm,
   },
   basicRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginVertical: 4,
+    gap: Spacing.sm,
+    marginVertical: Spacing.xs,
   },
   basicText: {
     fontSize: Typography.sizes.base,
@@ -550,14 +556,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   chipWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: Spacing.sm,
   },
   interestPill: {
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderRadius: Radii.full,
   },
   sharedInterestPill: {
@@ -573,17 +579,17 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.bold,
   },
   safetyRow: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.lg,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 12,
+    gap: Spacing.md,
   },
   safetyOption: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   safetyText: {
     fontSize: Typography.sizes.sm,
@@ -596,7 +602,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     right: 0,
     flexDirection: "row",
     justifyContent: "center",
-    gap: 24,
+    gap: Spacing.xl,
   },
   passButton: {
     width: 60,
@@ -621,16 +627,16 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   center: {
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: Spacing.xl,
   },
   errorText: {
     fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   backBtnAlt: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: Layout.screenPadding,
+    paddingVertical: Spacing.md,
     backgroundColor: Colors.primary,
     borderRadius: Radii.full,
   },

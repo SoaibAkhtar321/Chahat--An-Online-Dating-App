@@ -11,7 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Layout, Radii, Shadows, Spacing, ThemeColors, Typography } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Button } from "../../src/components/ui/Button";
 
@@ -93,6 +93,9 @@ export default function WelcomeScreen() {
                   key={i}
                   onPress={() => setSlideIndex(i)}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 19, bottom: 19, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show slide ${i + 1} of ${SLIDES.length}`}
                   style={[
                     styles.dot,
                     i === slideIndex ? styles.dotActive : styles.dotInactive,
@@ -107,6 +110,7 @@ export default function WelcomeScreen() {
             <Button
               title="Create account"
               onPress={() => router.push("/(auth)/signup")}
+              size="lg"
               style={styles.primaryButton}
             />
 
@@ -114,6 +118,7 @@ export default function WelcomeScreen() {
               title="I already have an account"
               variant="ghost"
               onPress={() => router.push("/(auth)/login")}
+              size="lg"
               style={styles.secondaryButton}
             />
 
@@ -163,8 +168,6 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.ink,
     borderBottomLeftRadius: Radii.xxl,
     borderBottomRightRadius: Radii.xxl,
-    borderBottomWidth: 1.5,
-    borderBottomColor: Colors.border,
     overflow: "hidden",
     ...Shadows.card,
   },
@@ -177,9 +180,9 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 14,
-    paddingHorizontal: 20,
-    paddingBottom: 22,
+    paddingTop: Spacing.lg,
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.xl,
   },
   logoRow: {
     flexDirection: "row",
@@ -199,8 +202,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   badgePill: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.35)",
@@ -218,12 +221,12 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   bottomContent: {
     flexGrow: 1,
     justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 16,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Layout.sectionGap,
+    paddingBottom: Spacing.lg,
   },
   copySection: {
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
   },
   headingText: {
     fontSize: Typography.sizes.title,
@@ -236,13 +239,13 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
     lineHeight: 22,
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   dotsRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: Spacing.sm,
     alignItems: "center",
-    marginTop: 16,
+    marginTop: Spacing.lg,
   },
   dot: {
     height: 6,
@@ -258,8 +261,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   actionsSection: {
     width: "100%",
-    gap: 12,
-    marginTop: 16,
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
   },
   primaryButton: {
     width: "100%",
@@ -268,14 +271,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     width: "100%",
   },
   legalSection: {
-    marginTop: 4,
-    paddingHorizontal: 12,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
   },
   legalText: {
-    fontSize: Typography.sizes.xs,
+    fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 20,
   },
   legalLink: {
     color: Colors.primary,

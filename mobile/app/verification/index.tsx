@@ -6,7 +6,7 @@ import { useRouter } from "expo-router";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { BadgeCheck, Camera, Clock } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Button } from "../../src/components/ui/Button";
@@ -207,14 +207,14 @@ const createStyles = (Colors: ThemeColors) =>
       backgroundColor: Colors.background,
     },
     content: {
-      padding: 24,
+      padding: Spacing.xl,
       flex: 1,
       justifyContent: "center",
     },
     statusBox: {
       alignItems: "center",
       backgroundColor: Colors.card,
-      padding: 32,
+      padding: Spacing.xxl,
       borderRadius: Radii.xxl,
       borderWidth: 1,
       borderColor: Colors.border,
@@ -223,19 +223,19 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.xl,
       fontWeight: Typography.weights.bold,
       color: Colors.foreground,
-      marginTop: 16,
+      marginTop: Spacing.lg,
     },
     statusDesc: {
       fontSize: Typography.sizes.sm,
       color: Colors.mutedForeground,
       textAlign: "center",
-      marginTop: 8,
+      marginTop: Spacing.sm,
       lineHeight: 20,
     },
     box: {
       alignItems: "center",
       backgroundColor: Colors.card,
-      padding: 24,
+      padding: Spacing.xl,
       borderRadius: Radii.xxl,
       borderWidth: 1,
       borderColor: Colors.border,
@@ -245,15 +245,15 @@ const createStyles = (Colors: ThemeColors) =>
       fontWeight: Typography.weights.bold,
       fontFamily: Typography.fontDisplay,
       color: Colors.foreground,
-      marginTop: 12,
+      marginTop: Spacing.md,
     },
     subtitle: {
       fontSize: Typography.sizes.sm,
       color: Colors.mutedForeground,
       textAlign: "center",
-      marginTop: 8,
+      marginTop: Spacing.sm,
       lineHeight: 20,
-      marginBottom: 20,
+      marginBottom: Spacing.lg,
     },
     selfieWrapper: {
       width: 140,
@@ -262,7 +262,7 @@ const createStyles = (Colors: ThemeColors) =>
       overflow: "hidden",
       borderWidth: 3,
       borderColor: Colors.primary,
-      marginBottom: 20,
+      marginBottom: Spacing.lg,
     },
     selfie: {
       width: "100%",

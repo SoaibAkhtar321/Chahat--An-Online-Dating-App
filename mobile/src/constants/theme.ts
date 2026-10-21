@@ -165,6 +165,26 @@ export const Typography = {
   },
 };
 
+// Spacing scale: the only allowed values for padding, margin and gap.
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+} as const;
+
+// Layout constants shared by screens and controls.
+export const Layout = {
+  screenPadding: 24, // horizontal screen padding (20-24)
+  sectionGap: Spacing.xl,
+  fieldGap: Spacing.lg,
+  minTap: 44, // minimum touch target
+  buttonHeight: 52, // md button (50-56)
+  inputHeight: 52,
+} as const;
+
 export const Radii = {
   sm: 10,
   md: 14,

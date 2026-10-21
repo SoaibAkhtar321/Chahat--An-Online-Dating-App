@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImageManipulator from "expo-image-manipulator";
 import { X, Crop, RotateCcw } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { centerCropRect } from "../../utils/cropMath";
 import { Alert } from "../../utils/alert";
@@ -145,7 +145,7 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
+      paddingHorizontal: Spacing.lg,
     },
     iconBtn: { padding: 4 },
     title: { fontSize: Typography.sizes.lg, fontWeight: Typography.weights.bold, color: Colors.foreground },
@@ -155,7 +155,7 @@ const createStyles = (Colors: ThemeColors) =>
     toolbar: {
       flexDirection: "row",
       justifyContent: "center",
-      paddingVertical: 14,
+      paddingVertical: Spacing.lg,
       borderTopWidth: 1,
       borderTopColor: Colors.border,
       backgroundColor: Colors.card,
@@ -163,9 +163,9 @@ const createStyles = (Colors: ThemeColors) =>
     tool: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
+      gap: Spacing.sm,
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.md,
       borderRadius: Radii.full,
       backgroundColor: Colors.secondary,
     },

@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CallVideoStage, type CallSessionWithVideo } from "../../src/services/agoraCallMedia";
 import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
@@ -354,12 +354,12 @@ const createStyles = (Colors: ThemeColors) =>
     callState: {
       width: "100%",
       alignItems: "center",
-      padding: 20,
+      padding: Spacing.lg,
       borderWidth: 1,
       borderColor: Colors.border,
       borderRadius: Radii.xl,
       backgroundColor: Colors.card,
-      gap: 10,
+      gap: Spacing.md,
     },
     stateTitle: {
       color: Colors.foreground,
@@ -392,9 +392,9 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 10,
+      gap: Spacing.md,
       backgroundColor: Colors.destructive,
-      paddingHorizontal: 24,
+      paddingHorizontal: Spacing.xl,
       borderRadius: Radii.full,
     },
     endCallText: {

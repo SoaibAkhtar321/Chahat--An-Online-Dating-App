@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Pressable } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MapPin, ChevronUp, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { AvatarPlaceholder } from "../ui/AvatarPlaceholder";
 import { ProfilePhoto } from "../profile/ProfilePhoto";
@@ -187,8 +187,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     paddingBottom: 60,
   },
   noPhotoText: {
-    marginTop: 12,
-    fontSize: 12,
+    marginTop: Spacing.md,
+    fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
     fontWeight: Typography.weights.medium,
   },
@@ -216,27 +216,27 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   compatBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: Spacing.xs,
     backgroundColor: "rgba(30, 20, 25, 0.75)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
   },
   compatBadgeText: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.accent,
   },
   dailyBadge: {
     backgroundColor: "rgba(212, 75, 53, 0.92)",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
   },
   dailyBadgeText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.primaryForeground,
     letterSpacing: 0.3,
@@ -247,7 +247,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     left: 16,
     right: 16,
     flexDirection: "row",
-    gap: 4,
+    gap: Spacing.xs,
     zIndex: 2,
   },
   indicatorBar: {
@@ -267,8 +267,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     left: 0,
     right: 0,
     paddingTop: 80,
-    paddingBottom: 22,
-    paddingHorizontal: 18,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     zIndex: 2,
   },
   infoRow: {
@@ -278,15 +278,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   textColumn: {
     flex: 1,
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   name: {
-    fontSize: 24,
+    fontSize: Typography.sizes.xxl,
     fontWeight: Typography.weights.bold,
     fontFamily: Typography.fontDisplay,
     color: Colors.primaryForeground,
@@ -297,54 +297,54 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    marginTop: 4,
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
   },
   locationText: {
-    fontSize: 12,
+    fontSize: Typography.sizes.sm,
     color: "rgba(255, 255, 255, 0.9)",
     fontWeight: Typography.weights.medium,
   },
   tagChipsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 6,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   intentBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
     alignSelf: "flex-start",
   },
   intentText: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     color: Colors.primaryForeground,
     fontWeight: Typography.weights.semibold,
   },
   voiceBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: Spacing.xs,
     backgroundColor: "rgba(212, 75, 53, 0.38)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.3)",
   },
   voiceBadgeText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     color: Colors.primaryForeground,
     fontWeight: Typography.weights.semibold,
   },
   bio: {
-    fontSize: 12,
+    fontSize: Typography.sizes.sm,
     color: "rgba(255, 255, 255, 0.85)",
     lineHeight: 18,
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   infoButton: {
     width: 44,

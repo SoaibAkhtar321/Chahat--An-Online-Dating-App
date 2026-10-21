@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Play, Pause, Mic, Volume2 } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { getAudioPlayerAdapter } from "../../services/voiceMedia";
 import { fetchVoiceIntro, type VoiceIntroPlayback } from "../../services/voiceIntro";
@@ -144,40 +144,40 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   card: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 16,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginVertical: 10,
+    marginVertical: Spacing.md,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   tag: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: Spacing.sm,
     backgroundColor: Colors.secondary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
   },
   tagText: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.semibold,
     color: Colors.primary,
   },
   title: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   playerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: Spacing.lg,
   },
   playButton: {
     width: 44,
@@ -194,7 +194,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 28,
-    gap: 4,
+    gap: Spacing.xs,
   },
   bar: {
     flex: 1,
@@ -209,10 +209,10 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   timeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   timeText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     fontWeight: Typography.weights.medium,
   },

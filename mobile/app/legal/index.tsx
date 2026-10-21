@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { LEGAL_DOCUMENT_VERSIONS } from "../../src/constants/legalVersions";
@@ -233,48 +233,48 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.sm,
       color: Colors.mutedForeground,
       lineHeight: 20,
-      marginBottom: 16,
+      marginBottom: Spacing.lg,
     },
     card: {
       backgroundColor: Colors.card,
       borderRadius: Radii.lg,
       borderWidth: 1,
       borderColor: Colors.border,
-      marginBottom: 12,
+      marginBottom: Spacing.md,
       overflow: "hidden",
     },
     sectionHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      padding: 16,
+      padding: Spacing.lg,
     },
     sectionTitle: {
       flex: 1,
       fontSize: Typography.sizes.base,
       fontWeight: Typography.weights.bold,
       color: Colors.foreground,
-      paddingRight: 8,
+      paddingRight: Spacing.sm,
     },
     sectionBody: { paddingHorizontal: 16, paddingBottom: 16 },
     subheading: {
       fontSize: Typography.sizes.sm,
       fontWeight: Typography.weights.bold,
       color: Colors.foreground,
-      marginTop: 12,
-      marginBottom: 6,
+      marginTop: Spacing.md,
+      marginBottom: Spacing.sm,
     },
     paragraph: {
       fontSize: Typography.sizes.sm,
       color: Colors.mutedForeground,
       lineHeight: 21,
-      marginBottom: 10,
+      marginBottom: Spacing.md,
     },
     linkRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 12,
+      paddingVertical: Spacing.md,
       borderTopWidth: 1,
       borderTopColor: Colors.border,
     },
@@ -290,13 +290,13 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.sm,
       color: Colors.mutedForeground,
       fontStyle: "italic",
-      marginTop: 2,
+      marginTop: Spacing.xs,
     },
     choiceRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 4,
+      marginBottom: Spacing.xs,
     },
     choiceValue: {
       fontSize: Typography.sizes.sm,

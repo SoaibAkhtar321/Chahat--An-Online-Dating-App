@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useLocalSearchParams } from "expo-router";
-import { Typography, ThemeColors } from "../../src/constants/theme";
+import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Input } from "../../src/components/ui/Input";
@@ -24,6 +24,7 @@ export default function ResetPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const [confirmError, setConfirmError] = useState("");
 
   const handleSend = async () => {
     setError("");
@@ -45,13 +46,14 @@ export default function ResetPasswordScreen() {
 
   const handleUpdatePassword = async () => {
     setError("");
+    setConfirmError("");
     const validation = validatePassword(newPassword);
     if (!validation.valid) {
       setError(validation.error || "Use a valid password.");
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
+      setConfirmError("Passwords do not match.");
       return;
     }
     setLoading(true);
@@ -68,7 +70,16 @@ export default function ResetPasswordScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Reset Password" />
-      <View style={styles.content}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.flex}
+      >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>
           {isRecoveryFlow ? "Choose a new password" : "Forgot your password?"}
         </Text>
@@ -85,7 +96,10 @@ export default function ResetPasswordScreen() {
               placeholder="8+ characters, a letter and a number"
               secureTextEntry
               value={newPassword}
-              onChangeText={setNewPassword}
+              onChangeText={(t) => {
+                setNewPassword(t);
+                setError("");
+              }}
               error={error}
             />
             <Input
@@ -93,19 +107,24 @@ export default function ResetPasswordScreen() {
               placeholder="Enter the new password again"
               secureTextEntry
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(t) => {
+                setConfirmPassword(t);
+                setConfirmError("");
+              }}
+              error={confirmError || undefined}
             />
             <Button
               title={loading ? "Updating…" : "Update password"}
               onPress={handleUpdatePassword}
               loading={loading}
+              size="lg"
               style={styles.actionBtn}
             />
           </View>
         ) : sent ? (
           <View style={styles.successBox}>
             <Text style={styles.successText}>
-              A password reset link has been dispatched to {email}.
+              We sent a password reset link to {email}.
             </Text>
             <Button
               title="Back to login"
@@ -121,18 +140,23 @@ export default function ResetPasswordScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(t) => {
+                setEmail(t);
+                setError("");
+              }}
               error={error}
             />
             <Button
               title={loading ? "Sending…" : "Send Reset Link"}
               onPress={handleSend}
               loading={loading}
+              size="lg"
               style={styles.actionBtn}
             />
           </View>
         )}
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -143,38 +167,42 @@ const createStyles = (Colors: ThemeColors) =>
       flex: 1,
       backgroundColor: Colors.background,
     },
+    flex: {
+      flex: 1,
+    },
     content: {
-      padding: 24,
+      paddingHorizontal: Layout.screenPadding,
+      paddingTop: Layout.sectionGap,
+      paddingBottom: Layout.sectionGap,
     },
     title: {
       fontSize: Typography.sizes.xxl,
       fontWeight: Typography.weights.bold,
       color: Colors.foreground,
       fontFamily: Typography.fontDisplay,
-      marginTop: 12,
     },
     subtitle: {
       fontSize: Typography.sizes.base,
       color: Colors.mutedForeground,
-      marginTop: 6,
+      marginTop: Spacing.sm,
       lineHeight: 22,
-      marginBottom: 24,
+      marginBottom: Layout.sectionGap,
     },
     form: {
       width: "100%",
     },
     actionBtn: {
-      marginTop: 12,
+      marginTop: Spacing.sm,
     },
     successBox: {
       backgroundColor: Colors.highlight,
-      padding: 16,
-      borderRadius: 12,
+      padding: Spacing.lg,
+      borderRadius: Radii.md,
     },
     successText: {
       color: Colors.highlightForeground,
       fontSize: Typography.sizes.base,
-      marginBottom: 16,
+      marginBottom: Spacing.lg,
       lineHeight: 22,
     },
   });

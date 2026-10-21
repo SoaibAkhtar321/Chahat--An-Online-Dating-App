@@ -8,13 +8,13 @@ import {
   StyleProp,
   TextStyle,
 } from "react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { Layout, Radii, Shadows, Spacing, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: "primary" | "ghost" | "danger" | "outline";
+  variant?: "primary" | "ghost" | "danger" | "outline" | "text";
   size?: "sm" | "md" | "lg";
   loading?: boolean;
   disabled?: boolean;
@@ -45,6 +45,8 @@ export const Button: React.FC<ButtonProps> = ({
         return styles.danger;
       case "outline":
         return styles.outline;
+      case "text":
+        return styles.textVariant;
       case "primary":
       default:
         return styles.primary;
@@ -59,6 +61,8 @@ export const Button: React.FC<ButtonProps> = ({
         return styles.dangerText;
       case "outline":
         return styles.outlineText;
+      case "text":
+        return styles.textVariantText;
       case "primary":
       default:
         return styles.primaryText;
@@ -70,6 +74,9 @@ export const Button: React.FC<ButtonProps> = ({
       activeOpacity={0.85}
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       style={[
         styles.base,
         styles[size],
@@ -103,14 +110,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: Radii.full,
-    paddingHorizontal: 20,
-    gap: 8,
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.sm,
   },
   sm: {
-    height: 40,
+    height: Layout.minTap,
   },
   md: {
-    height: 50,
+    height: Layout.buttonHeight,
   },
   lg: {
     height: 56,
@@ -132,6 +139,9 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.primary,
   },
+  textVariant: {
+    backgroundColor: "transparent",
+  },
   disabled: {
     opacity: 0.5,
   },
@@ -150,5 +160,9 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   outlineText: {
     color: Colors.primary,
+  },
+  textVariantText: {
+    color: Colors.mutedForeground,
+    fontWeight: Typography.weights.semibold,
   },
 });

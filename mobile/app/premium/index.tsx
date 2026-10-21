@@ -15,7 +15,7 @@ import {
   RefreshCw,
   Info,
 } from "lucide-react-native";
-import { Radii, Shadows, Typography } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Button } from "../../src/components/ui/Button";
@@ -634,15 +634,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
   heroBox: {
     alignItems: "center",
-    padding: 20,
+    padding: Spacing.lg,
     borderRadius: Radii.xxl,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
     ...Shadows.card,
   },
   crownCircle: {
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
     borderRadius: Radii.full,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
+    marginBottom: Spacing.md,
   },
   heroTitle: {
     fontSize: Typography.sizes.xl,
@@ -661,22 +661,22 @@ const styles = StyleSheet.create({
   heroTagline: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.semibold,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   heroSubtitle: {
     fontSize: Typography.sizes.xs,
     textAlign: "center",
-    marginTop: 6,
+    marginTop: Spacing.sm,
     lineHeight: 18,
   },
   currentActiveBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
-    marginTop: 10,
+    marginTop: Spacing.md,
   },
   currentActiveBadgeText: {
     fontSize: Typography.sizes.xs,
@@ -685,11 +685,11 @@ const styles = StyleSheet.create({
   safetyGuaranteeBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 14,
+    gap: Spacing.md,
+    padding: Spacing.lg,
     borderRadius: Radii.xl,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   safetyGuaranteeContent: {
     flex: 1,
@@ -699,16 +699,16 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
   },
   safetyGuaranteeText: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: Typography.sizes.xs,
+    marginTop: Spacing.xs,
     lineHeight: 16,
   },
   sectionHeading: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     letterSpacing: 0.5,
-    marginBottom: 10,
-    marginLeft: 4,
+    marginBottom: Spacing.md,
+    marginLeft: Spacing.xs,
   },
   comparisonCard: {
     borderRadius: Radii.xl,
@@ -718,49 +718,49 @@ const styles = StyleSheet.create({
   },
   matrixHeaderRow: {
     flexDirection: "row",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     borderBottomWidth: 1,
     alignItems: "center",
   },
   matrixColFeature: {
     flex: 2.2,
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
   },
   matrixColPlan: {
     flex: 1,
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     textAlign: "center",
   },
   matrixRow: {
     flexDirection: "row",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     borderBottomWidth: 1,
     alignItems: "center",
   },
   matrixRowLabel: {
     flex: 2.2,
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.medium,
   },
   matrixRowCell: {
     flex: 1,
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     textAlign: "center",
   },
   durationGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 20,
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   durationCard: {
     flexBasis: "48%",
     flexGrow: 1,
     borderRadius: Radii.xl,
-    padding: 14,
+    padding: Spacing.lg,
     borderWidth: 1.5,
     position: "relative",
   },
@@ -768,12 +768,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -8,
     right: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
   },
   durationBadgeText: {
-    fontSize: 9,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: "#fff",
   },
@@ -784,34 +784,34 @@ const styles = StyleSheet.create({
   durationPrice: {
     fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   durationSavings: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.semibold,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   singleMonthNoteBox: {
     borderRadius: Radii.lg,
-    padding: 12,
+    padding: Spacing.md,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   singleMonthNoteTitle: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
   },
   singleMonthNoteText: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: Typography.sizes.xs,
+    marginTop: Spacing.xs,
   },
   plansContainer: {
-    gap: 16,
-    marginBottom: 24,
+    gap: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   planCard: {
     borderRadius: Radii.xl,
-    padding: 16,
+    padding: Spacing.lg,
     borderWidth: 1.5,
     position: "relative",
     ...Shadows.card,
@@ -820,13 +820,13 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -10,
     right: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
   },
   planBadgeText: {
     color: "#fff",
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     letterSpacing: 0.5,
   },
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 14,
+    marginBottom: Spacing.lg,
   },
   planTitleCol: {
     flex: 1,
@@ -842,24 +842,24 @@ const styles = StyleSheet.create({
   planNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   planName: {
     fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
   },
   currentPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
   },
   currentPillText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
   },
   planTagline: {
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: Typography.sizes.xs,
+    marginTop: Spacing.xs,
   },
   planPriceCol: {
     alignItems: "flex-end",
@@ -869,17 +869,17 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
   },
   planPeriod: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     marginTop: -2,
   },
   featuresList: {
-    gap: 8,
-    marginBottom: 16,
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
   featureItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   featureText: {
     fontSize: Typography.sizes.sm,
@@ -889,8 +889,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
     borderRadius: Radii.lg,
   },
   radioCircle: {
@@ -912,9 +912,9 @@ const styles = StyleSheet.create({
   },
   ctaCard: {
     borderRadius: Radii.xxl,
-    padding: 18,
+    padding: Spacing.lg,
     borderWidth: 1,
-    gap: 12,
+    gap: Spacing.md,
     ...Shadows.card,
   },
   ctaSummaryRow: {
@@ -934,12 +934,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    marginTop: 4,
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   restoreBtnText: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.medium,
   },
 });

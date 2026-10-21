@@ -4,7 +4,7 @@ import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { Toggle } from "../../src/components/ui/Toggle";
@@ -616,7 +616,7 @@ export default function SettingsScreen() {
           autoCapitalize="characters"
           value={deleteConfirmationText}
           onChangeText={setDeleteConfirmationText}
-          containerStyle={{ marginVertical: 12 }}
+          containerStyle={{ marginVertical: Spacing.md }}
         />
       </Dialog>
     </SafeAreaView>
@@ -630,19 +630,19 @@ const createStyles = (Colors: ThemeColors) =>
       backgroundColor: Colors.background,
     },
     content: {
-      padding: 20,
-      paddingBottom: 40,
+      padding: Spacing.lg,
+      paddingBottom: Spacing.xxl,
     },
     section: {
-      marginBottom: 24,
+      marginBottom: Spacing.xl,
     },
     sectionHeader: {
       fontSize: Typography.sizes.xs,
       fontWeight: Typography.weights.bold,
       color: Colors.mutedForeground,
       letterSpacing: 1,
-      marginBottom: 8,
-      paddingLeft: 4,
+      marginBottom: Spacing.sm,
+      paddingLeft: Spacing.xs,
     },
     card: {
       backgroundColor: Colors.card,
@@ -656,8 +656,8 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 14,
-      paddingHorizontal: 16,
+      paddingVertical: Spacing.lg,
+      paddingHorizontal: Spacing.lg,
       borderBottomWidth: 1,
       borderBottomColor: Colors.border,
     },
@@ -665,8 +665,8 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 15,
-      paddingHorizontal: 16,
+      paddingVertical: Spacing.lg,
+      paddingHorizontal: Spacing.lg,
       borderBottomWidth: 1,
       borderBottomColor: Colors.border,
     },
@@ -680,12 +680,12 @@ const createStyles = (Colors: ThemeColors) =>
       color: Colors.mutedForeground,
     },
     actionSection: {
-      marginTop: 8,
-      gap: 16,
+      marginTop: Spacing.sm,
+      gap: Spacing.lg,
     },
     deleteBtn: {
       alignItems: "center",
-      paddingVertical: 12,
+      paddingVertical: Spacing.md,
     },
     deleteText: {
       fontSize: Typography.sizes.sm,
@@ -694,12 +694,12 @@ const createStyles = (Colors: ThemeColors) =>
     },
     themeRow: {
       flexDirection: "row",
-      padding: 12,
-      gap: 8,
+      padding: Spacing.md,
+      gap: Spacing.sm,
     },
     themeOptionBtn: {
       flex: 1,
-      paddingVertical: 10,
+      paddingVertical: Spacing.md,
       alignItems: "center",
       justifyContent: "center",
       borderRadius: Radii.lg,

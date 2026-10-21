@@ -3,7 +3,7 @@ import { safeBack } from "../../src/utils/navigation";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
@@ -91,11 +91,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.primary,
     justifyContent: "space-between",
-    padding: 24,
+    padding: Spacing.xl,
   },
   header: {
     alignItems: "center",
-    paddingTop: 12,
+    paddingTop: Spacing.md,
   },
   logo: {
     fontSize: 36,
@@ -122,14 +122,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.base,
     color: Colors.primaryForeground,
     opacity: 0.9,
-    marginTop: 8,
+    marginTop: Spacing.sm,
     textAlign: "center",
   },
   photosWrapper: {
     width: 280,
     height: 240,
     position: "relative",
-    marginTop: 36,
+    marginTop: Spacing.xxl,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -157,8 +157,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     transform: [{ rotate: "8deg" }],
   },
   actions: {
-    gap: 12,
-    marginBottom: 16,
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   chatButton: {
     backgroundColor: Colors.card,

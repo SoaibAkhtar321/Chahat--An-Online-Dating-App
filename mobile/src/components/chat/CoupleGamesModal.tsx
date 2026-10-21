@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from "react-native";
 import { X, Sparkles, Trophy, CheckCircle2 } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Layout, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 interface CoupleGamesModalProps {
@@ -69,7 +69,13 @@ export const CoupleGamesModal: React.FC<CoupleGamesModalProps> = ({
               <Sparkles size={20} color={Colors.primary} />
               <Text style={styles.title}>Couple Games & Polls</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
               <X size={20} color={Colors.foreground} />
             </TouchableOpacity>
           </View>
@@ -212,21 +218,21 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.background,
     borderTopLeftRadius: Radii.xxl,
     borderTopRightRadius: Radii.xxl,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 36,
+    paddingTop: Spacing.lg,
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Spacing.xxl,
     maxHeight: "85%",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: Spacing.sm,
   },
   headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   title: {
     fontSize: Typography.sizes.lg,
@@ -234,8 +240,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.foreground,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
+    width: Layout.minTap,
+    height: Layout.minTap,
     borderRadius: Radii.full,
     backgroundColor: Colors.secondary,
     alignItems: "center",
@@ -244,18 +250,18 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   subtitle: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   tabsRow: {
     flexDirection: "row",
     backgroundColor: Colors.secondary,
     borderRadius: Radii.lg,
-    padding: 4,
-    marginBottom: 16,
+    padding: Spacing.xs,
+    marginBottom: Spacing.lg,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: Spacing.md,
     alignItems: "center",
     borderRadius: Radii.md,
   },
@@ -273,15 +279,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.bold,
   },
   scrollList: {
-    paddingBottom: 20,
+    paddingBottom: Spacing.lg,
   },
   cardList: {
-    gap: 12,
+    gap: Spacing.md,
   },
   gameCard: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 14,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -289,18 +295,18 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: Spacing.sm,
   },
   choiceBtn: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     backgroundColor: Colors.secondary,
     borderRadius: Radii.lg,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 6,
+    gap: Spacing.sm,
   },
   choiceBtnSelected: {
     backgroundColor: Colors.primary,
@@ -315,14 +321,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.primaryForeground,
   },
   vsBadge: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.mutedForeground,
   },
   quizCard: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 16,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -330,14 +336,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   quizOptions: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   quizOptionBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     backgroundColor: Colors.secondary,
     borderRadius: Radii.md,
   },
@@ -356,10 +362,10 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   hintBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 18,
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
     backgroundColor: Colors.secondary,
-    padding: 12,
+    padding: Spacing.md,
     borderRadius: Radii.lg,
   },
   hintText: {

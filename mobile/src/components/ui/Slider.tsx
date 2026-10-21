@@ -8,7 +8,7 @@ import {
   ViewStyle,
   Platform,
 } from "react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 interface SliderProps {
@@ -188,7 +188,7 @@ export const RangeSlider: React.FC<RangeSliderProps> = ({
       {Platform.OS === "web" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", marginTop: 4 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, color: Colors.mutedForeground, minWidth: 32 }}>Min</span>
+            <span style={{ fontSize: Typography.sizes.sm, color: Colors.mutedForeground, minWidth: 32 }}>Min</span>
             <input
               type="range"
               min={min}
@@ -206,13 +206,13 @@ export const RangeSlider: React.FC<RangeSliderProps> = ({
                 height: 20,
               }}
             />
-            <span style={{ fontSize: 13, fontWeight: "600", color: Colors.foreground, minWidth: 28, textAlign: "right" }}>
+            <span style={{ fontSize: Typography.sizes.sm, fontWeight: "600", color: Colors.foreground, minWidth: 28, textAlign: "right" }}>
               {minVal}
             </span>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, color: Colors.mutedForeground, minWidth: 32 }}>Max</span>
+            <span style={{ fontSize: Typography.sizes.sm, color: Colors.mutedForeground, minWidth: 32 }}>Max</span>
             <input
               type="range"
               min={minVal + 1}
@@ -230,7 +230,7 @@ export const RangeSlider: React.FC<RangeSliderProps> = ({
                 height: 20,
               }}
             />
-            <span style={{ fontSize: 13, fontWeight: "600", color: Colors.foreground, minWidth: 28, textAlign: "right" }}>
+            <span style={{ fontSize: Typography.sizes.sm, fontWeight: "600", color: Colors.foreground, minWidth: 28, textAlign: "right" }}>
               {maxVal}
             </span>
           </div>
@@ -264,13 +264,13 @@ export const RangeSlider: React.FC<RangeSliderProps> = ({
 const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     width: "100%",
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   label: {
     fontSize: Typography.sizes.sm,
@@ -315,7 +315,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   boundsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   boundText: {
     fontSize: Typography.sizes.xs,
@@ -323,6 +323,6 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   dualSlidersRow: {
     width: "100%",
-    gap: 8,
+    gap: Spacing.sm,
   },
 });

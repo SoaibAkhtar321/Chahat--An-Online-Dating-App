@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ViewStyle,
 } from "react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { calculateAge, validateDob } from "../../utils/validation";
 
@@ -394,17 +394,17 @@ export const DatePicker: React.FC<DatePickerProps> = ({
 const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     width: "100%",
-    marginVertical: 12,
+    marginVertical: Spacing.md,
   },
   breadcrumbRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   breadcrumbChip: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     backgroundColor: Colors.card,
     borderRadius: Radii.md,
     borderWidth: 1,
@@ -435,7 +435,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderRadius: Radii.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 16,
+    padding: Spacing.lg,
     minHeight: 280,
   },
   stepContainer: {
@@ -445,8 +445,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14,
-    paddingBottom: 8,
+    marginBottom: Spacing.lg,
+    paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -458,11 +458,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   stepHelp: {
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   backButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
     borderRadius: Radii.sm,
     backgroundColor: Colors.secondary,
   },
@@ -477,12 +477,12 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   yearsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: Spacing.sm,
     justifyContent: "flex-start",
   },
   yearButton: {
     width: "23%",
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderRadius: Radii.sm,
     backgroundColor: Colors.secondary,
     alignItems: "center",
@@ -505,11 +505,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   monthsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: Spacing.sm,
   },
   monthButton: {
     width: "31%",
-    paddingVertical: 14,
+    paddingVertical: Spacing.lg,
     borderRadius: Radii.sm,
     backgroundColor: Colors.secondary,
     alignItems: "center",
@@ -535,11 +535,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   daysGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: Spacing.sm,
   },
   dayButton: {
     width: "12%",
-    paddingVertical: 10,
+    paddingVertical: Spacing.md,
     borderRadius: Radii.sm,
     backgroundColor: Colors.secondary,
     alignItems: "center",
@@ -562,8 +562,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   confirmedContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 24,
-    gap: 16,
+    paddingVertical: Spacing.xl,
+    gap: Spacing.lg,
   },
   confirmedContent: {
     alignItems: "center",
@@ -579,12 +579,12 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.xxl,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginVertical: 8,
+    marginVertical: Spacing.sm,
   },
   ageBadge: {
     backgroundColor: "rgba(46, 158, 103, 0.12)",
-    paddingVertical: 6,
-    paddingHorizontal: 16,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: Colors.success,
@@ -596,8 +596,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   ageBadgeInvalid: {
     backgroundColor: "rgba(214, 57, 46, 0.12)",
-    paddingVertical: 6,
-    paddingHorizontal: 16,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radii.full,
     borderWidth: 1,
     borderColor: Colors.destructive,
@@ -608,8 +608,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.semibold,
   },
   editButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Layout.screenPadding,
     backgroundColor: Colors.secondary,
     borderRadius: Radii.md,
     borderWidth: 1,
@@ -623,7 +623,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   errorText: {
     color: Colors.destructive,
     fontSize: Typography.sizes.xs,
-    marginTop: 6,
+    marginTop: Spacing.sm,
     fontWeight: Typography.weights.medium,
   },
 });

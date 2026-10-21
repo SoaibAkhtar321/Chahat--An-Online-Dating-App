@@ -1,9 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, View, Text, StyleSheet } from "react-native";
+import {
+  AppState,
+  View,
+  Text,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { MailCheck } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Button } from "../../src/components/ui/Button";
 import { Input } from "../../src/components/ui/Input";
@@ -111,7 +119,16 @@ export default function VerifyScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.flex}
+      >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.iconCircle}>
           <MailCheck size={40} color={Colors.primary} />
         </View>
@@ -147,16 +164,13 @@ export default function VerifyScreen() {
           onPress={handleVerify}
           loading={verifying}
           disabled={code.trim().length < 6}
-          style={styles.backButton}
+          size="lg"
+          style={styles.fullWidth}
         />
 
-        {message ? (
-          <View style={styles.noticeBox}>
-            <Text style={styles.noticeText}>{message}</Text>
-          </View>
-        ) : null}
+        {message ? <Text style={styles.noticeText}>{message}</Text> : null}
 
-        <View style={styles.resendSection}>
+        <View style={styles.secondaryActions}>
           <Button
             title={
               resending
@@ -165,15 +179,16 @@ export default function VerifyScreen() {
                   ? `Resend email in ${cooldown}s`
                   : "Resend email"
             }
-            variant="ghost"
+            variant="text"
+            size="sm"
             onPress={handleResend}
             loading={resending}
             disabled={cooldown > 0}
           />
+          <Button variant="text" size="sm" title="Back to log in" onPress={handleBack} />
         </View>
-
-        <Button variant="ghost" title="Back to log in" onPress={handleBack} style={styles.backButton} />
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -182,11 +197,16 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    padding: 24,
-    justifyContent: "center",
+  },
+  flex: {
+    flex: 1,
   },
   content: {
+    flexGrow: 1,
     alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPadding,
+    paddingVertical: Layout.sectionGap,
   },
   iconCircle: {
     width: 80,
@@ -195,7 +215,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.secondary,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: Layout.sectionGap,
   },
   title: {
     fontSize: Typography.sizes.title,
@@ -208,27 +228,24 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: Spacing.sm,
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: Layout.sectionGap,
   },
-  noticeBox: {
-    backgroundColor: Colors.highlight,
-    padding: 14,
-    borderRadius: Radii.md,
-    marginBottom: 24,
-    width: "100%",
+  fullWidth: {
+    alignSelf: "stretch",
   },
   noticeText: {
-    color: Colors.highlightForeground,
+    color: Colors.success,
     textAlign: "center",
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.medium,
+    marginTop: Spacing.lg,
   },
-  resendSection: {
-    width: "100%",
-    marginBottom: 24,
-  },
-  backButton: {
-    width: "100%",
+  secondaryActions: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
   },
 });

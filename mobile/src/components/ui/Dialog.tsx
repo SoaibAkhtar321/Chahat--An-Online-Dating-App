@@ -1,13 +1,15 @@
 import React, { useMemo } from "react";
 import {
   Modal,
+  KeyboardAvoidingView,
+  Platform,
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   TouchableWithoutFeedback,
 } from "react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { Button } from "./Button";
 
@@ -40,7 +42,10 @@ export const Dialog: React.FC<DialogProps> = ({
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
       <TouchableWithoutFeedback onPress={onCancel}>
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
           <TouchableWithoutFeedback>
             <View style={styles.content}>
               <Text style={styles.title}>{title}</Text>
@@ -51,18 +56,19 @@ export const Dialog: React.FC<DialogProps> = ({
                   title={confirmText}
                   variant={danger ? "danger" : "primary"}
                   onPress={onConfirm}
+                  size="lg"
                   style={styles.actionButton}
                 />
                 <Button
                   title={cancelText}
-                  variant="ghost"
+                  variant="text"
                   onPress={onCancel}
                   style={styles.actionButton}
                 />
               </View>
             </View>
           </TouchableWithoutFeedback>
-        </View>
+        </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
     </Modal>
   );
@@ -74,21 +80,21 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.overlay,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: Spacing.xl,
   },
   content: {
     width: "100%",
     maxWidth: 360,
     backgroundColor: Colors.card,
     borderRadius: Radii.xxl,
-    padding: 24,
+    padding: Spacing.xl,
     ...Shadows.card,
   },
   title: {
     fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
     textAlign: "center",
   },
   body: {
@@ -96,11 +102,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.mutedForeground,
     lineHeight: 20,
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   actions: {
-    gap: 10,
-    marginTop: 10,
+    gap: Spacing.md,
+    marginTop: Spacing.md,
   },
   actionButton: {
     width: "100%",

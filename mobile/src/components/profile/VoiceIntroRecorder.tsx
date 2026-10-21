@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from "react-native";
 import { Mic, Square, Play, Pause, Trash2, RotateCcw } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import {
   cleanupAbandonedVoiceFile,
@@ -235,8 +235,8 @@ const createStyles = (Colors: ThemeColors) =>
       borderRadius: Radii.xl,
       borderWidth: 1,
       borderColor: Colors.border,
-      padding: 14,
-      marginTop: 8,
+      padding: Spacing.lg,
+      marginTop: Spacing.sm,
     },
     row: { flexDirection: "row", alignItems: "center", gap: 12 },
     flex: { flex: 1 },
@@ -257,6 +257,6 @@ const createStyles = (Colors: ThemeColors) =>
       alignItems: "center", justifyContent: "center",
     },
     title: { fontSize: Typography.sizes.sm, fontWeight: Typography.weights.semibold, color: Colors.foreground },
-    hint: { fontSize: 12, color: Colors.mutedForeground, marginTop: 6 },
+    hint: { fontSize: Typography.sizes.sm, color: Colors.mutedForeground, marginTop: 6 },
     iconBtn: { padding: 8 },
   });

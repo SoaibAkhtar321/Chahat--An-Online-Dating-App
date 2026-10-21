@@ -8,7 +8,7 @@ import {
   TouchableWithoutFeedback,
 } from "react-native";
 import { Reply, Trash2, Users } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { REACTION_EMOJIS } from "../../utils/reactions";
 
@@ -145,13 +145,13 @@ const createStyles = (Colors: ThemeColors) =>
       flex: 1,
       backgroundColor: Colors.overlay,
       justifyContent: "flex-end",
-      padding: 16,
+      padding: Spacing.lg,
     },
     sheet: {
       width: "100%",
       backgroundColor: Colors.card,
       borderRadius: Radii.xxl,
-      padding: 16,
+      padding: Spacing.lg,
       ...Shadows.card,
     },
     title: {
@@ -159,13 +159,13 @@ const createStyles = (Colors: ThemeColors) =>
       fontWeight: Typography.weights.bold,
       color: Colors.foreground,
       textAlign: "center",
-      marginBottom: 8,
+      marginBottom: Spacing.sm,
     },
     reactionPicker: {
       flexDirection: "row",
       justifyContent: "space-between",
-      paddingVertical: 8,
-      paddingHorizontal: 4,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.xs,
       borderBottomWidth: 1,
       borderBottomColor: Colors.border,
     },
@@ -182,14 +182,14 @@ const createStyles = (Colors: ThemeColors) =>
       borderColor: Colors.primary,
     },
     reactionButtonText: {
-      fontSize: 24,
+      fontSize: Typography.sizes.xxl,
     },
     option: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 14,
-      paddingVertical: 14,
-      paddingHorizontal: 8,
+      gap: Spacing.lg,
+      paddingVertical: Spacing.lg,
+      paddingHorizontal: Spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: Colors.border,
     },
@@ -204,12 +204,12 @@ const createStyles = (Colors: ThemeColors) =>
     optionHint: {
       fontSize: Typography.sizes.xs,
       color: Colors.mutedForeground,
-      marginTop: 2,
+      marginTop: Spacing.xs,
     },
     cancel: {
       alignItems: "center",
-      paddingVertical: 14,
-      marginTop: 4,
+      paddingVertical: Spacing.lg,
+      marginTop: Spacing.xs,
     },
     cancelText: {
       fontSize: Typography.sizes.base,

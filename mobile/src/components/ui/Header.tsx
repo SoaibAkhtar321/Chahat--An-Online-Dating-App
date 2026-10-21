@@ -3,7 +3,7 @@ import { safeBack } from "../../utils/navigation";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 interface HeaderProps {
@@ -35,7 +35,12 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <View style={styles.header}>
       {showBack ? (
-        <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          activeOpacity={0.7}
+          accessibilityLabel="Go back"
+        >
           <ArrowLeft size={20} color={Colors.foreground} />
         </TouchableOpacity>
       ) : (
@@ -55,27 +60,25 @@ export const Header: React.FC<HeaderProps> = ({
 
 const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   header: {
-    height: 60,
+    minHeight: 60,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
     backgroundColor: Colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: Layout.minTap,
+    height: Layout.minTap,
     borderRadius: Radii.full,
     backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   placeholder: {
-    width: 40,
+    width: Layout.minTap,
   },
   title: {
     flex: 1,
@@ -85,7 +88,9 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.foreground,
   },
   rightContainer: {
-    width: 40,
+    minWidth: Layout.minTap,
+    minHeight: Layout.minTap,
     alignItems: "flex-end",
+    justifyContent: "center",
   },
 });

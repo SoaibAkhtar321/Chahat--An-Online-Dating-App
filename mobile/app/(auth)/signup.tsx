@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
@@ -80,8 +80,18 @@ export default function SignupScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, "/(auth)/welcome")}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => safeBack(router, "/(auth)/welcome")}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <ArrowLeft size={20} color={Colors.foreground} />
           </TouchableOpacity>
 
@@ -116,12 +126,9 @@ export default function SignupScreen() {
               error={errors.password}
             />
 
-            <View style={styles.rulesBox}>
-              <Text style={styles.rulesText}>• Must be 18 years or older to register</Text>
-              <Text style={styles.rulesText}>
-                • One profile per individual with authentic photos
-              </Text>
-            </View>
+            <Text style={styles.rulesText}>
+              You must be 18 or older. One profile per person, with authentic photos.
+            </Text>
 
             <LegalAcceptanceCheckbox
               checked={legalAccepted}
@@ -136,17 +143,21 @@ export default function SignupScreen() {
               title={loading ? "Creating…" : "Sign up"}
               onPress={handleSignup}
               loading={loading}
-              style={styles.submitButton}
+              disabled={loading}
+              size="lg"
             />
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Have an account?{" "}
-              <Text style={styles.loginLink} onPress={() => router.push("/(auth)/login")}>
-                Log in
-              </Text>
-            </Text>
+            <Text style={styles.footerText}>Have an account?</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/login")}
+              style={styles.footerLink}
+              accessibilityRole="button"
+              accessibilityLabel="Log in"
+            >
+              <Text style={styles.loginLink}>Log in</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -163,19 +174,19 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xl,
     flexGrow: 1,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: Layout.minTap,
+    height: Layout.minTap,
     borderRadius: Radii.full,
     backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: Layout.sectionGap,
   },
   title: {
     fontSize: Typography.sizes.title,
@@ -186,36 +197,37 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   subtitle: {
     fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
-    marginTop: 6,
+    marginTop: Spacing.sm,
     lineHeight: 22,
   },
   form: {
-    marginTop: 32,
-  },
-  rulesBox: {
-    backgroundColor: Colors.secondary,
-    padding: 14,
-    borderRadius: Radii.md,
-    marginBottom: 20,
-    gap: 4,
+    marginTop: Spacing.xxl,
   },
   rulesText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.secondaryForeground,
-  },
-  submitButton: {
-    marginTop: 8,
+    fontSize: Typography.sizes.sm,
+    lineHeight: 20,
+    color: Colors.mutedForeground,
+    marginBottom: Layout.fieldGap,
   },
   footer: {
     marginTop: "auto",
-    paddingTop: 32,
+    paddingTop: Spacing.xxl,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
   },
   footerText: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
   },
+  footerLink: {
+    minHeight: Layout.minTap,
+    justifyContent: "center",
+    paddingHorizontal: Spacing.xs,
+  },
   loginLink: {
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.primary,
   },

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Pressable, Alert } from "react-native";
 import { Image } from "expo-image";
 import { Check, CheckCheck, AlertCircle, Play, Pause, Mic, Ban, Camera } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Message } from "../../types";
 import { getAudioPlayerAdapter } from "../../services/voiceMedia";
@@ -190,6 +190,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 ]}
                 onPress={handleTogglePlay}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? "Pause voice message" : "Play voice message"}
               >
                 {isPlaying ? (
                   <Pause size={18} color={isMe ? Colors.primary : Colors.primaryForeground} />
@@ -316,12 +318,12 @@ const PENDING_TICK_COLOR = "rgba(255, 255, 255, 0.75)";
 
 const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
-    marginVertical: 4,
-    paddingHorizontal: 16,
+    marginVertical: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
   },
   dayHeader: {
     alignItems: "center",
-    marginVertical: 12,
+    marginVertical: Spacing.md,
   },
   dayHeaderText: {
     fontSize: Typography.sizes.xs,
@@ -340,8 +342,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   bubble: {
     maxWidth: "80%",
     borderRadius: Radii.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   bubbleMe: {
     backgroundColor: Colors.primary,
@@ -367,7 +369,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   deletedRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: Spacing.sm,
   },
   deletedText: {
     fontSize: Typography.sizes.sm,
@@ -377,9 +379,9 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   quote: {
     borderLeftWidth: 3,
     borderRadius: Radii.md,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginBottom: 6,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.sm,
   },
   quoteMe: {
     backgroundColor: "rgba(0, 0, 0, 0.15)",
@@ -403,7 +405,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   quoteLine: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: Spacing.xs,
   },
   quoteText: {
     flexShrink: 1,
@@ -422,7 +424,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: Radii.md,
-    marginBottom: 6,
+    marginBottom: Spacing.sm,
   },
   text: {
     fontSize: Typography.sizes.base,
@@ -438,11 +440,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    marginTop: 4,
-    gap: 4,
+    marginTop: Spacing.xs,
+    gap: Spacing.xs,
   },
   time: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
   },
   timeMe: {
     color: "rgba(255, 255, 255, 0.75)",
@@ -451,21 +453,21 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.mutedForeground,
   },
   tick: {
-    marginLeft: 2,
+    marginLeft: Spacing.xs,
   },
   reactionRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 4,
+    gap: Spacing.xs,
     marginTop: -6,
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
   },
   reactionChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
     backgroundColor: Colors.card,
     borderWidth: 1,
@@ -475,7 +477,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderColor: Colors.primary,
   },
   reactionEmoji: {
-    fontSize: 14,
+    fontSize: Typography.sizes.base,
   },
   reactionCount: {
     fontSize: Typography.sizes.xs,
@@ -488,13 +490,13 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   voiceContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
-    gap: 10,
+    paddingVertical: Spacing.xs,
+    gap: Spacing.md,
   },
   voicePlayBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: Layout.minTap,
+    height: Layout.minTap,
+    borderRadius: Radii.full,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -512,7 +514,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 24,
-    gap: 3,
+    gap: Spacing.xs,
   },
   waveBar: {
     width: 3,
@@ -534,15 +536,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 2,
+    marginTop: Spacing.xs,
   },
   micTag: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: Spacing.xs,
   },
   voiceDurationText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.semibold,
   },
   voiceTextMe: {

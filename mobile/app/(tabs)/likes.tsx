@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Heart } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Layout, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
@@ -182,8 +182,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    padding: 24,
-    paddingBottom: 40,
+    padding: Spacing.xl,
+    paddingBottom: Spacing.xxl,
   },
   title: {
     fontSize: Typography.sizes.title,
@@ -194,13 +194,13 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   subtitle: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
-    marginTop: 4,
-    marginBottom: 24,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xl,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: Spacing.md,
   },
   gridItem: {
     width: CARD_SIZE,
@@ -222,7 +222,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    padding: 10,
+    padding: Spacing.md,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -234,8 +234,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.primaryForeground,
   },
   likeBackBtn: {
-    width: 32,
-    height: 32,
+    width: Layout.minTap,
+    height: Layout.minTap,
     borderRadius: Radii.full,
     backgroundColor: Colors.primary,
     alignItems: "center",
@@ -247,7 +247,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.secondary,
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
+    padding: Spacing.md,
   },
   lockIconCircle: {
     width: 56,
@@ -256,7 +256,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   lockedHint: {
     fontSize: Typography.sizes.xs,
@@ -266,22 +266,22 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   premiumBanner: {
     backgroundColor: Colors.secondary,
     borderRadius: Radii.xxl,
-    padding: 20,
-    marginTop: 28,
+    padding: Spacing.lg,
+    marginTop: Spacing.xl,
     alignItems: "center",
   },
   bannerTitle: {
     fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginBottom: 6,
+    marginBottom: Spacing.sm,
   },
   bannerDesc: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
     textAlign: "center",
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   bannerBtn: {
     width: "100%",

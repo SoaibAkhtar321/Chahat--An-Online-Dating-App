@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { X, Check } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Filters } from "../../types";
 import { INTERESTS, LANGUAGES, DEFAULT_FILTERS } from "../../types";
@@ -111,7 +111,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
               so distance never hides anybody. */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Discovery order</Text>
-            <Text style={{ color: Colors.mutedForeground, fontSize: 13, lineHeight: 19 }}>
+            <Text style={{ color: Colors.mutedForeground, fontSize: Typography.sizes.sm, lineHeight: 19 }}>
               The closest people to you come first, then it keeps widening outward until everyone is shown.
             </Text>
           </View>
@@ -165,12 +165,12 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: Layout.screenPadding,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   closeButton: {
-    padding: 4,
+    padding: Spacing.xs,
   },
   title: {
     fontSize: Typography.sizes.lg,
@@ -183,22 +183,22 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.primary,
   },
   content: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   sectionTitle: {
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   sectionValue: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   pillRow: {
     flexDirection: "row",
@@ -209,7 +209,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexWrap: "wrap",
   },
   footer: {
-    padding: 20,
+    padding: Spacing.lg,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     backgroundColor: Colors.card,

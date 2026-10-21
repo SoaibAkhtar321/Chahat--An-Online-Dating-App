@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Compass, MapPin, Search } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { POPULAR_CITIES } from "../../constants/cities";
 import { useTheme } from "../../context/ThemeContext";
 import { Input } from "../ui/Input";
@@ -198,8 +198,8 @@ const createStyles = (Colors: ThemeColors) =>
       borderRadius: Radii.lg,
       borderWidth: 1,
       borderColor: Colors.border,
-      padding: 16,
-      marginBottom: 12,
+      padding: Spacing.lg,
+      marginBottom: Spacing.md,
     },
     cardActive: { borderColor: Colors.primary, borderWidth: 2 },
     cardHead: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
@@ -208,7 +208,7 @@ const createStyles = (Colors: ThemeColors) =>
     primaryBtn: {
       backgroundColor: Colors.primary,
       borderRadius: Radii.lg,
-      paddingVertical: 12,
+      paddingVertical: Spacing.md,
       alignItems: "center",
       justifyContent: "center",
       minHeight: 44,

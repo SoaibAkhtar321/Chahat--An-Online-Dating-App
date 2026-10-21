@@ -17,7 +17,7 @@ import {
   BadgeCheck,
   ChevronRight,
 } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Header } from "../../src/components/ui/Header";
@@ -159,7 +159,7 @@ export default function ExploreScreen() {
               <Text style={[styles.dailyName, { color: Colors.foreground, marginTop: 12, textAlign: "center" }]}>
                 Discover New Profiles
               </Text>
-              <Text style={{ fontSize: 12, color: Colors.mutedForeground, marginTop: 4, textAlign: "center" }}>
+              <Text style={{ fontSize: Typography.sizes.sm, color: Colors.mutedForeground, marginTop: 4, textAlign: "center" }}>
                 Keep exploring your discovery feed to find new people near you.
               </Text>
             </TouchableOpacity>
@@ -241,17 +241,17 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 20,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
+    gap: Spacing.lg,
   },
   dailySection: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   sectionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   sectionHeading: {
     fontSize: Typography.sizes.lg,
@@ -268,7 +268,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderRadius: Radii.xxl,
     overflow: "hidden",
     position: "relative",
-    marginTop: 6,
+    marginTop: Spacing.sm,
     ...Shadows.card,
   },
   dailyPhoto: {
@@ -281,29 +281,29 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: "rgba(0,0,0,0.65)",
-    padding: 16,
-    gap: 4,
+    padding: Spacing.lg,
+    gap: Spacing.xs,
   },
   dailyBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: Spacing.xs,
     backgroundColor: Colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.full,
     alignSelf: "flex-start",
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   dailyBadgeText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: "#fff",
   },
   dailyNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: Spacing.sm,
   },
   dailyName: {
     fontSize: Typography.sizes.lg,
@@ -317,15 +317,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   challengeCard: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 16,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 12,
+    gap: Spacing.md,
   },
   challengeHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: Spacing.md,
   },
   challengeIconCircle: {
     width: 38,
@@ -341,7 +341,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.foreground,
   },
   challengeSub: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
   },
   challengePrompt: {
@@ -350,7 +350,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontStyle: "italic",
     color: Colors.foreground,
     backgroundColor: Colors.secondary,
-    padding: 12,
+    padding: Spacing.md,
     borderRadius: Radii.md,
     lineHeight: 20,
   },
@@ -359,8 +359,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radii.full,
   },
   challengeBtnText: {
@@ -369,19 +369,19 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.semibold,
   },
   communitiesSection: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   communityGrid: {
-    gap: 12,
-    marginTop: 6,
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
   },
   communityCard: {
     backgroundColor: Colors.card,
     borderRadius: Radii.xl,
-    padding: 16,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
+    gap: Spacing.sm,
   },
   communityTop: {
     flexDirection: "row",
@@ -397,7 +397,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     justifyContent: "center",
   },
   membersCount: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.medium,
     color: Colors.mutedForeground,
   },
@@ -413,17 +413,17 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   filterChipRow: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 4,
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   tagPill: {
     backgroundColor: Colors.secondary,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radii.sm,
   },
   tagText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     color: Colors.primary,
     fontWeight: Typography.weights.medium,
   },

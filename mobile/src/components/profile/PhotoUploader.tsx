@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from "
 import { Alert } from "../../utils/alert";
 import * as ImagePicker from "expo-image-picker";
 import { Plus, X, Star, ArrowLeft, ArrowRight } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { PhotoItem } from "../../types";
 import { compressToUnderLimit } from "../../utils/compressImage";
@@ -203,6 +203,9 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                 onPress={() => removePhoto(index)}
                 style={styles.deleteButton}
                 activeOpacity={0.8}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove photo ${index + 1}`}
               >
                 <X size={12} color={Colors.primaryForeground} />
               </TouchableOpacity>
@@ -213,6 +216,9 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                   <TouchableOpacity
                     onPress={() => movePhoto(index, index - 1)}
                     style={styles.arrowButton}
+                    hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Move photo ${index + 1} earlier`}
                   >
                     <ArrowLeft size={10} color={Colors.primaryForeground} />
                   </TouchableOpacity>
@@ -221,6 +227,9 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                   <TouchableOpacity
                     onPress={() => movePhoto(index, index + 1)}
                     style={styles.arrowButton}
+                    hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Move photo ${index + 1} later`}
                   >
                     <ArrowRight size={10} color={Colors.primaryForeground} />
                   </TouchableOpacity>
@@ -232,6 +241,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
               onPress={() => pickImage(index)}
               style={styles.emptySlot}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Add photo ${index + 1}`}
             >
               <Plus size={24} color={Colors.primary} />
             </TouchableOpacity>
@@ -246,8 +257,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginVertical: 12,
+    gap: Spacing.sm,
+    marginVertical: Spacing.md,
   },
   slot: {
     width: ITEM_WIDTH,
@@ -281,15 +292,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     top: 6,
     left: 6,
     backgroundColor: Colors.primary,
-    padding: 4,
+    padding: Spacing.xs,
     borderRadius: Radii.full,
   },
   statusBadge: {
     position: "absolute",
     bottom: 6,
     left: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: 4,
   },
   statusApproved: {
@@ -299,7 +310,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.accent,
   },
   statusText: {
-    fontSize: 9,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
   },
@@ -319,11 +330,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     bottom: 6,
     right: 6,
     flexDirection: "row",
-    gap: 2,
+    gap: Spacing.xs,
   },
   arrowButton: {
     backgroundColor: "rgba(35, 20, 30, 0.7)",
-    padding: 3,
+    padding: Spacing.xs,
     borderRadius: 4,
   },
 });

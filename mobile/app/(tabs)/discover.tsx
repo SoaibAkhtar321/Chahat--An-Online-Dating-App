@@ -1,5 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+  RefreshControl,
+} from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -14,7 +22,8 @@ import {
   MapPin,
   Crown,
 } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Layout, Radii, Shadows, Spacing, Typography, ThemeColors } from "../../src/constants/theme";
+import { Button } from "../../src/components/ui/Button";
 import { useTheme } from "../../src/context/ThemeContext";
 import { DiscoveryCard } from "../../src/components/discovery/DiscoveryCard";
 import {
@@ -54,6 +63,7 @@ export default function DiscoverScreen() {
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [swiping, setSwiping] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const cardRef = useRef<SwipeableCardHandle>(null);
   const [locationSharing, setLocationSharing] = useState(false);
 
@@ -192,6 +202,15 @@ export default function DiscoverScreen() {
     }
   };
 
+  const handlePullRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshDeck();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Top Header */}
@@ -203,6 +222,8 @@ export default function DiscoverScreen() {
             style={styles.iconCircle}
             onPress={() => router.push("/notifications")}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
           >
             <Bell size={20} color={Colors.foreground} />
           </TouchableOpacity>
@@ -222,6 +243,8 @@ export default function DiscoverScreen() {
             style={styles.iconCircle}
             onPress={() => setFilterModalVisible(true)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Filters"
           >
             <SlidersHorizontal size={20} color={Colors.foreground} />
           </TouchableOpacity>
@@ -296,25 +319,51 @@ export default function DiscoverScreen() {
             />
           </SwipeableCard>
         ) : (
-          <View style={styles.emptyContainer}>
+          <ScrollView
+            style={styles.emptyScroll}
+            contentContainerStyle={styles.emptyContainer}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handlePullRefresh}
+                tintColor={Colors.primary}
+                colors={[Colors.primary]}
+                progressBackgroundColor={Colors.card}
+              />
+            }
+          >
             <View style={styles.emptyIconCircle}>
               <MapPin size={32} color={Colors.primary} />
             </View>
             <Text style={styles.emptyTitle}>No one new right now</Text>
             <Text style={styles.emptySubtitle}>
-              You have seen everyone who matches your filters, in every city. Try a wider age range or fewer
-              interests in filters, or check back later as new people join.
+              You have seen everyone who matches your filters. Widen them, or check back soon as new
+              people join.
             </Text>
-            <TouchableOpacity style={styles.resetBtn} onPress={() => router.push("/settings/location")}>
-              <Text style={styles.resetBtnText}>Change location</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.emptyBtn} onPress={() => setFilterModalVisible(true)}>
-              <Text style={styles.emptyBtnText}>Adjust filters</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.resetBtn} onPress={refreshDeck}>
-              <Text style={styles.resetBtnText}>Refresh deck</Text>
-            </TouchableOpacity>
-          </View>
+            <Button
+              title="Adjust filters"
+              onPress={() => setFilterModalVisible(true)}
+              size="lg"
+              style={styles.emptyPrimary}
+            />
+            <View style={styles.emptySecondary}>
+              <Button
+                title="Refresh"
+                variant="text"
+                size="sm"
+                onPress={handlePullRefresh}
+                loading={refreshing}
+              />
+              <Button
+                title="Change location"
+                variant="text"
+                size="sm"
+                onPress={() => router.push("/settings/location")}
+              />
+            </View>
+          </ScrollView>
         )}
       </View>
 
@@ -323,7 +372,7 @@ export default function DiscoverScreen() {
         <View style={styles.actionRow}>
           {/* Undo Pass */}
           <TouchableOpacity
-            onPress={handleUndo}
+            accessibilityLabel="Undo last pass" onPress={handleUndo}
             disabled={!lastPassedId}
             style={[styles.smallBtn, !lastPassedId && styles.btnDisabled]}
             activeOpacity={0.7}
@@ -367,6 +416,7 @@ export default function DiscoverScreen() {
           {/* Boost */}
           <TouchableOpacity
             onPress={handleBoost}
+            accessibilityLabel="Boost your profile"
             style={[styles.smallBtn, isBoosting && styles.boostBtnActive]}
             activeOpacity={0.7}
           >
@@ -396,11 +446,11 @@ const createStyles = (Colors: ThemeColors) =>
       backgroundColor: Colors.background,
     },
     header: {
-      height: 56,
+      minHeight: 56,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 20,
+      paddingHorizontal: Layout.screenPadding,
     },
     logoText: {
       fontFamily: Typography.fontDisplay,
@@ -414,15 +464,13 @@ const createStyles = (Colors: ThemeColors) =>
     },
     headerIcons: {
       flexDirection: "row",
-      gap: 10,
+      gap: Spacing.sm,
     },
     iconCircle: {
-      width: 40,
-      height: 40,
+      width: Layout.minTap,
+      height: Layout.minTap,
       borderRadius: Radii.full,
       backgroundColor: Colors.card,
-      borderWidth: 1,
-      borderColor: Colors.border,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -430,8 +478,8 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 6,
+      paddingHorizontal: Layout.screenPadding,
+      paddingVertical: Spacing.sm,
     },
     quotaText: {
       fontSize: Typography.sizes.xs,
@@ -445,7 +493,7 @@ const createStyles = (Colors: ThemeColors) =>
     premiumStatusRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      gap: Spacing.sm,
     },
     premiumStatusText: {
       fontSize: Typography.sizes.xs,
@@ -461,10 +509,10 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginHorizontal: 20,
-      marginBottom: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      marginHorizontal: Layout.screenPadding,
+      marginBottom: Spacing.sm,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
       backgroundColor: Colors.secondary,
       borderRadius: Radii.full,
     },
@@ -482,21 +530,27 @@ const createStyles = (Colors: ThemeColors) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      paddingHorizontal: 16,
-      paddingBottom: 8,
+      paddingHorizontal: Spacing.lg,
+      paddingBottom: Spacing.sm,
+    },
+    emptyScroll: {
+      alignSelf: "stretch",
     },
     emptyContainer: {
+      flexGrow: 1,
       alignItems: "center",
-      paddingHorizontal: 32,
+      justifyContent: "center",
+      paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.xl,
     },
     emptyIconCircle: {
-      width: 64,
-      height: 64,
+      width: 72,
+      height: 72,
       borderRadius: Radii.full,
       backgroundColor: Colors.secondary,
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 16,
+      marginBottom: Spacing.xl,
     },
     emptyTitle: {
       fontSize: Typography.sizes.xxl,
@@ -506,39 +560,30 @@ const createStyles = (Colors: ThemeColors) =>
       textAlign: "center",
     },
     emptySubtitle: {
-      fontSize: Typography.sizes.sm,
+      fontSize: Typography.sizes.base,
       color: Colors.mutedForeground,
       textAlign: "center",
-      marginTop: 8,
-      lineHeight: 20,
-      marginBottom: 20,
+      marginTop: Spacing.sm,
+      lineHeight: 22,
+      maxWidth: 320,
     },
-    emptyBtn: {
-      backgroundColor: Colors.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 14,
-      borderRadius: Radii.full,
-      ...Shadows.glow,
+    emptyPrimary: {
+      alignSelf: "stretch",
+      marginTop: Spacing.xxl,
     },
-    emptyBtnText: {
-      color: Colors.primaryForeground,
-      fontWeight: Typography.weights.bold,
-      fontSize: Typography.sizes.base,
-    },
-    resetBtn: {
-      marginTop: 12,
-    },
-    resetBtnText: {
-      color: Colors.mutedForeground,
-      fontSize: Typography.sizes.sm,
-      fontWeight: Typography.weights.semibold,
+    emptySecondary: {
+      alignSelf: "stretch",
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: Spacing.sm,
+      marginTop: Spacing.md,
     },
     actionRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 12,
-      paddingBottom: 16,
+      gap: Spacing.md,
+      paddingBottom: Spacing.lg,
     },
     smallBtn: {
       width: 48,

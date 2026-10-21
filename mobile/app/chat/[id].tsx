@@ -37,7 +37,7 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ChatBubble } from "../../src/components/chat/ChatBubble";
 import { MessageActionSheet } from "../../src/components/chat/MessageActionSheet";
@@ -638,7 +638,9 @@ export default function ChatDetailScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => safeBack(router)} style={styles.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity accessibilityLabel="Go back"
+            onPress={() => safeBack(router)}
+            style={styles.backBtn} activeOpacity={0.7}>
           <ArrowLeft size={22} color={Colors.foreground} />
         </TouchableOpacity>
 
@@ -689,7 +691,8 @@ export default function ChatDetailScreen() {
             </TouchableOpacity>
           ) : null}
 
-          <TouchableOpacity style={styles.actionIcon} onPress={() => setMenuVisible(!menuVisible)}>
+          <TouchableOpacity style={styles.actionIcon} accessibilityLabel="More options"
+            onPress={() => setMenuVisible(!menuVisible)}>
             <MoreVertical size={20} color={Colors.foreground} />
           </TouchableOpacity>
         </View>
@@ -782,6 +785,7 @@ export default function ChatDetailScreen() {
         style={styles.chatArea}
       >
         <FlatList
+          keyboardShouldPersistTaps="handled"
           ref={flatListRef}
           data={messages}
           extraData={reactions}
@@ -956,12 +960,18 @@ export default function ChatDetailScreen() {
           </View>
         ) : (
         <View style={styles.inputBar}>
-          <TouchableOpacity style={styles.attachBtn} onPress={handlePickImage} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.attachBtn}
+            onPress={handlePickImage}
+            activeOpacity={0.7}
+            accessibilityLabel="Attach photo"
+          >
             <ImagePlus size={22} color={Colors.primary} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.attachBtn, showIcebreakers && styles.attachBtnActive]}
+            accessibilityLabel="Conversation starters"
             onPress={() => setShowIcebreakers(!showIcebreakers)}
             activeOpacity={0.7}
           >
@@ -972,6 +982,7 @@ export default function ChatDetailScreen() {
             style={styles.attachBtn}
             onPress={() => setShowGamesModal(true)}
             activeOpacity={0.7}
+            accessibilityLabel="Couple games"
           >
             <Trophy size={19} color={Colors.primary} />
           </TouchableOpacity>
@@ -1114,20 +1125,20 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     height: 64,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     backgroundColor: Colors.card,
-    gap: 8,
+    gap: Spacing.sm,
   },
   backBtn: {
-    padding: 6,
+    padding: Spacing.sm,
   },
   partnerInfo: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: Spacing.md,
   },
   avatar: {
     width: 40,
@@ -1145,17 +1156,17 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   headerActions: {
     flexDirection: "row",
-    gap: 6,
+    gap: Spacing.sm,
   },
   actionIcon: {
-    padding: 6,
+    padding: Spacing.sm,
   },
   journeyBar: {
     backgroundColor: Colors.card,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
   },
   journeyHeader: {
     flexDirection: "row",
@@ -1165,7 +1176,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   journeyTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: Spacing.sm,
   },
   journeyTitle: {
     fontSize: Typography.sizes.xs,
@@ -1173,16 +1184,16 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.primary,
   },
   journeyBody: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 4,
+    gap: Spacing.xs,
   },
   journeyStep: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
   },
   stepDot: {
     width: 8,
@@ -1201,25 +1212,25 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: Spacing.sm,
     backgroundColor: Colors.secondary,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
   },
   safetyNoticeText: {
-    fontSize: 11,
+    fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
   },
   menuBanner: {
     backgroundColor: Colors.card,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
     zIndex: 10,
   },
   menuOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Layout.screenPadding,
   },
   menuOptionText: {
     fontSize: Typography.sizes.sm,
@@ -1230,19 +1241,19 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   messageList: {
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     flexGrow: 1,
   },
   emptyMessages: {
     alignItems: "center",
-    padding: 32,
-    marginTop: 40,
+    padding: Spacing.xxl,
+    marginTop: Spacing.xxl,
   },
   emptyAvatar: {
     width: 80,
     height: 80,
     borderRadius: Radii.full,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   emptyMatchTitle: {
     fontSize: Typography.sizes.xl,
@@ -1254,18 +1265,18 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: Spacing.sm,
     lineHeight: 20,
   },
   starterQuickBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: Spacing.sm,
     backgroundColor: Colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     borderRadius: Radii.full,
-    marginTop: 20,
+    marginTop: Spacing.lg,
   },
   starterQuickBtnText: {
     color: Colors.primaryForeground,
@@ -1275,11 +1286,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   imagePreviewBar: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 8,
+    padding: Spacing.sm,
     backgroundColor: Colors.card,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 12,
+    gap: Spacing.md,
   },
   previewThumb: {
     width: 44,
@@ -1294,12 +1305,12 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   replyBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
     backgroundColor: Colors.card,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 10,
+    gap: Spacing.md,
   },
   replyBarAccent: {
     width: 3,
@@ -1329,22 +1340,22 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.card,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    paddingVertical: 10,
+    paddingVertical: Spacing.md,
   },
   icebreakerHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   icebreakerTabs: {
     flexDirection: "row",
-    gap: 8,
+    gap: Spacing.sm,
   },
   langTab: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
     borderRadius: Radii.full,
     backgroundColor: Colors.secondary,
   },
@@ -1361,30 +1372,30 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.bold,
   },
   closeDrawerBtn: {
-    padding: 4,
+    padding: Spacing.xs,
   },
   closeDrawerText: {
-    fontSize: 14,
+    fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
   },
   icebreakersScroll: {
-    paddingHorizontal: 12,
-    gap: 10,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.md,
   },
   icebreakerChip: {
     backgroundColor: Colors.secondary,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
     borderRadius: Radii.lg,
     maxWidth: 240,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   icebreakerChipTag: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     color: Colors.primary,
     fontWeight: Typography.weights.bold,
-    marginBottom: 2,
+    marginBottom: Spacing.xs,
     textTransform: "uppercase",
   },
   icebreakerChipText: {
@@ -1395,15 +1406,15 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   inputBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     backgroundColor: Colors.card,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    gap: 8,
+    gap: Spacing.sm,
   },
   attachBtn: {
-    padding: 6,
+    padding: Spacing.sm,
     borderRadius: Radii.full,
   },
   attachBtnActive: {
@@ -1415,14 +1426,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     maxHeight: 100,
     backgroundColor: Colors.input,
     borderRadius: Radii.full,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     fontSize: Typography.sizes.sm,
     color: Colors.foreground,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
+    width: Layout.minTap,
+    height: Layout.minTap,
     borderRadius: Radii.full,
     backgroundColor: Colors.primary,
     alignItems: "center",
@@ -1435,8 +1446,8 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 4,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
   },
   recordingDot: {
     width: 10,
@@ -1446,7 +1457,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   recordingTime: {
     color: Colors.foreground,
-    fontSize: 15,
+    fontSize: Typography.sizes.base,
     fontVariant: ["tabular-nums"],
   },
 });

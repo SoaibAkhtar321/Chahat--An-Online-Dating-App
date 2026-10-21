@@ -16,7 +16,7 @@ import {
   HeartHandshake,
   Zap,
 } from "lucide-react-native";
-import { Radii, Shadows, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Shadows, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
@@ -268,17 +268,17 @@ const createStyles = (Colors: ThemeColors) =>
       backgroundColor: Colors.background,
     },
     content: {
-      padding: 20,
-      paddingBottom: 40,
-      gap: 16,
+      padding: Spacing.lg,
+      paddingBottom: Spacing.xxl,
+      gap: Spacing.lg,
     },
     profileHeader: {
       alignItems: "center",
-      marginBottom: 8,
+      marginBottom: Spacing.sm,
     },
     avatarWrapper: {
       position: "relative",
-      marginBottom: 12,
+      marginBottom: Spacing.md,
     },
     avatarImage: {
       width: 100,
@@ -295,14 +295,14 @@ const createStyles = (Colors: ThemeColors) =>
       right: 0,
       backgroundColor: Colors.primary,
       borderRadius: Radii.full,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: Spacing.xs,
       borderWidth: 2,
       borderColor: Colors.card,
     },
     pctText: {
       color: Colors.primaryForeground,
-      fontSize: 10,
+      fontSize: Typography.sizes.xs,
       fontWeight: Typography.weights.bold,
     },
     profileName: {
@@ -312,17 +312,17 @@ const createStyles = (Colors: ThemeColors) =>
       color: Colors.foreground,
     },
     badgeRow: {
-      marginTop: 6,
+      marginTop: Spacing.sm,
       flexDirection: "row",
       alignItems: "center",
     },
     verifiedTag: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
+      gap: Spacing.xs,
       backgroundColor: Colors.highlight,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: Spacing.xs,
       borderRadius: Radii.full,
     },
     verifiedTagText: {
@@ -332,8 +332,8 @@ const createStyles = (Colors: ThemeColors) =>
     },
     unverifiedButton: {
       backgroundColor: Colors.secondary,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
       borderRadius: Radii.full,
       borderWidth: 1,
       borderColor: Colors.border,
@@ -346,22 +346,22 @@ const createStyles = (Colors: ThemeColors) =>
     intentTag: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      gap: Spacing.sm,
       backgroundColor: Colors.secondary,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
       borderRadius: Radii.full,
-      marginTop: 6,
+      marginTop: Spacing.sm,
     },
     intentTagText: {
-      fontSize: 11,
+      fontSize: Typography.sizes.xs,
       color: Colors.foreground,
       fontWeight: Typography.weights.medium,
     },
     cityText: {
       fontSize: Typography.sizes.xs,
       color: Colors.mutedForeground,
-      marginTop: 6,
+      marginTop: Spacing.sm,
     },
     completeProfileCard: {
       flexDirection: "row",
@@ -369,7 +369,7 @@ const createStyles = (Colors: ThemeColors) =>
       justifyContent: "space-between",
       backgroundColor: Colors.card,
       borderRadius: Radii.xl,
-      padding: 16,
+      padding: Spacing.lg,
       borderWidth: 1.5,
       borderColor: Colors.accent,
       ...Shadows.card,
@@ -378,8 +378,8 @@ const createStyles = (Colors: ThemeColors) =>
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
-      marginRight: 8,
+      gap: Spacing.md,
+      marginRight: Spacing.sm,
     },
     completeIconWrap: {
       width: 40,
@@ -395,9 +395,9 @@ const createStyles = (Colors: ThemeColors) =>
       color: Colors.foreground,
     },
     completeSubtitle: {
-      fontSize: 11,
+      fontSize: Typography.sizes.xs,
       color: Colors.mutedForeground,
-      marginTop: 2,
+      marginTop: Spacing.xs,
       lineHeight: 15,
     },
     completeProgressTrack: {
@@ -405,7 +405,7 @@ const createStyles = (Colors: ThemeColors) =>
       backgroundColor: Colors.secondary,
       borderRadius: 2,
       overflow: "hidden",
-      marginTop: 6,
+      marginTop: Spacing.sm,
       width: "90%",
     },
     completeProgressFill: {
@@ -415,10 +415,10 @@ const createStyles = (Colors: ThemeColors) =>
     completeActionBtn: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
+      gap: Spacing.xs,
       backgroundColor: Colors.primary,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.md,
       borderRadius: Radii.full,
     },
     completeActionText: {
@@ -429,7 +429,7 @@ const createStyles = (Colors: ThemeColors) =>
     planCard: {
       backgroundColor: Colors.card,
       borderRadius: Radii.xl,
-      padding: 16,
+      padding: Spacing.lg,
       borderWidth: 1.5,
       borderColor: Colors.primary,
       ...Shadows.card,
@@ -437,7 +437,7 @@ const createStyles = (Colors: ThemeColors) =>
     planCardHeader: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
+      gap: Spacing.md,
     },
     planCardIcon: {
       width: 42,
@@ -455,15 +455,15 @@ const createStyles = (Colors: ThemeColors) =>
     planCardSubtitle: {
       fontSize: Typography.sizes.xs,
       color: Colors.mutedForeground,
-      marginTop: 2,
+      marginTop: Spacing.xs,
     },
     planUpgradeBtn: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
+      gap: Spacing.xs,
       backgroundColor: Colors.primary,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.md,
       borderRadius: Radii.full,
     },
     planUpgradeBtnText: {
@@ -481,11 +481,11 @@ const createStyles = (Colors: ThemeColors) =>
     menuItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 14,
-      paddingHorizontal: 16,
+      paddingVertical: Spacing.lg,
+      paddingHorizontal: Spacing.lg,
       borderBottomWidth: 1,
       borderBottomColor: Colors.border,
-      gap: 12,
+      gap: Spacing.md,
     },
     menuItemLast: {
       borderBottomWidth: 0,
@@ -498,12 +498,12 @@ const createStyles = (Colors: ThemeColors) =>
     },
     itemBadge: {
       backgroundColor: Colors.secondary,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: Spacing.xs,
       borderRadius: Radii.full,
     },
     itemBadgeText: {
-      fontSize: 10,
+      fontSize: Typography.sizes.xs,
       color: Colors.primary,
       fontWeight: Typography.weights.bold,
     },

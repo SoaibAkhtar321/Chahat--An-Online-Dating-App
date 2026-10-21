@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { MessageCircle, Video } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
@@ -43,6 +43,7 @@ export default function ChatsScreen() {
           <Button
             title="Start discovering"
             onPress={() => router.push("/(tabs)/discover")}
+            size="lg"
             style={styles.emptyBtn}
           />
         </View>
@@ -160,7 +161,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: Layout.screenPadding,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -173,7 +174,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   callsBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: Spacing.xs,
   },
   callsText: {
     fontSize: Typography.sizes.sm,
@@ -181,26 +182,26 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.primary,
   },
   content: {
-    padding: 20,
+    padding: Spacing.lg,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   sectionHeader: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.mutedForeground,
     letterSpacing: 1,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   noMatchesText: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
   },
   matchReel: {
-    gap: 16,
-    paddingVertical: 4,
+    gap: Spacing.lg,
+    paddingVertical: Spacing.xs,
   },
   matchAvatarItem: {
     alignItems: "center",
@@ -217,16 +218,16 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginTop: 6,
+    marginTop: Spacing.sm,
     textAlign: "center",
   },
   convoItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
+    gap: Spacing.md,
   },
   convoAvatar: {
     width: 54,
@@ -240,7 +241,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   convoName: {
     fontSize: Typography.sizes.base,
@@ -276,11 +277,11 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
-    marginLeft: 8,
+    paddingHorizontal: Spacing.sm,
+    marginLeft: Spacing.sm,
   },
   unreadBadgeText: {
-    fontSize: 10,
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.primaryForeground,
   },
@@ -288,22 +289,23 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 32,
+    padding: Spacing.xxl,
   },
   emptyTitle: {
     fontSize: Typography.sizes.xxl,
     fontWeight: Typography.weights.bold,
     fontFamily: Typography.fontDisplay,
     color: Colors.foreground,
-    marginTop: 16,
+    marginTop: Spacing.lg,
+    textAlign: "center",
   },
   emptySubtitle: {
-    fontSize: Typography.sizes.sm,
+    fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
     textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20,
-    marginBottom: 24,
+    marginTop: Spacing.sm,
+    lineHeight: 22,
+    marginBottom: Spacing.xl,
   },
   emptyBtn: {
     width: "100%",

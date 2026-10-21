@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle } from "react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
 interface ChipProps {
@@ -27,6 +27,10 @@ export const Chip: React.FC<ChipProps> = ({
     <TouchableOpacity
       activeOpacity={0.8}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
       style={[styles.chip, active ? styles.activeChip : styles.inactiveChip, style]}
     >
       {icon}
@@ -39,16 +43,16 @@ export const Chip: React.FC<ChipProps> = ({
 
 const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   chip: {
-    minHeight: 38,
+    minHeight: Layout.minTap - Spacing.sm,
     borderRadius: Radii.full,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
-    marginBottom: 8,
-    gap: 6,
+    marginRight: Spacing.sm,
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
   },
   activeChip: {
     backgroundColor: Colors.primary,

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Bell, Heart, MessageCircle, ShieldCheck, CheckCheck } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { useAuth } from "../../src/context/AuthContext";
@@ -146,7 +146,7 @@ const createStyles = (Colors: ThemeColors) =>
     markReadBtn: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
+      gap: Spacing.xs,
     },
     markReadText: {
       fontSize: Typography.sizes.xs,
@@ -154,18 +154,18 @@ const createStyles = (Colors: ThemeColors) =>
       color: Colors.primary,
     },
     list: {
-      padding: 16,
-      gap: 12,
+      padding: Spacing.lg,
+      gap: Spacing.md,
     },
     itemCard: {
       flexDirection: "row",
       backgroundColor: Colors.card,
-      padding: 16,
+      padding: Spacing.lg,
       borderRadius: Radii.lg,
       borderWidth: 1,
       borderColor: Colors.border,
       alignItems: "center",
-      gap: 12,
+      gap: Spacing.md,
     },
     itemUnread: {
       borderColor: Colors.primary,
@@ -192,7 +192,7 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.sm,
       fontWeight: Typography.weights.bold,
       color: Colors.foreground,
-      marginBottom: 2,
+      marginBottom: Spacing.xs,
     },
     itemText: {
       fontSize: Typography.sizes.sm,
@@ -202,13 +202,13 @@ const createStyles = (Colors: ThemeColors) =>
     itemTime: {
       fontSize: Typography.sizes.xs,
       color: Colors.mutedForeground,
-      marginTop: 4,
+      marginTop: Spacing.xs,
     },
     emptyView: {
       alignItems: "center",
       marginTop: 80,
-      paddingHorizontal: 32,
-      gap: 10,
+      paddingHorizontal: Spacing.xxl,
+      gap: Spacing.md,
     },
     emptyIconCircle: {
       width: 72,
@@ -217,7 +217,7 @@ const createStyles = (Colors: ThemeColors) =>
       backgroundColor: Colors.secondary,
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 8,
+      marginBottom: Spacing.sm,
     },
     emptyTitle: {
       fontSize: Typography.sizes.lg,

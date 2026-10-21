@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Typography, ThemeColors } from "../../src/constants/theme";
+import { Layout, Spacing, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Button } from "../../src/components/ui/Button";
@@ -51,7 +51,11 @@ export default function AcceptLegalScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>Terms & Privacy</Text>
         <Text style={styles.subtitle}>
           To keep using Chahat, please review our Terms & Conditions and Privacy Policy and confirm below.
@@ -65,8 +69,20 @@ export default function AcceptLegalScreen() {
             }}
             error={error}
           />
-          <Button title={saving ? "Saving…" : "Continue"} onPress={onContinue} loading={saving} />
-          <Button title="Sign out" variant="ghost" onPress={onSignOut} style={styles.signOut} />
+          <Button
+            title={saving ? "Saving…" : "Continue"}
+            onPress={onContinue}
+            loading={saving}
+            size="lg"
+          />
+          <Button
+            title="Sign out"
+            variant="text"
+            size="sm"
+            onPress={onSignOut}
+            disabled={saving}
+            style={styles.signOut}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -76,7 +92,12 @@ export default function AcceptLegalScreen() {
 const createStyles = (Colors: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.background },
-    content: { padding: 24, flexGrow: 1, justifyContent: "center" },
+    content: {
+      paddingHorizontal: Layout.screenPadding,
+      paddingVertical: Layout.sectionGap,
+      flexGrow: 1,
+      justifyContent: "center",
+    },
     title: {
       fontSize: Typography.sizes.title,
       fontWeight: Typography.weights.bold,
@@ -86,9 +107,9 @@ const createStyles = (Colors: ThemeColors) =>
     subtitle: {
       fontSize: Typography.sizes.base,
       color: Colors.mutedForeground,
-      marginTop: 6,
+      marginTop: Spacing.sm,
       lineHeight: 22,
     },
-    form: { marginTop: 32 },
-    signOut: { marginTop: 8 },
+    form: { marginTop: Spacing.xxl },
+    signOut: { marginTop: Spacing.sm, alignSelf: "center" },
   });

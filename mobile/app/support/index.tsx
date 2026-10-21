@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { Alert } from "../../src/utils/alert";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { SUPPORT_CONTACT, supportMailtoUrl } from "../../src/constants/supportContact";
@@ -68,8 +68,8 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.base,
       fontWeight: Typography.weights.bold,
       color: Colors.foreground,
-      marginTop: 20,
-      marginBottom: 8,
+      marginTop: Spacing.lg,
+      marginBottom: Spacing.sm,
     },
     paragraph: { fontSize: Typography.sizes.sm, color: Colors.mutedForeground, lineHeight: 22 },
     card: {
@@ -77,7 +77,7 @@ const createStyles = (Colors: ThemeColors) =>
       borderRadius: Radii.lg,
       borderWidth: 1,
       borderColor: Colors.border,
-      padding: 16,
+      padding: Spacing.lg,
     },
     link: { fontSize: Typography.sizes.base, color: Colors.primary, fontWeight: Typography.weights.bold },
     hint: { fontSize: Typography.sizes.xs, color: Colors.mutedForeground, marginTop: 4 },
@@ -90,8 +90,8 @@ const createStyles = (Colors: ThemeColors) =>
       borderRadius: Radii.lg,
       borderWidth: 1,
       borderColor: Colors.border,
-      padding: 16,
-      marginBottom: 8,
+      padding: Spacing.lg,
+      marginBottom: Spacing.sm,
     },
     rowLabel: { fontSize: Typography.sizes.sm, color: Colors.foreground },
   });

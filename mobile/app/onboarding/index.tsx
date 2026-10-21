@@ -15,7 +15,7 @@ import type { LocationSelection } from "../../src/services/locationSelectionPoli
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { DatePicker } from "../../src/components/ui/DatePicker";
@@ -341,7 +341,7 @@ export default function OnboardingScreen() {
               />
             </View>
 
-            <Text style={[styles.stepTitle, { fontSize: 16, marginTop: 24 }]}>Looking to meet…</Text>
+            <Text style={[styles.stepTitle, { fontSize: Typography.sizes.base, marginTop: 24 }]}>Looking to meet…</Text>
             <View style={styles.chipRow}>
               <Chip
                 label="Women"
@@ -388,7 +388,7 @@ export default function OnboardingScreen() {
             </Text>
             <PhotoUploader photos={photos} onChange={setPhotos} maxPhotos={6} />
 
-            <Text style={[styles.stepTitle, { fontSize: 16, marginTop: 24 }]}>Add a voice intro (optional)</Text>
+            <Text style={[styles.stepTitle, { fontSize: Typography.sizes.base, marginTop: 24 }]}>Add a voice intro (optional)</Text>
             <Text style={styles.stepSubtitle}>
               A few seconds of your voice helps people get a feel for you. Others can listen on Discover and on your profile. You can skip this and add it later in Complete Profile.
             </Text>
@@ -430,7 +430,12 @@ export default function OnboardingScreen() {
           </Text>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
           {renderContent()}
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -466,12 +471,12 @@ const createStyles = (Colors: ThemeColors) =>
       height: 56,
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingHorizontal: Layout.screenPadding,
+      gap: Spacing.md,
     },
     backBtn: {
-      width: 38,
-      height: 38,
+      width: Layout.minTap,
+      height: Layout.minTap,
       borderRadius: Radii.full,
       backgroundColor: Colors.card,
       borderWidth: 1,
@@ -498,36 +503,36 @@ const createStyles = (Colors: ThemeColors) =>
       textAlign: "right",
     },
     content: {
-      padding: 24,
-      paddingBottom: 40,
+      padding: Spacing.xl,
+      paddingBottom: Spacing.xxl,
     },
     stepTitle: {
       fontSize: Typography.sizes.xxl,
       fontWeight: Typography.weights.bold,
       fontFamily: Typography.fontDisplay,
       color: Colors.foreground,
-      marginBottom: 8,
+      marginBottom: Spacing.sm,
     },
     stepSubtitle: {
       fontSize: Typography.sizes.sm,
       color: Colors.mutedForeground,
-      marginBottom: 24,
+      marginBottom: Spacing.xl,
       lineHeight: 20,
     },
     chipRow: {
       flexDirection: "row",
-      gap: 12,
+      gap: Spacing.md,
     },
     chipWrap: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: 8,
+      gap: Spacing.sm,
     },
     seekingBox: {
       backgroundColor: Colors.secondary,
-      padding: 14,
+      padding: Spacing.lg,
       borderRadius: Radii.md,
-      marginTop: 20,
+      marginTop: Spacing.lg,
     },
     seekingText: {
       fontSize: Typography.sizes.sm,
@@ -537,12 +542,12 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: Colors.card,
-      padding: 16,
+      padding: Spacing.lg,
       borderRadius: Radii.lg,
       borderWidth: 1,
       borderColor: Colors.border,
-      marginBottom: 12,
-      gap: 12,
+      marginBottom: Spacing.md,
+      gap: Spacing.md,
     },
     locationIconWrap: {
       width: 44,
@@ -560,7 +565,7 @@ const createStyles = (Colors: ThemeColors) =>
     locationCardDesc: {
       fontSize: Typography.sizes.xs,
       color: Colors.mutedForeground,
-      marginTop: 2,
+      marginTop: Spacing.xs,
       lineHeight: 16,
     },
     locDetectBtn: {
@@ -568,10 +573,10 @@ const createStyles = (Colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: Colors.primary,
-      paddingVertical: 12,
-      paddingHorizontal: 20,
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Layout.screenPadding,
       borderRadius: Radii.md,
-      marginBottom: 12,
+      marginBottom: Spacing.md,
     },
     locDetectBtnDisabled: {
       opacity: 0.6,
@@ -584,9 +589,9 @@ const createStyles = (Colors: ThemeColors) =>
     locMessageBadge: {
       flexDirection: "row",
       alignItems: "center",
-      padding: 10,
+      padding: Spacing.md,
       borderRadius: Radii.md,
-      marginBottom: 12,
+      marginBottom: Spacing.md,
     },
     locMessageBadgeSuccess: {
       backgroundColor: Colors.primary + "1A",
@@ -606,11 +611,11 @@ const createStyles = (Colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "space-between",
       backgroundColor: Colors.card,
-      padding: 12,
+      padding: Spacing.md,
       borderRadius: Radii.md,
       borderWidth: 1,
       borderColor: Colors.border,
-      marginBottom: 16,
+      marginBottom: Spacing.lg,
     },
     selectedCityLabel: {
       fontSize: Typography.sizes.sm,
@@ -620,8 +625,8 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: Colors.secondary,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
       borderRadius: Radii.full,
     },
     selectedCityText: {
@@ -633,11 +638,11 @@ const createStyles = (Colors: ThemeColors) =>
       fontSize: Typography.sizes.sm,
       fontWeight: Typography.weights.semibold,
       color: Colors.foreground,
-      marginBottom: 8,
+      marginBottom: Spacing.sm,
     },
     customRow: {
       flexDirection: "row",
-      gap: 8,
+      gap: Spacing.sm,
       alignItems: "center",
     },
     addBtn: {
@@ -651,12 +656,12 @@ const createStyles = (Colors: ThemeColors) =>
     errorText: {
       color: Colors.destructive,
       fontSize: Typography.sizes.sm,
-      marginTop: 12,
+      marginTop: Spacing.md,
       textAlign: "center",
       fontWeight: Typography.weights.medium,
     },
     footer: {
-      padding: 24,
+      padding: Spacing.xl,
       borderTopWidth: 1,
       borderTopColor: Colors.border,
       backgroundColor: Colors.card,

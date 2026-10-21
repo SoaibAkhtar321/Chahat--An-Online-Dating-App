@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Typography, ThemeColors } from "../../src/constants/theme";
+import { Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 
@@ -54,21 +54,21 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    padding: 24,
+    padding: Spacing.xl,
   },
   heading: {
     fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.bold,
     fontFamily: Typography.fontDisplay,
     color: Colors.foreground,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   subheading: {
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.bold,
     color: Colors.foreground,
-    marginTop: 16,
-    marginBottom: 6,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   paragraph: {
     fontSize: Typography.sizes.sm,

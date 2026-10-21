@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../src/constants/theme";
+import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
@@ -29,14 +29,18 @@ export default function LoginScreen() {
   const [forgotPassword, setForgotPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [successNotice, setSuccessNotice] = useState("");
 
   const handleLogin = async () => {
     setError("");
+    setEmailError("");
+    setPasswordError("");
     setSuccessNotice("");
 
     if (!email.trim() || !/^\S+@\S+\.\S+$/.test(email)) {
-      setError("Enter a valid email address");
+      setEmailError("Enter a valid email address");
       return;
     }
 
@@ -54,7 +58,7 @@ export default function LoginScreen() {
     }
 
     if (!password) {
-      setError("Enter your password");
+      setPasswordError("Enter your password");
       return;
     }
 
@@ -82,8 +86,18 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, "/(auth)/welcome")}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => safeBack(router, "/(auth)/welcome")}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <ArrowLeft size={20} color={Colors.foreground} />
           </TouchableOpacity>
 
@@ -110,8 +124,9 @@ export default function LoginScreen() {
               onChangeText={(text) => {
                 setEmail(text);
                 setError("");
+                setEmailError("");
               }}
-              error={error && !password ? error : undefined}
+              error={emailError || undefined}
             />
 
             {!forgotPassword && (
@@ -123,24 +138,35 @@ export default function LoginScreen() {
                 onChangeText={(text) => {
                   setPassword(text);
                   setError("");
+                  setPasswordError("");
                 }}
-                error={error}
+                error={passwordError || undefined}
               />
             )}
+
+            {error ? (
+              <Text style={styles.formError} accessibilityLiveRegion="polite">
+                {error}
+              </Text>
+            ) : null}
 
             <Button
               title={loading ? "Please wait…" : forgotPassword ? "Send reset link" : "Log in"}
               onPress={handleLogin}
               loading={loading}
-              style={styles.submitButton}
+              disabled={loading}
+              size="lg"
             />
 
             <TouchableOpacity
               onPress={() => {
                 setForgotPassword(!forgotPassword);
                 setError("");
+                setEmailError("");
+                setPasswordError("");
               }}
               style={styles.forgotButton}
+              accessibilityRole="button"
             >
               <Text style={styles.forgotText}>
                 {forgotPassword ? "Back to log in" : "Forgot password?"}
@@ -149,12 +175,15 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              New to Chahat?{" "}
-              <Text style={styles.signupLink} onPress={() => router.push("/(auth)/signup")}>
-                Create an account
-              </Text>
-            </Text>
+            <Text style={styles.footerText}>New to Chahat?</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/signup")}
+              style={styles.footerLink}
+              accessibilityRole="button"
+              accessibilityLabel="Create an account"
+            >
+              <Text style={styles.signupLink}>Create an account</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -171,19 +200,19 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 24,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xl,
     flexGrow: 1,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: Layout.minTap,
+    height: Layout.minTap,
     borderRadius: Radii.full,
     backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: Layout.sectionGap,
   },
   title: {
     fontSize: Typography.sizes.title,
@@ -194,14 +223,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   subtitle: {
     fontSize: Typography.sizes.base,
     color: Colors.mutedForeground,
-    marginTop: 6,
+    marginTop: Spacing.sm,
     lineHeight: 22,
   },
   successBox: {
     backgroundColor: Colors.highlight,
-    padding: 12,
+    padding: Spacing.md,
     borderRadius: Radii.md,
-    marginTop: 16,
+    marginTop: Spacing.lg,
   },
   successText: {
     fontSize: Typography.sizes.sm,
@@ -209,14 +238,19 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontWeight: Typography.weights.medium,
   },
   form: {
-    marginTop: 32,
+    marginTop: Spacing.xxl,
   },
-  submitButton: {
-    marginTop: 12,
+  formError: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.destructive,
+    fontWeight: Typography.weights.medium,
+    marginBottom: Layout.fieldGap,
   },
   forgotButton: {
-    marginTop: 20,
+    minHeight: Layout.minTap,
+    marginTop: Spacing.md,
     alignItems: "center",
+    justifyContent: "center",
   },
   forgotText: {
     fontSize: Typography.sizes.sm,
@@ -225,14 +259,23 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   footer: {
     marginTop: "auto",
-    paddingTop: 32,
+    paddingTop: Spacing.xxl,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
   },
   footerText: {
     fontSize: Typography.sizes.sm,
     color: Colors.mutedForeground,
   },
+  footerLink: {
+    minHeight: Layout.minTap,
+    justifyContent: "center",
+    paddingHorizontal: Spacing.xs,
+  },
   signupLink: {
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.primary,
   },

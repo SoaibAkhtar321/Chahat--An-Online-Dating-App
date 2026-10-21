@@ -1,7 +1,8 @@
 import React from "react";
 import { Tabs } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Compass, Heart, MessageCircle, User } from "lucide-react-native";
-import { Typography } from "../../src/constants/theme";
+import { Typography, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useMilo } from "../../src/context/MiloContext";
 import { PushSetup } from "../../src/components/notifications/PushSetup";
@@ -9,6 +10,7 @@ import { PushSetup } from "../../src/components/notifications/PushSetup";
 export default function TabsLayout() {
   const { totalUnreadCount } = useMilo();
   const { colors: Colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <>
@@ -22,9 +24,10 @@ export default function TabsLayout() {
           backgroundColor: Colors.card,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
+          // Grows with the bottom inset so labels never sit under the gesture bar / home indicator.
+          height: 60 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, Spacing.sm),
+          paddingTop: Spacing.sm,
         },
         tabBarLabelStyle: {
           fontSize: Typography.sizes.xs,
@@ -54,7 +57,7 @@ export default function TabsLayout() {
           tabBarBadgeStyle: {
             backgroundColor: Colors.primary,
             color: Colors.primaryForeground,
-            fontSize: 10,
+            fontSize: Typography.sizes.xs,
           },
           tabBarIcon: ({ color, size }) => (
             <MessageCircle size={size} color={color} strokeWidth={2.2} />

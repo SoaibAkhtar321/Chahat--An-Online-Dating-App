@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Phone, PhoneOff } from "lucide-react-native";
-import { Radii, Typography, ThemeColors } from "../../constants/theme";
+import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import { useMilo } from "../../context/MiloContext";
 import { useIncomingCallController, useIncomingCallView } from "../../context/IncomingCallContext";
@@ -92,9 +92,9 @@ const createStyles = (Colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 10,
+      gap: Spacing.md,
       borderRadius: Radii.full,
-      paddingHorizontal: 24,
+      paddingHorizontal: Spacing.xl,
     },
     decline: { backgroundColor: Colors.destructive },
     answer: { backgroundColor: Colors.success },
