@@ -22,7 +22,7 @@ export async function fetchMyProfile(userId: string, _email: string): Promise<Me
     supabase
       .from("profiles")
       .select(
-        "id, name, gender, seeking, city, bio, work, education, intents, interests, languages, lifestyle, prompt, onboarded",
+        "id, name, gender, seeking, city, bio, work, education, intents, interests, languages, lifestyle, prompt, onboarded, voice_intro_path, voice_intro_duration_sec",
       )
       .eq("id", userId)
       .maybeSingle(),
@@ -76,6 +76,8 @@ export async function fetchMyProfile(userId: string, _email: string): Promise<Me
     ageMax: stateData.ageMax ?? 35,
     distance: stateData.distance ?? 50,
     onboarded: !!row?.onboarded,
+    voiceIntroPath: row?.voice_intro_path ?? null,
+    voiceIntroDurationSec: row?.voice_intro_duration_sec ?? null,
     verificationStatus: stateData.verification?.status ?? "none",
   };
 }
@@ -131,6 +133,13 @@ export async function saveProfile(
     if (profile.languages !== undefined) updateData.languages = profile.languages;
     if (profile.lifestyle !== undefined) updateData.lifestyle = profile.lifestyle;
     if (profile.onboarded !== undefined) updateData.onboarded = profile.onboarded;
+    // Voice intro: path and duration always travel together (DB constraint). null removes it.
+    if (profile.voiceIntroPath !== undefined) {
+      updateData.voice_intro_path = profile.voiceIntroPath;
+      updateData.voice_intro_duration_sec = profile.voiceIntroPath
+        ? (profile.voiceIntroDurationSec ?? null)
+        : null;
+    }
 
     if (profile.photos !== undefined) {
       updateData.photos = profile.photos.map((p) => ({

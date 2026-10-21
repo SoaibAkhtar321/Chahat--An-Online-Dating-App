@@ -10,11 +10,17 @@ import {
 import { Trash2, Users } from "lucide-react-native";
 import { Radii, Shadows, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
+import { REACTION_EMOJIS } from "../../utils/reactions";
 
 interface MessageActionSheetProps {
   visible: boolean;
   /** Only the sender of a message that still has content may delete it for everyone. */
   canDeleteForEveryone: boolean;
+  /** Quick reactions row. Hidden for a message that was deleted for everyone. */
+  canReact?: boolean;
+  /** The current user's reaction on this message, highlighted in the row. */
+  currentReaction?: string | null;
+  onReact?: (emoji: string) => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
   onClose: () => void;
@@ -23,6 +29,9 @@ interface MessageActionSheetProps {
 export const MessageActionSheet: React.FC<MessageActionSheetProps> = ({
   visible,
   canDeleteForEveryone,
+  canReact = false,
+  currentReaction = null,
+  onReact,
   onDeleteForMe,
   onDeleteForEveryone,
   onClose,
@@ -37,6 +46,24 @@ export const MessageActionSheet: React.FC<MessageActionSheetProps> = ({
           <TouchableWithoutFeedback>
             <View style={styles.sheet} testID="message-action-sheet">
               <Text style={styles.title}>Message options</Text>
+
+              {canReact && onReact ? (
+                <View style={styles.reactionPicker} testID="message-reaction-picker">
+                  {REACTION_EMOJIS.map((emoji) => (
+                    <TouchableOpacity
+                      key={emoji}
+                      style={[styles.reactionButton, currentReaction === emoji && styles.reactionButtonActive]}
+                      onPress={() => onReact(emoji)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={currentReaction === emoji ? `Remove ${emoji} reaction` : `React ${emoji}`}
+                      testID={`message-react-${emoji}`}
+                    >
+                      <Text style={styles.reactionButtonText}>{emoji}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
 
               <TouchableOpacity
                 style={styles.option}
@@ -111,6 +138,29 @@ const createStyles = (Colors: ThemeColors) =>
       color: Colors.foreground,
       textAlign: "center",
       marginBottom: 8,
+    },
+    reactionPicker: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    reactionButton: {
+      width: 44,
+      height: 44,
+      borderRadius: Radii.full,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reactionButtonActive: {
+      backgroundColor: Colors.muted,
+      borderWidth: 1,
+      borderColor: Colors.primary,
+    },
+    reactionButtonText: {
+      fontSize: 24,
     },
     option: {
       flexDirection: "row",

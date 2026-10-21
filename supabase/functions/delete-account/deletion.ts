@@ -103,6 +103,9 @@ export async function executeAccountDeletion(
     if (clearPhotosErr) throw new Error(`clear profile photo references: ${clearPhotosErr.message}`);
     await removeFolder(admin, "photos", uid);
 
+    current = "storage:voice-intros";
+    await removeFolder(admin, "voice-intros", uid);
+
     current = "storage:chat";
     const { data: userMatches, error: matchErr } = await admin
       .from("matches")

@@ -211,10 +211,16 @@ describe("Phase 3B: Realtime subscription", () => {
   it("listens for both INSERT and UPDATE on this match only", () => {
     const fake = fakeChannel();
     subscribeToMatchMessages(MATCH, jest.fn(), ME);
-    expect(fake.channel.on).toHaveBeenCalledTimes(2);
-    const configs = fake.channel.on.mock.calls.map((c: any[]) => c[1]);
+    const configs = fake.channel.on.mock.calls.map((c: any[]) => c[1]).filter((c: any) => c.table === "messages");
     expect(configs.map((c: any) => c.event).sort()).toEqual(["INSERT", "UPDATE"]);
     for (const c of configs) expect(c).toMatchObject({ table: "messages", filter: `match_id=eq.${MATCH}` });
+    // reactions share the channel but only INSERT/UPDATE (a Realtime DELETE cannot be filtered per match)
+    const reactionEvents = fake.channel.on.mock.calls
+      .map((c: any[]) => c[1])
+      .filter((c: any) => c.table === "message_reactions")
+      .map((c: any) => c.event)
+      .sort();
+    expect(reactionEvents).toEqual(["INSERT", "UPDATE"]);
   });
 
   it("maps an INSERT row to the client Message shape before handing it over", () => {

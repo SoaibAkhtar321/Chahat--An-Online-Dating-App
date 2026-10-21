@@ -1,6 +1,7 @@
 import type { MeProfile, PhotoItem } from "../types";
 import { PROMPTS } from "../types";
 import { validateDob } from "../utils/validation";
+import { validateVoiceIntroDuration, validateVoiceIntroPath } from "./voiceIntroPolicy";
 
 export type ProfileValidation = { valid: true } | { valid: false; error: string };
 export type PhotoDisplayState = "missing" | "loading" | "loaded" | "error";
@@ -57,6 +58,14 @@ export function validateProfileDraft(
   }
   if (profile.bio !== undefined && profile.bio.length > 500) {
     return { valid: false, error: "Bio must be 500 characters or fewer." };
+  }
+  if (profile.voiceIntroPath !== undefined && profile.voiceIntroPath !== null) {
+    if (
+      !validateVoiceIntroPath(userId, profile.voiceIntroPath) ||
+      !validateVoiceIntroDuration(profile.voiceIntroDurationSec ?? 0).valid
+    ) {
+      return { valid: false, error: "Your voice intro could not be verified. Please record it again." };
+    }
   }
   if (profile.gender !== undefined && !["", "man", "woman"].includes(profile.gender)) {
     return { valid: false, error: "Select a supported gender." };

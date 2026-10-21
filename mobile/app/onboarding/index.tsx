@@ -22,6 +22,15 @@ import { DatePicker } from "../../src/components/ui/DatePicker";
 import { Button } from "../../src/components/ui/Button";
 import { Chip } from "../../src/components/ui/Chip";
 import { PhotoUploader } from "../../src/components/profile/PhotoUploader";
+import {
+  VoiceIntroRecorder,
+  type VoiceIntroValue,
+} from "../../src/components/profile/VoiceIntroRecorder";
+import {
+  prepareVoiceIntroSave,
+  removeVoiceIntroFiles,
+  type VoiceIntroRef,
+} from "../../src/services/voiceIntro";
 import { useAuth } from "../../src/context/AuthContext";
 import {
   validateDob,
@@ -63,6 +72,9 @@ export default function OnboardingScreen() {
   const city = selection?.city ?? "";
   const [photos, setPhotos] = useState<PhotoItem[]>(profile?.photos || []);
   const uploadedPhotoCache = useRef(new Map<string, PhotoItem>());
+  // Optional voice intro, recorded under the photo step and uploaded with the profile.
+  const [voiceIntro, setVoiceIntro] = useState<VoiceIntroValue>({ kind: "none" });
+  const voiceUploadCache = useRef<{ uri: string; ref: VoiceIntroRef } | null>(null);
 
   const totalSteps = STEPS.length;
   const currentKey = STEPS[step];
@@ -188,6 +200,17 @@ export default function OnboardingScreen() {
         }
       }
 
+      let voicePlan;
+      try {
+        voicePlan = await prepareVoiceIntroSave(user.id, voiceIntro, profile?.voiceIntroPath, voiceUploadCache);
+      } catch (voiceErr: any) {
+        Alert.alert(
+          "Voice intro upload failed",
+          `${voiceErr?.message || "Please check your connection and retry."} You can also skip the voice intro and add it later in Complete Profile.`,
+        );
+        return;
+      }
+
       const res = await saveProfile(
         {
           name: name.trim(),
@@ -196,6 +219,7 @@ export default function OnboardingScreen() {
           seeking: seeking || (gender === "man" ? "woman" : "man"),
           city: city.trim(),
           photos: processedPhotos,
+          ...voicePlan.fields,
           onboarded: true,
         },
         user.id,
@@ -223,6 +247,8 @@ export default function OnboardingScreen() {
         console.warn("handleFinish: unused photo cleanup deferred", cleanupErr);
       }
       uploadedPhotoCache.current.clear();
+      voiceUploadCache.current = null;
+      void removeVoiceIntroFiles(user.id, voicePlan.staleAfterSave);
 
       // Ask the server to check the new photos
       await Promise.race([
@@ -361,6 +387,12 @@ export default function OnboardingScreen() {
               Profiles with genuine photos receive far more responses. You can add more photos anytime in Complete Profile.
             </Text>
             <PhotoUploader photos={photos} onChange={setPhotos} maxPhotos={6} />
+
+            <Text style={[styles.stepTitle, { fontSize: 16, marginTop: 24 }]}>Add a voice intro (optional)</Text>
+            <Text style={styles.stepSubtitle}>
+              A few seconds of your voice helps people get a feel for you. Others can listen on Discover and on your profile. You can skip this and add it later in Complete Profile.
+            </Text>
+            <VoiceIntroRecorder value={voiceIntro} onChange={setVoiceIntro} disabled={saving} />
           </View>
         );
 

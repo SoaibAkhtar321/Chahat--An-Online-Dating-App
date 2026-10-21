@@ -215,7 +215,7 @@ export default function ProfileDetailScreen() {
           ) : null}
 
           {/* Voice Introduction Player */}
-          <VoiceIntroPlayer userName={targetProfile.name} durationSec={24} />
+          <VoiceIntroPlayer userId={targetProfile.id} userName={targetProfile.name} />
 
           {/* Compatibility Card */}
           <View style={styles.compatCard}>

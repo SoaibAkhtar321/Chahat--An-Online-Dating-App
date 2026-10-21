@@ -1,55 +1,101 @@
-import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Play, Pause, Mic, Volume2 } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
+import { getAudioPlayerAdapter } from "../../services/voiceMedia";
+import { fetchVoiceIntro, type VoiceIntroPlayback } from "../../services/voiceIntro";
 
 interface VoiceIntroPlayerProps {
+  /** Profile whose intro is played. The intro is looked up (and signed) on demand. */
+  userId?: string;
   userName?: string;
-  durationSec?: number;
+  /** Already-resolved intro, e.g. from the Discover feed. Skips the lookup. */
+  source?: VoiceIntroPlayback | null;
 }
 
+const BAR_HEIGHTS = [4, 10, 16, 8, 22, 14, 18, 24, 12, 20, 8, 16, 22, 10, 6, 14, 20, 12, 18, 8];
+
+const fmt = (sec: number) => {
+  const s = Math.max(0, Math.round(sec));
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+};
+
+// Renders nothing when the member has not recorded a voice intro.
 export const VoiceIntroPlayer: React.FC<VoiceIntroPlayerProps> = ({
+  userId,
   userName = "Member",
-  durationSec = 22,
+  source,
 }) => {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
+  const [intro, setIntro] = useState<VoiceIntroPlayback | null>(source ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentSec, setCurrentSec] = useState(0);
+  const [positionMs, setPositionMs] = useState(0);
+  const [durationMs, setDurationMs] = useState((source?.durationSec ?? 0) * 1000);
+  const activeUrl = useRef<string | null>(null);
 
   useEffect(() => {
-    let timer: any;
-    if (isPlaying) {
-      timer = setInterval(() => {
-        setCurrentSec((prev) => {
-          if (prev >= durationSec) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, 1000);
+    let cancelled = false;
+    if (source) {
+      setIntro(source);
+      return;
     }
-    return () => clearInterval(timer);
-  }, [isPlaying, durationSec]);
+    if (!userId) return;
+    void fetchVoiceIntro(userId).then((res) => {
+      if (!cancelled) setIntro(res);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, source]);
 
-  const togglePlay = () => {
+  useEffect(() => {
+    setDurationMs((intro?.durationSec ?? 0) * 1000);
+  }, [intro]);
+
+  // Stop playback when the profile screen goes away.
+  useEffect(
+    () => () => {
+      const adapter = getAudioPlayerAdapter();
+      if (activeUrl.current) void adapter.stopAsync();
+    },
+    [],
+  );
+
+  const toggle = useCallback(async () => {
+    if (!intro) return;
+    const adapter = getAudioPlayerAdapter();
     if (isPlaying) {
+      await adapter.pauseAsync();
       setIsPlaying(false);
-    } else {
-      setIsPlaying(true);
+      return;
     }
-  };
+    activeUrl.current = intro.url;
+    const res = await adapter.playAsync(intro.url, (status) => {
+      if (status.durationMs > 0) setDurationMs(status.durationMs);
+      setPositionMs(status.didJustFinish ? 0 : status.positionMs);
+      setIsPlaying(status.isPlaying && !status.didJustFinish);
+    });
+    if (!res.success) {
+      Alert.alert("Voice intro", res.error || "Could not play this voice intro.");
+      setIsPlaying(false);
+      return;
+    }
+    setIsPlaying(true);
+  }, [intro, isPlaying]);
 
-  const progressPercent = Math.min(100, Math.round((currentSec / durationSec) * 100));
+  if (!intro) return null;
+
+  const totalSec = Math.round(durationMs / 1000) || intro.durationSec;
+  const progressPercent = durationMs > 0 ? Math.min(100, Math.round((positionMs / durationMs) * 100)) : 0;
 
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={styles.tag}>
           <Mic size={14} color={Colors.primary} />
-          <Text style={styles.tagText}>Voice Intro · {durationSec}s</Text>
+          <Text style={styles.tagText}>Voice Intro · {totalSec}s</Text>
         </View>
         <Volume2 size={16} color={Colors.mutedForeground} />
       </View>
@@ -57,7 +103,13 @@ export const VoiceIntroPlayer: React.FC<VoiceIntroPlayerProps> = ({
       <Text style={styles.title}>Listen to {userName}'s voice introduction</Text>
 
       <View style={styles.playerRow}>
-        <TouchableOpacity style={styles.playButton} onPress={togglePlay} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.playButton}
+          onPress={() => void toggle()}
+          activeOpacity={0.8}
+          accessibilityLabel={isPlaying ? "Pause voice intro" : "Play voice intro"}
+          testID="voice-intro-play"
+        >
           {isPlaying ? (
             <Pause size={18} color={Colors.primaryForeground} fill={Colors.primaryForeground} />
           ) : (
@@ -67,27 +119,20 @@ export const VoiceIntroPlayer: React.FC<VoiceIntroPlayerProps> = ({
 
         <View style={styles.trackContainer}>
           <View style={styles.waveform}>
-            {[4, 10, 16, 8, 22, 14, 18, 24, 12, 20, 8, 16, 22, 10, 6, 14, 20, 12, 18, 8].map(
-              (height, idx) => {
-                const barProgress = (idx / 20) * 100;
-                const active = barProgress <= progressPercent;
-                return (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.bar,
-                      { height },
-                      active ? styles.barActive : styles.barInactive,
-                    ]}
-                  />
-                );
-              },
-            )}
+            {BAR_HEIGHTS.map((height, idx) => {
+              const active = (idx / BAR_HEIGHTS.length) * 100 <= progressPercent;
+              return (
+                <View
+                  key={idx}
+                  style={[styles.bar, { height }, active ? styles.barActive : styles.barInactive]}
+                />
+              );
+            })}
           </View>
 
           <View style={styles.timeRow}>
-            <Text style={styles.timeText}>0:{currentSec.toString().padStart(2, "0")}</Text>
-            <Text style={styles.timeText}>0:{durationSec.toString().padStart(2, "0")}</Text>
+            <Text style={styles.timeText}>{fmt(positionMs / 1000)}</Text>
+            <Text style={styles.timeText}>{fmt(totalSec)}</Text>
           </View>
         </View>
       </View>

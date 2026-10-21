@@ -54,6 +54,8 @@ jest.mock("../mobile/src/services/chat", () => ({
   sendChatMessage: jest.fn(),
   sendVoiceMessage: jest.fn(),
   markChatRead: jest.fn(),
+  fetchReactionsForMatch: jest.fn(async () => []),
+  setMessageReaction: jest.fn(async () => ({ success: true })),
   subscribeToMatchMessages: jest.fn(() => ({ id: "channel" })),
 }));
 jest.mock("../mobile/src/utils/alert", () => ({ Alert: { alert: jest.fn() } }));

@@ -51,6 +51,9 @@ import {
   sendChatMessage,
   sendVoiceMessage,
   markChatRead,
+  fetchMessageReceipts,
+  fetchReactionsForMatch,
+  setMessageReaction,
   subscribeToMatchMessages,
 } from "../../src/services/chat";
 import {
@@ -62,6 +65,7 @@ import {
 import {
   applyTombstone,
   appendIncoming,
+  mergeReceipts,
   insertChronologically,
   reconcileFetched,
   removeMessage,
@@ -75,6 +79,16 @@ import {
 } from "../../src/services/voiceMedia";
 import { blockUser, reportUser, unmatchUser } from "../../src/services/moderation";
 import { supabase } from "../../src/services/supabase";
+import { joinChatPresence, type ChatPresence } from "../../src/services/chatPresence";
+import { presenceLabel } from "../../src/utils/typingState";
+import {
+  applyReactionRow,
+  buildReactionMap,
+  clearMessageReactions,
+  nextReaction,
+  summarizeReactions,
+  type ReactionMap,
+} from "../../src/utils/reactions";
 import type { Message, Profile } from "../../src/types";
 
 export default function ChatDetailScreen() {
@@ -90,6 +104,11 @@ export default function ChatDetailScreen() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
+  const [partnerOnline, setPartnerOnline] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const presenceRef = useRef<ChatPresence | null>(null);
+  // Emoji reactions: messageId -> (userId -> emoji). Loaded with the thread, kept live through Realtime.
+  const [reactions, setReactions] = useState<ReactionMap>({});
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -157,6 +176,7 @@ export default function ChatDetailScreen() {
   // Deletion bookkeeping belongs to one conversation: reset only when the conversation changes
   // (not when the auth user object is refreshed), and before the effect below fetches.
   useEffect(() => {
+    setReactions({});
     hiddenIdsRef.current = new Set();
     tombstonesRef.current = new Map();
     confirmedTombstonesRef.current = new Set();
@@ -174,6 +194,9 @@ export default function ChatDetailScreen() {
       setMessages(reconcileFetched(msgs, deletionContext()));
       markChatRead(matchId, user.id);
     });
+    fetchReactionsForMatch(matchId).then((rows) => {
+      if (!cancelled) setReactions(buildReactionMap(rows));
+    });
 
     const handleRemoteTombstone = (id: string, deletedAt: string) => {
       // Remember it even when the user hid the message: a delete-for-me rollback must not resurrect content.
@@ -181,9 +204,23 @@ export default function ChatDetailScreen() {
       confirmedTombstonesRef.current.add(id);
       setActionTarget((current) => (current?.id === id ? null : current));
       setConfirmEveryone((current) => (current?.id === id ? null : current));
+      setReactions((prev) => clearMessageReactions(prev, id));
       if (hiddenIdsRef.current.has(id)) return;
       setMessages((prev) => applyTombstone(prev, id, deletedAt));
       refreshMatches();
+    };
+
+    // Tick updates for my messages: debounced, because marking a whole chat read fires one event per message.
+    let receiptTimer: ReturnType<typeof setTimeout> | null = null;
+    const refreshReceipts = () => {
+      if (receiptTimer) clearTimeout(receiptTimer);
+      receiptTimer = setTimeout(() => {
+        receiptTimer = null;
+        fetchMessageReceipts(matchId, user.id).then((fresh) => {
+          if (cancelled || fresh.length === 0) return;
+          setMessages((prev) => mergeReceipts(prev, fresh));
+        });
+      }, 400);
     };
 
     const channel = subscribeToMatchMessages(
@@ -197,6 +234,8 @@ export default function ChatDetailScreen() {
       user.id,
       {
         onMessageDeleted: ({ id, deletedAt }) => handleRemoteTombstone(id, deletedAt),
+        onReceiptChanged: refreshReceipts,
+        onReaction: (row) => setReactions((prev) => applyReactionRow(prev, row)),
         // The channel dropped and came back: deletions may have been missed, so reload the thread.
         // An empty result is ignored here because fetchMessagesForMatch also returns [] on network errors.
         onResync: () => {
@@ -204,19 +243,60 @@ export default function ChatDetailScreen() {
             if (cancelled || msgs.length === 0) return;
             setMessages(reconcileFetched(msgs, deletionContext()));
           });
+          fetchReactionsForMatch(matchId).then((rows) => {
+            if (!cancelled) setReactions(buildReactionMap(rows));
+          });
         },
       },
     );
 
     return () => {
       cancelled = true;
+      if (receiptTimer) clearTimeout(receiptTimer);
       supabase.removeChannel(channel);
     };
   }, [matchId, user]);
 
+  // Online + typing for this chat (Realtime presence/broadcast, nothing stored). Reset when the chat changes.
+  useEffect(() => {
+    setPartnerOnline(false);
+    setPartnerTyping(false);
+    if (!matchId || !user) return;
+    const presence = joinChatPresence(matchId, user.id, {
+      onPartnerOnline: setPartnerOnline,
+      onPartnerTyping: setPartnerTyping,
+    });
+    presenceRef.current = presence;
+    return () => {
+      presence.leave();
+      if (presenceRef.current === presence) presenceRef.current = null;
+    };
+  }, [matchId, user]);
+
+  const handleInputChange = (text: string) => {
+    setInputText(text);
+    presenceRef.current?.notifyInput(text.trim().length > 0);
+  };
+
   const upsertSentMessage = (sent: Message) => {
     // Realtime may already have delivered this row; replace it (the sent copy carries the signed media URL).
     setMessages((prev) => insertChronologically(prev, sent));
+  };
+
+  // Sets (or with null removes) my reaction. Optimistic; rolled back with a message when the server refuses.
+  const reactToMessage = async (message: Message, emoji: string | null): Promise<void> => {
+    if (!user || message.deletedAt) return;
+    const previous = reactions[message.id]?.[user.id] ?? null;
+    if (previous === emoji) return;
+    setReactions((prev) => applyReactionRow(prev, { messageId: message.id, userId: user.id, emoji }));
+    const res = await setMessageReaction(message.id, emoji);
+    if (!res.success) {
+      setReactions((prev) => applyReactionRow(prev, { messageId: message.id, userId: user.id, emoji: previous }));
+      Alert.alert(
+        "Reaction not sent",
+        res.error === "network" ? "Check your connection and try again." : "This message can no longer be reacted to.",
+      );
+    }
   };
 
   const openMessageActions = (message: Message) => {
@@ -298,6 +378,7 @@ export default function ChatDetailScreen() {
     const img = selectedImageUri || undefined;
     setSelectedImageUri(null);
     setInputText("");
+    presenceRef.current?.notifyStopped();
 
     const res = await sendChatMessage(matchId, user.id, text, img);
     setSending(false);
@@ -506,7 +587,11 @@ export default function ChatDetailScreen() {
             <Text style={styles.partnerName} numberOfLines={1}>
               {otherUser.name}
             </Text>
-            <Text style={styles.partnerStatus}>Active recently</Text>
+            {presenceLabel(partnerOnline, partnerTyping) ? (
+              <Text style={styles.partnerStatus} testID="chat-presence-label">
+                {presenceLabel(partnerOnline, partnerTyping)}
+              </Text>
+            ) : null}
           </View>
         </TouchableOpacity>
 
@@ -624,11 +709,16 @@ export default function ChatDetailScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
+          extraData={reactions}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => (
             <ChatBubble
               message={item}
               onLongPress={openMessageActions}
+              reactions={summarizeReactions(reactions[item.id], user?.id)}
+              onReactionPress={(m, emoji) =>
+                void reactToMessage(m, nextReaction(reactions[m.id]?.[user?.id ?? ""] ?? null, emoji))
+              }
               showDayHeader={
                 index === 0 ||
                 new Date(messages[index - 1]!.at).toDateString() !==
@@ -781,7 +871,7 @@ export default function ChatDetailScreen() {
             placeholder="Type a message or use icebreaker…"
             placeholderTextColor={Colors.mutedForeground}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             multiline
             maxLength={1000}
           />
@@ -828,6 +918,15 @@ export default function ChatDetailScreen() {
         canDeleteForEveryone={
           !!actionTarget && canDeleteMessageForEveryone(actionTarget, user?.id)
         }
+        canReact={!!actionTarget && !actionTarget.deletedAt}
+        currentReaction={actionTarget && user ? (reactions[actionTarget.id]?.[user.id] ?? null) : null}
+        onReact={(emoji) => {
+          const target = actionTarget;
+          setActionTarget(null);
+          if (target && user) {
+            void reactToMessage(target, nextReaction(reactions[target.id]?.[user.id] ?? null, emoji));
+          }
+        }}
         onDeleteForMe={() => {
           const target = actionTarget;
           setActionTarget(null);

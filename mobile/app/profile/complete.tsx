@@ -23,6 +23,7 @@ import {
   Globe,
   HeartHandshake,
   Heart,
+  Mic,
   Smile,
   Zap,
   User,
@@ -35,6 +36,16 @@ import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { Chip } from "../../src/components/ui/Chip";
 import { PhotoUploader } from "../../src/components/profile/PhotoUploader";
+import {
+  VoiceIntroRecorder,
+  type VoiceIntroValue,
+} from "../../src/components/profile/VoiceIntroRecorder";
+import {
+  initialVoiceIntroValue,
+  prepareVoiceIntroSave,
+  removeVoiceIntroFiles,
+  type VoiceIntroRef,
+} from "../../src/services/voiceIntro";
 import { Alert } from "../../src/utils/alert";
 import {
   saveProfile,
@@ -88,12 +99,17 @@ export default function CompleteProfileScreen() {
   const [languages, setLanguages] = useState<string[]>(profile?.languages || ["English", "Hindi"]);
   const [lifestyle, setLifestyle] = useState<Record<string, string>>(profile?.lifestyle || {});
   const [photos, setPhotos] = useState<PhotoItem[]>(profile?.photos || []);
+  const [voiceIntro, setVoiceIntro] = useState<VoiceIntroValue>(
+    initialVoiceIntroValue(profile?.voiceIntroPath, profile?.voiceIntroDurationSec),
+  );
+  const voiceUploadCache = useRef<{ uri: string; ref: VoiceIntroRef } | null>(null);
 
   // Unsaved-changes guard shared by the header arrow and Android hardware/gesture back.
   const initialSnapshot = useRef<string | null>(null);
   const currentSnapshot = () => ({
     name, bio, promptQ, promptA, intents, selectedInterests, work, education, languages, lifestyle,
     photos: photos.map((ph) => ph.id || ph.uri),
+    voice: voiceIntro.kind === "none" ? "" : voiceIntro.kind === "saved" ? voiceIntro.path : voiceIntro.uri,
   });
   useEffect(() => {
     initialSnapshot.current = JSON.stringify(currentSnapshot());
@@ -222,6 +238,15 @@ export default function CompleteProfileScreen() {
         }
       }
 
+      let voicePlan;
+      try {
+        voicePlan = await prepareVoiceIntroSave(user.id, voiceIntro, profile?.voiceIntroPath, voiceUploadCache);
+      } catch (voiceErr: any) {
+        Alert.alert("Voice intro upload failed", voiceErr?.message || "Please check your connection and retry.");
+        setSaving(false);
+        return;
+      }
+
       const res = await saveProfile(
         {
           name: name.trim() || profile?.name,
@@ -239,6 +264,7 @@ export default function CompleteProfileScreen() {
           languages,
           lifestyle,
           photos: processedPhotos,
+          ...voicePlan.fields,
           onboarded: true,
         },
         user.id,
@@ -269,6 +295,8 @@ export default function CompleteProfileScreen() {
         console.warn("CompleteProfile: unused photo cleanup deferred", cleanupErr);
       }
       uploadedPhotoCache.current.clear();
+      voiceUploadCache.current = null;
+      void removeVoiceIntroFiles(user.id, voicePlan.staleAfterSave);
 
       // Trigger moderation check for new photos
       void requestPhotoModeration().catch(() => {});
@@ -378,6 +406,18 @@ export default function CompleteProfileScreen() {
               Add up to 6 photos. The first photo will be your main profile photo shown on Discovery.
             </Text>
             <PhotoUploader photos={photos} onChange={setPhotos} maxPhotos={6} />
+          </View>
+
+          {/* Section: Voice intro */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Mic size={18} color={Colors.primary} />
+              <Text style={styles.sectionTitle}>Voice Intro</Text>
+            </View>
+            <Text style={styles.sectionDescription}>
+              Record a short voice introduction. It shows up on Discover and your profile so people can hear you.
+            </Text>
+            <VoiceIntroRecorder value={voiceIntro} onChange={setVoiceIntro} disabled={saving} />
           </View>
 
           {/* Section: Basic Details */}

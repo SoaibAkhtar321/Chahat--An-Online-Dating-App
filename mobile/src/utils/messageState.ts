@@ -24,6 +24,37 @@ export function isTombstone(message: Pick<Message, "deletedAt"> | null | undefin
 
 type Signed = Record<string, string | undefined | null>;
 
+/**
+ * Tick state of a message row. `read_at` is already masked server-side for senders without read receipts
+ * (get_match_messages), so a masked row simply stays at "delivered" or "sent".
+ */
+export function messageStatusFromRow(row: { read_at?: string | null; delivered_at?: string | null }): "sent" | "delivered" | "read" {
+  if (row.read_at) return "read";
+  if (row.delivered_at) return "delivered";
+  return "sent";
+}
+
+const STATUS_RANK: Record<Message["status"], number> = { failed: -1, sent: 0, delivered: 1, read: 2 };
+
+/**
+ * Upgrades the tick state of my own messages from a fresh (server-masked) fetch. Receipts only ever move forward:
+ * nothing is added, removed, re-ordered or downgraded, so deletions, optimistic and failed messages are untouched.
+ * Returns the same array when nothing changed so React skips the render.
+ */
+export function mergeReceipts(list: Message[], fetched: Message[]): Message[] {
+  const byId = new Map(fetched.map((m) => [m.id, m]));
+  let changed = false;
+  const next = list.map((m) => {
+    if (m.from !== "me" || m.deletedAt || m.status === "failed") return m;
+    const fresh = byId.get(m.id);
+    if (!fresh || fresh.deletedAt) return m;
+    if (STATUS_RANK[fresh.status] <= STATUS_RANK[m.status]) return m;
+    changed = true;
+    return { ...m, status: fresh.status };
+  });
+  return changed ? next : list;
+}
+
 /** Maps a `messages` row (table, RPC or Realtime payload) to the client Message shape. */
 export function mapMessageRow(row: any, currentUserId: string, signed: Signed = {}): Message {
   const deletedAt: string | null = row.deleted_at ?? null;
@@ -33,7 +64,7 @@ export function mapMessageRow(row: any, currentUserId: string, signed: Signed = 
     sender: row.sender as string,
     from: (row.sender === currentUserId ? "me" : "them") as "me" | "them",
     at: new Date(row.created_at).getTime(),
-    status: (row.read_at ? "read" : "sent") as "read" | "sent",
+    status: messageStatusFromRow(row),
   };
 
   // A tombstone never carries content, whatever the row says (defence in depth for the table fallback path).

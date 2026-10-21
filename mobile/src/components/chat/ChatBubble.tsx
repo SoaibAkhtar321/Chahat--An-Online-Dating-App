@@ -7,18 +7,25 @@ import { useTheme } from "../../context/ThemeContext";
 import type { Message } from "../../types";
 import { getAudioPlayerAdapter } from "../../services/voiceMedia";
 import { DELETED_BY_ME_PREVIEW_TEXT, DELETED_PREVIEW_TEXT } from "../../utils/messageState";
+import type { ReactionSummary } from "../../utils/reactions";
 
 interface ChatBubbleProps {
   message: Message;
   showDayHeader?: boolean;
   /** Long press on the bubble (message actions). Omit to keep the bubble non-interactive. */
   onLongPress?: (message: Message) => void;
+  /** Reaction chips under the bubble (already grouped). Never shown on a message deleted for everyone. */
+  reactions?: ReactionSummary[];
+  /** Tap on a chip: toggles the current user's reaction with that emoji. */
+  onReactionPress?: (message: Message, emoji: string) => void;
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
   message,
   showDayHeader = false,
   onLongPress,
+  reactions,
+  onReactionPress,
 }) => {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
@@ -190,11 +197,18 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             </Text>
 
             {isMe && !isDeleted && message.status !== "failed" && (
-              <View style={styles.tick}>
+              <View
+                style={styles.tick}
+                accessibilityLabel={
+                  message.status === "read" ? "Read" : message.status === "delivered" ? "Delivered" : "Sent"
+                }
+              >
                 {message.status === "read" ? (
-                  <CheckCheck size={13} color={Colors.primaryForeground} />
+                  <CheckCheck size={14} color={READ_TICK_COLOR} />
+                ) : message.status === "delivered" ? (
+                  <CheckCheck size={14} color={PENDING_TICK_COLOR} />
                 ) : (
-                  <Check size={13} color={Colors.primaryForeground} />
+                  <Check size={14} color={PENDING_TICK_COLOR} />
                 )}
               </View>
             )}
@@ -207,9 +221,36 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           </View>
         </Pressable>
       </View>
+
+      {!isDeleted && reactions && reactions.length > 0 ? (
+        <View
+          style={[styles.reactionRow, isMe ? styles.rowMe : styles.rowThem]}
+          testID={`message-reactions-${message.id}`}
+        >
+          {reactions.map((r) => (
+            <TouchableOpacity
+              key={r.emoji}
+              style={[styles.reactionChip, r.mine && styles.reactionChipMine]}
+              onPress={onReactionPress ? () => onReactionPress(message, r.emoji) : undefined}
+              disabled={!onReactionPress}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${r.emoji} reaction${r.count > 1 ? `, ${r.count} people` : ""}${r.mine ? ", yours" : ""}`}
+              testID={`message-reaction-chip-${message.id}-${r.emoji}`}
+            >
+              <Text style={styles.reactionEmoji}>{r.emoji}</Text>
+              {r.count > 1 ? <Text style={styles.reactionCount}>{r.count}</Text> : null}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 };
+
+// Read tick colour: a light sky blue that stays legible on the primary (terracotta) sent-bubble background.
+const READ_TICK_COLOR = "#7DD3FC";
+const PENDING_TICK_COLOR = "rgba(255, 255, 255, 0.75)";
 
 const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
@@ -305,6 +346,35 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   tick: {
     marginLeft: 2,
+  },
+  reactionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: -6,
+    paddingHorizontal: 8,
+  },
+  reactionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  reactionChipMine: {
+    borderColor: Colors.primary,
+  },
+  reactionEmoji: {
+    fontSize: 14,
+  },
+  reactionCount: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.mutedForeground,
   },
   bubbleVoice: {
     minWidth: 200,

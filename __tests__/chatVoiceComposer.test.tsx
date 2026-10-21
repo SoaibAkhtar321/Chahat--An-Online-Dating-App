@@ -88,6 +88,8 @@ jest.mock("../mobile/src/services/chat", () => ({
   sendChatMessage: jest.fn(),
   sendVoiceMessage: (...a: unknown[]) => mockSendVoice(...a),
   markChatRead: (...a: unknown[]) => mockMarkRead(...a),
+  fetchReactionsForMatch: jest.fn(async () => []),
+  setMessageReaction: jest.fn(async () => ({ success: true })),
   subscribeToMatchMessages: (_m: string, onReceived: (m: any) => void, _u: string, handlers: any) => {
     mockOnReceived = onReceived;
     mockHandlers = handlers;

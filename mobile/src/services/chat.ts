@@ -11,6 +11,7 @@ import { DEMO_PROFILES } from "./discovery";
 import { pushNotificationToInbox } from "./notifications";
 import { generateUUID, isValidUUID } from "../utils/validation";
 import { mapMessageRow } from "../utils/messageState";
+import { mapReactionRow, type ReactionRow } from "../utils/reactions";
 
 /**
  * Unread = messages from the other person that are not read and not deleted for everyone.
@@ -57,6 +58,9 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
       console.warn("Matches query failed:", error?.message);
       return [];
     }
+
+    // The app has these matches' messages now: let senders see the delivered tick (fire and forget).
+    void markMessagesDelivered();
 
     const items: MatchItem[] = [];
 
@@ -415,6 +419,67 @@ export async function sendVoiceMessage(
   }
 }
 
+/**
+ * Tells the server that this user's app has received incoming messages (sender sees the double tick).
+ * Pass a match id for one chat, or nothing for every chat of this user. Never throws.
+ */
+export async function markMessagesDelivered(matchId?: string): Promise<void> {
+  try {
+    if (matchId && !isValidUUID(matchId)) return;
+    await supabase.rpc("mark_messages_delivered", { _match_id: matchId ?? null });
+  } catch {
+    // Delivery ticks are best effort; the next refresh retries.
+  }
+}
+
+/**
+ * Fresh tick state for a chat, read through get_match_messages so read receipts stay masked for senders without them.
+ * No table fallback on purpose (it would expose read_at), no media signing (only statuses are used). [] on any error.
+ */
+export async function fetchMessageReceipts(matchId: string, currentUserId: string): Promise<Message[]> {
+  try {
+    if (!matchId || !isValidUUID(matchId)) return [];
+    const { data, error } = await supabase.rpc("get_match_messages", { _match_id: matchId });
+    if (error || !Array.isArray(data)) return [];
+    return data.map((row: any) => mapMessageRow(row, currentUserId));
+  } catch {
+    return [];
+  }
+}
+
+/** Current (non-removed) reactions of a chat. RLS limits this to members and to live, visible messages. [] on error. */
+export async function fetchReactionsForMatch(matchId: string): Promise<ReactionRow[]> {
+  try {
+    if (!matchId || !isValidUUID(matchId)) return [];
+    const { data, error } = await supabase
+      .from("message_reactions")
+      .select("message_id, user_id, emoji")
+      .eq("match_id", matchId)
+      .not("emoji", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(500);
+    if (error || !Array.isArray(data)) return [];
+    return data.map(mapReactionRow).filter((r): r is ReactionRow => !!r);
+  } catch {
+    return [];
+  }
+}
+
+export type SetReactionResult = { success: true } | { success: false; error: string };
+
+/** Sets (or, with null, removes) the caller's reaction on a message through the server function. Never throws. */
+export async function setMessageReaction(messageId: string, emoji: string | null): Promise<SetReactionResult> {
+  try {
+    if (!messageId || !isValidUUID(messageId)) return { success: false, error: "message_not_found" };
+    const { data, error } = await supabase.rpc("set_message_reaction", { _message_id: messageId, _emoji: emoji });
+    if (error) return { success: false, error: "network" };
+    if (data && (data as any).success === true) return { success: true };
+    return { success: false, error: String((data as any)?.error ?? "unknown") };
+  } catch {
+    return { success: false, error: "network" };
+  }
+}
+
 export async function markChatRead(matchId: string, currentUserId: string): Promise<void> {
   try {
     if (!matchId || !isValidUUID(matchId)) return;
@@ -437,6 +502,13 @@ export interface MatchMessageHandlers {
    * so the caller should refetch. Not called for the first subscription.
    */
   onResync?: () => void;
+  /**
+   * One of MY messages got a delivered/read timestamp (Realtime UPDATE). The payload is deliberately not used for the
+   * tick itself: read_at in Realtime is not masked for non-Plus users, so the caller refetches through the RPC.
+   */
+  onReceiptChanged?: () => void;
+  /** Someone in this chat set or removed a reaction (Realtime INSERT/UPDATE on message_reactions). */
+  onReaction?: (row: ReactionRow) => void;
 }
 
 export function subscribeToMatchMessages(
@@ -492,8 +564,40 @@ export function subscribeToMatchMessages(
         // Only tombstones are handled. read_at / viewed_at changes are deliberately ignored here:
         // read receipts are masked by get_match_messages for non-Plus users and Realtime would bypass that.
         const row: any = payload.new;
-        if (!row?.id || !row.deleted_at) return;
-        handlers?.onMessageDeleted?.({ id: row.id, deletedAt: row.deleted_at });
+        if (!row?.id) return;
+        if (row.deleted_at) {
+          handlers?.onMessageDeleted?.({ id: row.id, deletedAt: row.deleted_at });
+          return;
+        }
+        if (currentUserId && row.sender === currentUserId && (row.delivered_at || row.read_at)) {
+          handlers?.onReceiptChanged?.();
+        }
+      },
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "message_reactions",
+        filter: `match_id=eq.${matchId}`,
+      },
+      (payload) => {
+        const row = mapReactionRow(payload.new);
+        if (row) handlers?.onReaction?.(row);
+      },
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "message_reactions",
+        filter: `match_id=eq.${matchId}`,
+      },
+      (payload) => {
+        const row = mapReactionRow(payload.new);
+        if (row) handlers?.onReaction?.(row);
       },
     )
     .subscribe((status) => {

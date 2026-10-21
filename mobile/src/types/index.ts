@@ -38,6 +38,8 @@ export interface Profile {
   isDemo?: boolean;
   isVerified?: boolean;
   verificationStatus?: "none" | "pending" | "approved" | "rejected";
+  /** Signed, short-lived playback source for the member's voice intro; absent when they have none. */
+  voiceIntro?: { url: string; durationSec: number } | null;
 }
 
 export interface MeProfile {
@@ -62,6 +64,9 @@ export interface MeProfile {
   distance: number;
   onboarded: boolean;
   verificationStatus: "none" | "pending" | "approved" | "rejected";
+  /** Storage path of the member's own voice intro (private "voice-intros" bucket). */
+  voiceIntroPath?: string | null;
+  voiceIntroDurationSec?: number | null;
 }
 
 export interface Filters {
@@ -88,7 +93,8 @@ export interface Message {
   /** Set when the sender deleted the message for everyone (Phase 3A tombstone). Content is always empty then. */
   deletedAt?: string | null;
   at: number;
-  status: "sent" | "read" | "failed";
+  /** sent = stored on the server, delivered = reached the recipient's app, read = recipient opened the chat. */
+  status: "sent" | "delivered" | "read" | "failed";
 }
 
 export interface MatchItem {

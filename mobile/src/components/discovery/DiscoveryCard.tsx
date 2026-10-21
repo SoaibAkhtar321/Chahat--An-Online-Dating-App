@@ -131,10 +131,12 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
                 </View>
               ) : null}
 
-              <View style={styles.voiceBadge}>
-                <Volume2 size={12} color={Colors.primaryForeground} />
-                <Text style={styles.voiceBadgeText}>Voice Intro</Text>
-              </View>
+              {profile.voiceIntro ? (
+                <View style={styles.voiceBadge}>
+                  <Volume2 size={12} color={Colors.primaryForeground} />
+                  <Text style={styles.voiceBadgeText}>Voice Intro</Text>
+                </View>
+              ) : null}
             </View>
 
             {profile.bio ? (

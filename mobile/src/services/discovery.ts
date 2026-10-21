@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { DEFAULT_FILTERS, MAX_DISCOVERY_RADIUS_KM, type Profile, type SwipeResponse } from "../types";
 import { getSignedUrls } from "./storage";
+import { fetchVoiceIntros } from "./voiceIntro";
 import { pushNotificationToInbox } from "./notifications";
 
 // Bundled demo profiles for offline/testing mode matching prototype exactly
@@ -164,6 +165,9 @@ export async function fetchDiscoveryPage(
       ),
     );
     const profiles = data.map((row: any) => formatProfileRow(row, signed));
+    // One batched lookup for voice intros; failure just means no badges, never an empty deck.
+    const intros = await fetchVoiceIntros(profiles.map((p: Profile) => p.id));
+    for (const profile of profiles) profile.voiceIntro = intros[profile.id] ?? null;
     const last = data[data.length - 1];
     return {
       profiles,

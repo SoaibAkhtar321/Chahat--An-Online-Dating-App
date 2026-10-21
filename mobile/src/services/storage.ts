@@ -242,7 +242,7 @@ export async function sanitizeAndPrepareImageUpload(
 
 /** Returns a map path -> signed URL. Paths that cannot be signed (no access / missing) are omitted. */
 export async function getSignedUrls(
-  bucket: "photos" | "chat",
+  bucket: "photos" | "chat" | "voice-intros",
   paths: string[],
 ): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
@@ -269,7 +269,7 @@ export async function getSignedUrls(
   return out;
 }
 
-export async function getSignedUrl(bucket: "photos" | "chat", path: string): Promise<string | undefined> {
+export async function getSignedUrl(bucket: "photos" | "chat" | "voice-intros", path: string): Promise<string | undefined> {
   return (await getSignedUrls(bucket, [path]))[path];
 }
 
