@@ -4,12 +4,15 @@ import { Compass, Heart, MessageCircle, User } from "lucide-react-native";
 import { Typography } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useMilo } from "../../src/context/MiloContext";
+import { PushSetup } from "../../src/components/notifications/PushSetup";
 
 export default function TabsLayout() {
   const { totalUnreadCount } = useMilo();
   const { colors: Colors } = useTheme();
 
   return (
+    <>
+    <PushSetup />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -66,5 +69,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </>
   );
 }

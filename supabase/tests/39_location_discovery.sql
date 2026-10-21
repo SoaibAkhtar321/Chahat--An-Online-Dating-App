@@ -92,8 +92,8 @@ SELECT 'next cursor returns distinct tied-distance profile',
   coalesce(string_agg(id, ','), 'empty')
 FROM location_page_two;
 INSERT INTO public.t_results
-SELECT 'outside radius is excluded',
-  count(*) = 0, count(*)::text
+SELECT 'radius no longer excludes distant members (global feed)',
+  count(*) = 1, count(*)::text
 FROM public.get_discovery_feed_page(50, 18, 99, 50, '{}', '{}', '{}', NULL, NULL)
 WHERE id = '50000000-0000-0000-0000-000000000003';
 RESET ROLE;

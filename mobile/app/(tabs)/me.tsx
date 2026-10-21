@@ -286,6 +286,8 @@ const createStyles = (Colors: ThemeColors) =>
       borderRadius: Radii.full,
       borderWidth: 3,
       borderColor: Colors.primary,
+      overflow: "hidden",
+      backgroundColor: Colors.secondary,
     },
     pctBadge: {
       position: "absolute",

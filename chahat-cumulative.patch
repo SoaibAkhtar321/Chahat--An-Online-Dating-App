@@ -1,0 +1,892 @@
+diff --git a/__tests__/appConfig.test.ts b/__tests__/appConfig.test.ts
+index a2dd189..f336d69 100644
+--- a/__tests__/appConfig.test.ts
++++ b/__tests__/appConfig.test.ts
+@@ -14,7 +14,8 @@ describe("appConfig", () => {
+       "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+     ]);
+     expect(status.billing.configured).toBe(false);
+-    expect(status.push.configured).toBe(false);
++    // Push is on by default (users still opt in via the consent notice and OS permission).
++    expect(status.push.configured).toBe(true);
+     expect(status.calls.configured).toBe(false);
+     expect(status.voiceMessages.configured).toBe(false);
+     expect(status.coinTopup.configured).toBe(false);
+@@ -50,7 +51,9 @@ describe("appConfig", () => {
+     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "True" })).toBe(false);
+     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "1" })).toBe(false);
+     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "false" })).toBe(false);
+-    expect(isServiceConfigured("push", { EXPO_PUBLIC_FEATURE_CALLS: "true" })).toBe(false);
++    expect(isServiceConfigured("push", { EXPO_PUBLIC_FEATURE_CALLS: "true" })).toBe(true);
++    expect(isServiceConfigured("push", { EXPO_PUBLIC_FEATURE_PUSH: "false" })).toBe(false);
++    expect(isServiceConfigured("push", {})).toBe(true);
+   });
+ 
+   it("lists missing keys across services", () => {
+diff --git a/docs/PUSH_SETUP.md b/docs/PUSH_SETUP.md
+index b68f8e2..a6f8642 100644
+--- a/docs/PUSH_SETUP.md
++++ b/docs/PUSH_SETUP.md
+@@ -1,5 +1,11 @@
+ # Push Notification Setup (attach later)
+ 
++**Update:** the client now has push **on by default** (`EXPO_PUBLIC_FEATURE_PUSH` only needs to be set to `false` to switch it off).
++On first run inside the app a member sees the in-app consent notice once, and on agreeing the phone's own notification
++permission prompt follows; the device is also re-registered whenever the app returns to the foreground. Notifications
++still only arrive once the server steps below (Firebase file, EAS FCM credential, `dispatch-push` deployed and scheduled)
++are done: those cannot be done from the app code.
++
+ The architecture is complete. Push stays **off** until you do the steps below. While off:
+ - the app never asks for notification permission and never registers a device
+   (`registerPushNotificationToken` returns `not_configured`),
+diff --git a/mobile/app.json b/mobile/app.json
+index 477e47c..63439eb 100644
+--- a/mobile/app.json
++++ b/mobile/app.json
+@@ -11,10 +11,10 @@
+     "splash": {
+       "image": "./assets/splash-icon.png",
+       "resizeMode": "contain",
+-      "backgroundColor": "#FAF7F5",
++      "backgroundColor": "#F5F0E9",
+       "dark": {
+         "image": "./assets/splash-icon.png",
+-        "backgroundColor": "#161014"
++        "backgroundColor": "#0E0A0F"
+       }
+     },
+     "ios": {
+diff --git a/mobile/app/(tabs)/_layout.tsx b/mobile/app/(tabs)/_layout.tsx
+index 055c9c7..096dee0 100644
+--- a/mobile/app/(tabs)/_layout.tsx
++++ b/mobile/app/(tabs)/_layout.tsx
+@@ -4,12 +4,15 @@ import { Compass, Heart, MessageCircle, User } from "lucide-react-native";
+ import { Typography } from "../../src/constants/theme";
+ import { useTheme } from "../../src/context/ThemeContext";
+ import { useMilo } from "../../src/context/MiloContext";
++import { PushSetup } from "../../src/components/notifications/PushSetup";
+ 
+ export default function TabsLayout() {
+   const { totalUnreadCount } = useMilo();
+   const { colors: Colors } = useTheme();
+ 
+   return (
++    <>
++    <PushSetup />
+     <Tabs
+       screenOptions={{
+         headerShown: false,
+@@ -66,5 +69,6 @@ export default function TabsLayout() {
+         }}
+       />
+     </Tabs>
++    </>
+   );
+ }
+diff --git a/mobile/app/(tabs)/discover.tsx b/mobile/app/(tabs)/discover.tsx
+index a071a6a..47f3f85 100644
+--- a/mobile/app/(tabs)/discover.tsx
++++ b/mobile/app/(tabs)/discover.tsx
+@@ -302,8 +302,8 @@ export default function DiscoverScreen() {
+             </View>
+             <Text style={styles.emptyTitle}>No one new right now</Text>
+             <Text style={styles.emptySubtitle}>
+-              Nobody new is within your maximum distance. Try a larger distance, wider age or fewer interests in
+-              filters, change your location, or check back later.
++              You have seen everyone who matches your filters, in every city. Try a wider age range or fewer
++              interests in filters, or check back later as new people join.
+             </Text>
+             <TouchableOpacity style={styles.resetBtn} onPress={() => router.push("/settings/location")}>
+               <Text style={styles.resetBtnText}>Change location</Text>
+diff --git a/mobile/app/(tabs)/me.tsx b/mobile/app/(tabs)/me.tsx
+index 56c71fe..5e0fe48 100644
+--- a/mobile/app/(tabs)/me.tsx
++++ b/mobile/app/(tabs)/me.tsx
+@@ -286,6 +286,8 @@ const createStyles = (Colors: ThemeColors) =>
+       borderRadius: Radii.full,
+       borderWidth: 3,
+       borderColor: Colors.primary,
++      overflow: "hidden",
++      backgroundColor: Colors.secondary,
+     },
+     pctBadge: {
+       position: "absolute",
+diff --git a/mobile/src/components/discovery/DiscoveryCard.tsx b/mobile/src/components/discovery/DiscoveryCard.tsx
+index 04c4241..8f16f7f 100644
+--- a/mobile/src/components/discovery/DiscoveryCard.tsx
++++ b/mobile/src/components/discovery/DiscoveryCard.tsx
+@@ -230,7 +230,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+     color: Colors.accent,
+   },
+   dailyBadge: {
+-    backgroundColor: "rgba(255, 107, 129, 0.9)",
++    backgroundColor: "rgba(212, 75, 53, 0.92)",
+     paddingHorizontal: 9,
+     paddingVertical: 4,
+     borderRadius: Radii.full,
+@@ -328,7 +328,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
+     flexDirection: "row",
+     alignItems: "center",
+     gap: 4,
+-    backgroundColor: "rgba(255, 107, 129, 0.35)",
++    backgroundColor: "rgba(212, 75, 53, 0.38)",
+     paddingHorizontal: 8,
+     paddingVertical: 4,
+     borderRadius: Radii.full,
+diff --git a/mobile/src/components/discovery/FilterModal.tsx b/mobile/src/components/discovery/FilterModal.tsx
+index 1f96bc1..704bddb 100644
+--- a/mobile/src/components/discovery/FilterModal.tsx
++++ b/mobile/src/components/discovery/FilterModal.tsx
+@@ -4,10 +4,10 @@ import { X, Check } from "lucide-react-native";
+ import { Radii, Typography, ThemeColors } from "../../constants/theme";
+ import { useTheme } from "../../context/ThemeContext";
+ import type { Filters } from "../../types";
+-import { INTERESTS, LANGUAGES, DEFAULT_FILTERS, MAX_DISCOVERY_RADIUS_KM } from "../../types";
++import { INTERESTS, LANGUAGES, DEFAULT_FILTERS } from "../../types";
+ import { Chip } from "../ui/Chip";
+ import { Button } from "../ui/Button";
+-import { Slider, RangeSlider } from "../ui/Slider";
++import { RangeSlider } from "../ui/Slider";
+ import { Alert } from "../../utils/alert";
+ import { hasUnsavedChanges } from "../../utils/navigation";
+ 
+@@ -107,20 +107,13 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
+             />
+           </View>
+ 
+-          {/* Distance Slider */}
++          {/* No distance control: Discover lists the closest people first and keeps widening outward,
++              so distance never hides anybody. */}
+           <View style={styles.section}>
+-            <Slider
+-              label="Maximum Distance"
+-              value={localFilters.distance}
+-              min={5}
+-              max={MAX_DISCOVERY_RADIUS_KM}
+-              step={5}
+-              unit="km"
+-              prefix="Up to "
+-              onChange={(distance) => {
+-                setLocalFilters((prev) => ({ ...prev, distance }));
+-              }}
+-            />
++            <Text style={styles.sectionTitle}>Discovery order</Text>
++            <Text style={{ color: Colors.mutedForeground, fontSize: 13, lineHeight: 19 }}>
++              The closest people to you come first, then it keeps widening outward until everyone is shown.
++            </Text>
+           </View>
+ 
+           {/* Interests */}
+diff --git a/mobile/src/components/notifications/PushSetup.tsx b/mobile/src/components/notifications/PushSetup.tsx
+new file mode 100644
+index 0000000..126f92f
+--- /dev/null
++++ b/mobile/src/components/notifications/PushSetup.tsx
+@@ -0,0 +1,27 @@
++import { useEffect } from "react";
++import { AppState } from "react-native";
++import { useAuth } from "../../context/AuthContext";
++import { isServiceConfigured } from "../../config/appConfig";
++import { promptForPushOnce, registerPushNotificationToken } from "../../services/notifications";
++
++/**
++ * Renders nothing. Mounted once the member is inside the app (after sign-in, legal acceptance and onboarding):
++ * - asks once for notification consent + the system permission (see promptForPushOnce),
++ * - re-registers the device whenever the app returns to the foreground, so notifications start working right after
++ *   the person turns the permission on in their phone settings, and a refreshed token is always stored.
++ */
++export function PushSetup() {
++  const { user } = useAuth();
++  const userId = user?.id;
++
++  useEffect(() => {
++    if (!userId || !isServiceConfigured("push")) return;
++    void promptForPushOnce(userId);
++    const sub = AppState.addEventListener("change", (state) => {
++      if (state === "active") void registerPushNotificationToken(userId);
++    });
++    return () => sub.remove();
++  }, [userId]);
++
++  return null;
++}
+diff --git a/mobile/src/components/profile/ProfilePhoto.tsx b/mobile/src/components/profile/ProfilePhoto.tsx
+index a38c00d..e7482d0 100644
+--- a/mobile/src/components/profile/ProfilePhoto.tsx
++++ b/mobile/src/components/profile/ProfilePhoto.tsx
+@@ -32,7 +32,9 @@ export function ProfilePhoto({
+ 
+   return (
+     <View
+-      style={style}
++      // overflow hidden clips the image to the container's rounded shape
++      // (borderRadius alone does not clip child images on Android).
++      style={[style, { overflow: "hidden" }]}
+       accessible
+       accessibilityRole="image"
+       accessibilityLabel={
+diff --git a/mobile/src/config/appConfig.ts b/mobile/src/config/appConfig.ts
+index 3031630..ab8be41 100644
+--- a/mobile/src/config/appConfig.ts
++++ b/mobile/src/config/appConfig.ts
+@@ -59,6 +59,12 @@ function isFlagOn(env: EnvSource, key: string): boolean {
+   return clean(env[key]) === "true";
+ }
+ 
++// Push is ON by default; only an explicit "false" turns it off (kill switch). Devices still ask the user for consent
++// and the OS notification permission before anything is registered.
++function isFlagOff(env: EnvSource, key: string): boolean {
++  return clean(env[key]).toLowerCase() === "false";
++}
++
+ function status(missing: string[]): ServiceStatus {
+   return { configured: missing.length === 0, missing };
+ }
+@@ -82,7 +88,7 @@ export function getServiceStatus(env: EnvSource = readPublicEnv()): ServiceStatu
+     // Same flag already used by mobile/src/services/subscription.ts (BILLING_ENABLED).
+     billing: flagStatus(env, "EXPO_PUBLIC_FEATURE_BILLING"),
+     // Turn these on only after the matching server secrets and credentials are attached.
+-    push: flagStatus(env, "EXPO_PUBLIC_FEATURE_PUSH"),
++    push: status(isFlagOff(env, "EXPO_PUBLIC_FEATURE_PUSH") ? ["EXPO_PUBLIC_FEATURE_PUSH"] : []),
+     calls: flagStatus(env, "EXPO_PUBLIC_FEATURE_CALLS"),
+     voiceMessages: flagStatus(env, "EXPO_PUBLIC_FEATURE_VOICE_MESSAGES"),
+     coinTopup: flagStatus(env, "EXPO_PUBLIC_FEATURE_COIN_TOPUP"),
+diff --git a/mobile/src/constants/theme.ts b/mobile/src/constants/theme.ts
+index 42c4af7..8016b00 100644
+--- a/mobile/src/constants/theme.ts
++++ b/mobile/src/constants/theme.ts
+@@ -1,5 +1,5 @@
+ // Chahat Mobile Design Tokens & Adaptive Theme System
+-// Featuring brand terracotta (#C84630) with rich warm plum accents
++// Featuring refined terracotta (#B8402C) with champagne-gold and warm plum accents
+ // Fully supporting System, Light, and Dark appearance modes.
+ 
+ export interface ThemeColors {
+@@ -48,93 +48,97 @@ export interface ThemeColors {
+ }
+ 
+ export const LightColors: ThemeColors = {
+-  primary: "#C84630",
+-  primaryForeground: "#FFFDFB",
+-  primaryHover: "#B33B26",
+-  brandGradient: ["#D4533C", "#B53926"] as const,
+-
+-  background: "#FAF7F5",
+-  surface: "#FFFDFB",
+-  surfaceSecondary: "#F3ECE8",
+-  card: "#FFFDFB",
+-  cardForeground: "#301F29",
+-  secondary: "#EDE7E3",
+-  secondaryForeground: "#301F29",
+-  muted: "#EFEBE8",
+-  mutedForeground: "#7A6C74",
+-
+-  foreground: "#301F29",
+-  textPrimary: "#301F29",
+-  textSecondary: "#7A6C74",
+-  ink: "#23141E",
+-  inkForeground: "#FFFDFB",
+-
+-  accent: "#E2A94C",
+-  accentForeground: "#2E1B0E",
+-  highlight: "#D9EDF2",
+-  highlightForeground: "#1B4F5B",
+-  destructive: "#D6392E",
++  // Eye-comfort light: warm ivory canvas (no pure white glare), softly raised
++  // porcelain cards, and plum-charcoal text instead of harsh black.
++  primary: "#B8402C",
++  primaryForeground: "#FFFFFF",
++  primaryHover: "#9E3322",
++  brandGradient: ["#C9503A", "#9E3222"] as const,
++
++  background: "#F5F0E9",
++  surface: "#FBF8F3",
++  surfaceSecondary: "#EEE7DE",
++  card: "#FBF8F3",
++  cardForeground: "#2A1D26",
++  secondary: "#EBE3D9",
++  secondaryForeground: "#2A1D26",
++  muted: "#EDE6DC",
++  mutedForeground: "#6F6068",
++
++  foreground: "#2A1D26",
++  textPrimary: "#2A1D26",
++  textSecondary: "#6F6068",
++  ink: "#1F1419",
++  inkForeground: "#FBF8F3",
++
++  accent: "#C79A4B",
++  accentForeground: "#2B1C0C",
++  highlight: "#DCE9EC",
++  highlightForeground: "#1F4A55",
++  destructive: "#C73A30",
+   destructiveForeground: "#FFFFFF",
+-  success: "#2E9E67",
++  success: "#2B8A5E",
+   successForeground: "#FFFFFF",
+ 
+-  border: "#E2DCD8",
+-  input: "#E2DCD8",
+-  inputBackground: "#FFFDFB",
+-  placeholder: "#A89C97",
+-  disabled: "#D6CFCB",
+-  overlay: "rgba(35, 20, 30, 0.6)",
+-  tabBarBackground: "#FAF7F5",
+-  messageOutgoing: "#C84630",
+-  messageOutgoingText: "#FFFDFB",
+-  messageIncoming: "#EDE7E3",
+-  messageIncomingText: "#301F29",
+-  photoFade: ["transparent", "rgba(35, 20, 30, 0.25)", "rgba(35, 20, 30, 0.92)"] as const,
++  border: "#E3DACF",
++  input: "#E3DACF",
++  inputBackground: "#FBF8F3",
++  placeholder: "#A09389",
++  disabled: "#D4CAC0",
++  overlay: "rgba(31, 20, 25, 0.55)",
++  tabBarBackground: "#F5F0E9",
++  messageOutgoing: "#B8402C",
++  messageOutgoingText: "#FFFFFF",
++  messageIncoming: "#EBE3D9",
++  messageIncomingText: "#2A1D26",
++  photoFade: ["transparent", "rgba(31, 20, 25, 0.25)", "rgba(31, 20, 25, 0.92)"] as const,
+ };
+ 
+ export const DarkColors: ThemeColors = {
+-  primary: "#E05A42",
+-  primaryForeground: "#FFFDFB",
+-  primaryHover: "#C84630",
+-  brandGradient: ["#E05A42", "#C84630"] as const,
+-
+-  background: "#161014",
+-  surface: "#241A21",
+-  surfaceSecondary: "#2F232B",
+-  card: "#241A21",
+-  cardForeground: "#F7F2F5",
+-  secondary: "#2F232B",
+-  secondaryForeground: "#F7F2F5",
+-  muted: "#2C2028",
+-  mutedForeground: "#A99BA4",
+-
+-  foreground: "#F7F2F5",
+-  textPrimary: "#F7F2F5",
+-  textSecondary: "#A99BA4",
+-  ink: "#100B0E",
+-  inkForeground: "#F7F2F5",
+-
+-  accent: "#F0B65E",
+-  accentForeground: "#1E120A",
+-  highlight: "#264853",
+-  highlightForeground: "#B2E1EC",
+-  destructive: "#E8564B",
++  // Premium dark: deep aubergine-ink with clearly stepped elevation layers,
++  // warm off-white text, a luminous coral primary and champagne-gold accent.
++  primary: "#D44B35",
++  primaryForeground: "#FFFFFF",
++  primaryHover: "#C4432E",
++  brandGradient: ["#EE6A52", "#C9452F"] as const,
++
++  background: "#0E0A0F",
++  surface: "#191219",
++  surfaceSecondary: "#241A23",
++  card: "#1D151D",
++  cardForeground: "#F4EEF1",
++  secondary: "#2A1F29",
++  secondaryForeground: "#F4EEF1",
++  muted: "#241A23",
++  mutedForeground: "#B2A3AD",
++
++  foreground: "#F4EEF1",
++  textPrimary: "#F4EEF1",
++  textSecondary: "#B2A3AD",
++  ink: "#0A070B",
++  inkForeground: "#F4EEF1",
++
++  accent: "#E3B766",
++  accentForeground: "#1E140A",
++  highlight: "#1F3D47",
++  highlightForeground: "#BDE6F0",
++  destructive: "#EC5E52",
+   destructiveForeground: "#FFFFFF",
+-  success: "#3BB97B",
+-  successForeground: "#FFFFFF",
+-
+-  border: "#3B2D37",
+-  input: "#3B2D37",
+-  inputBackground: "#241A21",
+-  placeholder: "#7D6E77",
+-  disabled: "#4A3B45",
+-  overlay: "rgba(0, 0, 0, 0.75)",
+-  tabBarBackground: "#1A1318",
+-  messageOutgoing: "#E05A42",
+-  messageOutgoingText: "#FFFDFB",
+-  messageIncoming: "#2F232B",
+-  messageIncomingText: "#F7F2F5",
+-  photoFade: ["transparent", "rgba(16, 11, 14, 0.35)", "rgba(16, 11, 14, 0.95)"] as const,
++  success: "#41C285",
++  successForeground: "#0B1F15",
++
++  border: "#33262F",
++  input: "#33262F",
++  inputBackground: "#191219",
++  placeholder: "#85767F",
++  disabled: "#443540",
++  overlay: "rgba(0, 0, 0, 0.78)",
++  tabBarBackground: "#140E14",
++  messageOutgoing: "#CB4A33",
++  messageOutgoingText: "#FFFFFF",
++  messageIncoming: "#2A1F29",
++  messageIncomingText: "#F4EEF1",
++  photoFade: ["transparent", "rgba(10, 7, 11, 0.4)", "rgba(10, 7, 11, 0.96)"] as const,
+ };
+ 
+ // Default export for backward compatibility
+@@ -162,27 +166,29 @@ export const Typography = {
+ };
+ 
+ export const Radii = {
+-  sm: 8,
+-  md: 12,
+-  lg: 16,
+-  xl: 20,
+-  xxl: 28,
++  sm: 10,
++  md: 14,
++  lg: 18,
++  xl: 24,
++  xxl: 32,
+   full: 9999,
+ };
+ 
+ export const Shadows = {
++  // Soft, warm, plum-tinted elevation: wide blur and low opacity reads as
++  // expensive; hard dark drop shadows read as cheap.
+   card: {
+-    shadowColor: "#301F29",
+-    shadowOffset: { width: 0, height: 6 },
+-    shadowOpacity: 0.1,
+-    shadowRadius: 12,
+-    elevation: 4,
++    shadowColor: "#2A1D26",
++    shadowOffset: { width: 0, height: 8 },
++    shadowOpacity: 0.08,
++    shadowRadius: 20,
++    elevation: 3,
+   },
+   glow: {
+-    shadowColor: "#C84630",
+-    shadowOffset: { width: 0, height: 4 },
+-    shadowOpacity: 0.35,
+-    shadowRadius: 10,
+-    elevation: 6,
++    shadowColor: "#B8402C",
++    shadowOffset: { width: 0, height: 6 },
++    shadowOpacity: 0.28,
++    shadowRadius: 16,
++    elevation: 5,
+   },
+ };
+diff --git a/mobile/src/services/discovery.ts b/mobile/src/services/discovery.ts
+index 02b5b86..7ab6567 100644
+--- a/mobile/src/services/discovery.ts
++++ b/mobile/src/services/discovery.ts
+@@ -109,10 +109,11 @@ export interface DiscoveryPage {
+ const RADIUS_FALLBACKS_KM = [250, 100, 50, 25];
+ 
+ /**
+- * One page of the feed, nearest first. `filters.distance` is the member's MAXIMUM radius: the server orders by
+- * distance (device coordinates, else city centres) and keyset-pages with (distance, id), so a sparse
+- * neighbourhood naturally continues into neighbouring and farther cities up to that maximum, with no
+- * duplicates across pages. The deck is only empty when nobody eligible is within the maximum radius.
++ * One page of the feed. The server returns a GLOBAL feed ordered by real distance from the member's (rounded) device
++ * location, nearest first, with no upper limit: nearby people, then progressively farther ones, including other
++ * states and countries. Members with no usable position come last. Keyset paging on (key, id) means no duplicates
++ * across pages. `filters.distance` is only sent for compatibility with the RPC signature and no longer hides anyone;
++ * the deck is empty only when nobody eligible (age, interests, languages, blocks, swipes) is left anywhere.
+  */
+ export async function fetchDiscoveryPage(
+   filters?: import("../types").Filters,
+diff --git a/mobile/src/services/notifications.ts b/mobile/src/services/notifications.ts
+index 3d3e80c..1f7f013 100644
+--- a/mobile/src/services/notifications.ts
++++ b/mobile/src/services/notifications.ts
+@@ -8,7 +8,7 @@ import { secureKey } from "./secureKey";
+ import { Platform } from "react-native";
+ import { isServiceConfigured } from "../config/appConfig";
+ import { supabase, isSupabaseConfigured } from "./supabase";
+-import { hasConsent } from "./consent";
++import { ensureConsent, fetchMyConsents, hasConsent } from "./consent";
+ import { getActiveConversation } from "./activeConversation";
+ import { shouldPresentInForeground } from "./notificationPolicy";
+ 
+@@ -62,8 +62,8 @@ const LOCK_SCREEN_DETAILS: readonly LockScreenDetails[] = ["none", "name", "prev
+ 
+ const LEGACY_STORAGE_KEY_NOTICES = "milo_notifications_inbox";
+ const LEGACY_STORAGE_KEY_PREFS = "milo_notification_prefs";
+-const LEGACY_STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
+ const PUSH_PERMISSION_PROMPT_KEY = "milo_push_permission_prompted";
++const LEGACY_STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
+ const inboxKey = (userId: string) => `${LEGACY_STORAGE_KEY_NOTICES}:${userId}`;
+ const pushTokenKey = (userId: string) => secureKey(`milo_expo_push_token_${userId}`);
+ 
+@@ -325,6 +325,32 @@ export async function registerPushNotificationToken(
+   }
+ }
+ 
++const pushNoticeShownKey = (userId: string) => `chahat_push_notice_shown:${userId}`;
++
++/**
++ * First-run notification opt-in. Runs once per account on a real phone: shows the in-app notice (consent is required by
++ * privacy law before a device token is stored), and when the person agrees, continues straight to the system
++ * notification permission (Android 13+ and iOS ask at runtime) and registers the device. Declining is remembered and
++ * never re-asked automatically; it can be changed any time in Settings. Members who already agreed are registered by the
++ * normal sign-in flow, and members who withdrew are left alone.
++ */
++export async function promptForPushOnce(
++  userId: string,
++): Promise<PushRegistrationResult | { status: "skipped" }> {
++  try {
++    if (!userId || !isServiceConfigured("push") || !isSupabaseConfigured()) return { status: "skipped" };
++    if ((Platform.OS !== "ios" && Platform.OS !== "android") || !Device.isDevice) return { status: "skipped" };
++    const state = (await fetchMyConsents()).push_notifications;
++    if (state.decision !== null) return { status: "skipped" };
++    if (await AsyncStorage.getItem(pushNoticeShownKey(userId))) return { status: "skipped" };
++    await AsyncStorage.setItem(pushNoticeShownKey(userId), "1");
++    if (!(await ensureConsent("push_notifications"))) return { status: "skipped" };
++    return await registerPushNotificationToken(userId);
++  } catch {
++    return { status: "skipped" };
++  }
++}
++
+ export async function unregisterPushNotificationToken(
+   userId: string,
+ ): Promise<{ success: boolean; error?: string }> {
+diff --git a/mobile/src/types/index.ts b/mobile/src/types/index.ts
+index 1efe37e..4871491 100644
+--- a/mobile/src/types/index.ts
++++ b/mobile/src/types/index.ts
+@@ -199,7 +199,7 @@ export const LANGUAGES = [
+ /** Largest radius the server accepts (app_settings.discovery_max_radius_km, default 500). */
+ export const MAX_DISCOVERY_RADIUS_KM = 500;
+ 
+-/** Default MAXIMUM distance. Results are ordered nearest first, so this only bounds how far the feed may reach. */
++/** Legacy distance value sent to the feed RPC. The feed is global (own city, then nearest cities outward), so it no longer limits who is shown. */
+ export const DEFAULT_FILTERS: Filters = {
+   ageMin: 18,
+   ageMax: 35,
+diff --git a/supabase/migrations/20260101005000_discovery_global_feed.sql b/supabase/migrations/20260101005000_discovery_global_feed.sql
+new file mode 100644
+index 0000000..d1b1f92
+--- /dev/null
++++ b/supabase/migrations/20260101005000_discovery_global_feed.sql
+@@ -0,0 +1,175 @@
++-- 20260101005000_discovery_global_feed.sql
++-- Discovery is now a GLOBAL feed ordered purely by real distance, with no radius cap and no city tiers.
++-- Every eligible member (gender, age, filters, blocks and swipes still apply) is reachable, nearest first:
++--   the closest people come first and the feed keeps widening outward (nearby, then farther towns, other states,
++--   other countries) until everyone has been shown. This is the "expanding radius" behaviour done in one ordered
++--   pass: someone 3 km away always precedes someone 12 km away, who precedes someone 40 km away, and so on.
++-- Position used for distance: the member's rounded device location (when fresh and shared), else their city centre,
++-- else the member is listed last (no usable position). Distances are bucketed (5 km steps) and members who hide
++-- distance are coarsened to 25 km steps, exactly as before, so no exact position is ever exposed.
++-- Previously a member beyond the radius, or without a known city centre, was never returned, so a sparse area
++-- (for example one person in Mumbai while the viewer is in Delhi) produced an empty or incomplete deck.
++--
++-- Signature, return type, grants and privacy rules are unchanged (single overload). `_radius_km` / `_min_radius_km`
++-- are still validated so older clients keep working, but `_radius_km` no longer excludes anyone.
++--
++-- Paging key (cursor_distance_m): bucket metres, or 1,000,000,000 when the position is unknown; keyset (key, id).
++BEGIN;
++
++CREATE OR REPLACE FUNCTION public.get_discovery_feed_page(
++  _limit integer DEFAULT 20,
++  _age_min integer DEFAULT 18,
++  _age_max integer DEFAULT 99,
++  _radius_km integer DEFAULT 50,
++  _intents text[] DEFAULT '{}',
++  _interests text[] DEFAULT '{}',
++  _languages text[] DEFAULT '{}',
++  _after_distance_m integer DEFAULT NULL,
++  _after_id text DEFAULT NULL,
++  _min_radius_km integer DEFAULT 0
++)
++RETURNS TABLE (
++  id text,
++  name text,
++  age integer,
++  city text,
++  bio text,
++  work text,
++  education text,
++  interests text[],
++  intents text[],
++  languages text[],
++  lifestyle jsonb,
++  prompt jsonb,
++  photos jsonb,
++  distance_km integer,
++  cursor_distance_m integer,
++  distance_basis text
++)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = public, pg_temp
++AS $$
++DECLARE
++  _uid uuid := auth.uid();
++  _me public.profiles;
++  _origin public.discovery_locations;
++  _max_radius integer := public.billing_setting_int('discovery_max_radius_km', 500, 1, 1000);
++  _city_lat double precision;
++  _city_lng double precision;
++  _anchor_lat double precision;
++  _anchor_lng double precision;
++  _anchor_basis text;
++BEGIN
++  IF _uid IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
++  IF _limit IS NULL OR _limit < 1 OR _limit > 50
++     OR _age_min IS NULL OR _age_max IS NULL OR _age_min < 18 OR _age_max > 99 OR _age_min > _age_max
++     OR _radius_km IS NULL OR _radius_km < 1 OR _radius_km > _max_radius
++     OR _min_radius_km IS NULL OR _min_radius_km < 0 OR _min_radius_km >= _radius_km
++     OR coalesce(cardinality(_intents), 0) > 6
++     OR coalesce(cardinality(_interests), 0) > 10
++     OR coalesce(cardinality(_languages), 0) > 16
++     OR ((_after_distance_m IS NULL) <> (_after_id IS NULL))
++     OR (_after_distance_m IS NOT NULL AND (_after_distance_m < 0 OR char_length(_after_id) > 128)) THEN
++    RAISE EXCEPTION 'Invalid discovery filters or cursor';
++  END IF;
++
++  SELECT * INTO _me FROM public.profiles p
++  WHERE p.id = _uid::text AND p.user_id = _uid AND p.status = 'active';
++  IF _me.id IS NULL OR NOT _me.onboarded THEN RAISE EXCEPTION 'Completed active profile required'; END IF;
++
++  SELECT * INTO _origin FROM public.discovery_locations l
++  WHERE l.user_id = _uid AND l.updated_at >= now() - interval '72 hours';
++
++  SELECT c.latitude, c.longitude INTO _city_lat, _city_lng
++  FROM public.city_centroids c WHERE c.name_key = public.normalize_city_key(_me.city);
++
++  -- Anchor: fresh device coordinates, else the selected city's centre, else none (then no distance is known and everyone is listed last).
++  IF _origin.user_id IS NOT NULL THEN
++    _anchor_lat := _origin.latitude; _anchor_lng := _origin.longitude; _anchor_basis := 'device';
++  ELSIF _city_lat IS NOT NULL THEN
++    _anchor_lat := _city_lat; _anchor_lng := _city_lng; _anchor_basis := 'city';
++  END IF;
++
++  RETURN QUERY
++  WITH raw_candidates AS (
++    SELECT
++      p.id, p.name,
++      date_part('year', age(p.dob))::integer AS age,
++      p.city, p.bio, p.work, p.education, p.interests, p.intents, p.languages, p.lifestyle, p.prompt,
++      public.public_photos(p.id, p.photos) AS photos,
++      coalesce(st.share_distance, true) AS share,
++      -- Device position (hidden-distance members are coarsened to ~11 km), else the city centre.
++      CASE WHEN loc.user_id IS NOT NULL THEN
++             CASE WHEN coalesce(st.share_distance, true) THEN loc.latitude
++                  ELSE round(loc.latitude::numeric, 1)::double precision END
++           ELSE cc.latitude END AS pos_lat,
++      CASE WHEN loc.user_id IS NOT NULL THEN
++             CASE WHEN coalesce(st.share_distance, true) THEN loc.longitude
++                  ELSE round(loc.longitude::numeric, 1)::double precision END
++           ELSE cc.longitude END AS pos_lng,
++      CASE WHEN loc.user_id IS NOT NULL THEN 'device'
++           WHEN cc.name_key IS NOT NULL THEN 'city' END AS pos_basis
++    FROM public.profiles p
++    LEFT JOIN public.discovery_locations loc
++      ON loc.user_id = p.user_id AND loc.updated_at >= now() - interval '72 hours'
++    LEFT JOIN public.discovery_location_settings st ON st.user_id = p.user_id
++    LEFT JOIN public.city_centroids cc ON cc.name_key = public.normalize_city_key(p.city)
++    WHERE p.id <> _uid::text
++      AND p.status = 'active'
++      AND p.onboarded
++      AND NOT p.is_demo
++      AND NOT EXISTS (
++        SELECT 1 FROM public.blocks b
++        WHERE (b.blocker = _uid::text AND b.blocked = p.id)
++           OR (b.blocker = p.id AND b.blocked = _uid::text)
++      )
++      AND NOT EXISTS (
++        SELECT 1 FROM public.swipes s WHERE s.from_id = _uid::text AND s.to_id = p.id
++      )
++      AND (_me.seeking = '' OR p.gender = '' OR p.gender = _me.seeking)
++      AND p.dob IS NOT NULL
++      AND date_part('year', age(p.dob))::integer BETWEEN _age_min AND _age_max
++      AND (coalesce(cardinality(_intents), 0) = 0 OR p.intents && _intents)
++      AND (coalesce(cardinality(_interests), 0) = 0 OR p.interests && _interests)
++      AND (coalesce(cardinality(_languages), 0) = 0 OR p.languages && _languages)
++  ), scored AS (
++    SELECT
++      c.*,
++      CASE
++        WHEN _anchor_basis IS NOT NULL AND c.pos_lat IS NOT NULL THEN
++          public.distance_bucket_km(public.haversine_km(_anchor_lat, _anchor_lng, c.pos_lat, c.pos_lng))
++        ELSE NULL
++      END AS bucket_km
++    FROM raw_candidates c
++  ), ranked AS (
++    SELECT s.*,
++           CASE
++             WHEN s.bucket_km IS NULL THEN 1000000000
++             WHEN s.share THEN s.bucket_km * 1000
++             ELSE (ceil(s.bucket_km / 25.0) * 25)::integer * 1000
++           END AS order_distance_m
++    FROM scored s
++    WHERE _min_radius_km = 0 OR coalesce(s.bucket_km, 0) > _min_radius_km
++  )
++  SELECT
++    r.id, r.name, r.age, r.city, r.bio, r.work, r.education, r.interests, r.intents,
++    r.languages, r.lifestyle, r.prompt, r.photos,
++    CASE WHEN r.share THEN r.bucket_km END,
++    r.order_distance_m,
++    CASE WHEN r.bucket_km IS NULL THEN NULL
++         WHEN _anchor_basis = 'device' AND r.pos_basis = 'device' THEN 'device'
++         ELSE 'city' END
++  FROM ranked r
++  WHERE _after_distance_m IS NULL OR (r.order_distance_m, r.id) > (_after_distance_m, _after_id)
++  ORDER BY r.order_distance_m, r.id
++  LIMIT _limit;
++END
++$$;
++REVOKE EXECUTE ON FUNCTION public.get_discovery_feed_page(
++  integer, integer, integer, integer, text[], text[], text[], integer, text, integer) FROM PUBLIC, anon;
++GRANT EXECUTE ON FUNCTION public.get_discovery_feed_page(
++  integer, integer, integer, integer, text[], text[], text[], integer, text, integer) TO authenticated;
++
++COMMIT;
+diff --git a/supabase/tests/39_location_discovery.sql b/supabase/tests/39_location_discovery.sql
+index 68b7687..ce0bcdf 100644
+--- a/supabase/tests/39_location_discovery.sql
++++ b/supabase/tests/39_location_discovery.sql
+@@ -92,8 +92,8 @@ SELECT 'next cursor returns distinct tied-distance profile',
+   coalesce(string_agg(id, ','), 'empty')
+ FROM location_page_two;
+ INSERT INTO public.t_results
+-SELECT 'outside radius is excluded',
+-  count(*) = 0, count(*)::text
++SELECT 'radius no longer excludes distant members (global feed)',
++  count(*) = 1, count(*)::text
+ FROM public.get_discovery_feed_page(50, 18, 99, 50, '{}', '{}', '{}', NULL, NULL)
+ WHERE id = '50000000-0000-0000-0000-000000000003';
+ RESET ROLE;
+diff --git a/supabase/tests/48_location_privacy.sql b/supabase/tests/48_location_privacy.sql
+index 3c70603..eb38015 100644
+--- a/supabase/tests/48_location_privacy.sql
++++ b/supabase/tests/48_location_privacy.sql
+@@ -92,13 +92,13 @@ INSERT INTO public.t_results SELECT 'feed: nearest first (Near before Far)',
+   (SELECT array_position(array_agg(id ORDER BY ord), '90000000-0000-0000-0000-000000000002')
+         < array_position(array_agg(id ORDER BY ord), '90000000-0000-0000-0000-000000000003')
+    FROM (SELECT id, row_number() OVER () ord FROM public.get_discovery_feed_page(50,18,99,500,'{}','{}','{}',NULL,NULL)) q), 'order';
+-INSERT INTO public.t_results SELECT 'feed radius 50: includes Near, excludes Far',
++INSERT INTO public.t_results SELECT 'feed radius 50: Far is still returned (global feed), after Near',
+   EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,50,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002')
+-  AND NOT EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,50,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000003'), 'radius';
++  AND EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,50,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000003'), 'radius';
+ INSERT INTO public.t_results SELECT 'feed radius 200 includes Far',
+   EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,200,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000003'), 'radius200';
+-INSERT INTO public.t_results SELECT 'feed: radius filter follows the bucket (a 6 km neighbour is excluded at radius 3, included at 6)',
+-  NOT EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,3,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002')
++INSERT INTO public.t_results SELECT 'feed: radius is advisory only (a 6 km neighbour is returned at radius 3 and at 6)',
++  EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,3,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002')
+   AND EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,6,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002'), 'bucket radius';
+ INSERT INTO public.t_results SELECT 'feed: hidden-distance member shows no distance',
+   count(*)=1 AND bool_and(distance_km IS NULL), count(*)::text
+diff --git a/supabase/tests/62_discovery_city_anchor.sql b/supabase/tests/62_discovery_city_anchor.sql
+index 5cbadb6..a3ac59d 100644
+--- a/supabase/tests/62_discovery_city_anchor.sql
++++ b/supabase/tests/62_discovery_city_anchor.sql
+@@ -55,34 +55,30 @@ VALUES ('62000000-0000-0000-0000-000000000001', '62000000-0000-0000-0000-0000000
+ 
+ -- 1. City-anchored viewer (no device coordinates) --------------------------------------------------------------------
+ SET ROLE authenticated; SET request.jwt.claim.sub = '62000000-0000-0000-0000-000000000001';
+-INSERT INTO public.t_results SELECT 'p5 feed: city anchor at 150 km returns Pune, Pune-with-fix and Mumbai only',
++INSERT INTO public.t_results SELECT 'p5 feed: global feed returns every eligible member regardless of the radius (150 km)',
+   coalesce(array_agg(id ORDER BY id), '{}') = ARRAY[
+-    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000014'],
++    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000013',
++    '62000000-0000-0000-0000-000000000014', '62000000-0000-0000-0000-000000000015', '62000000-0000-0000-0000-000000000016'],
+   coalesce(string_agg(right(id, 2), ',' ORDER BY id), 'none')
+   FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
+-INSERT INTO public.t_results SELECT 'p5 feed: nearest first (Pune, then Pune-with-fix, then Mumbai)',
+-  coalesce(array_agg(id ORDER BY cursor_distance_m, id), '{}') = ARRAY[
+-    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014', '62000000-0000-0000-0000-000000000012'],
+-  coalesce(string_agg(right(id, 2), ',' ORDER BY cursor_distance_m, id), 'none')
+-  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
+-INSERT INTO public.t_results SELECT 'p5 feed: a farther city is excluded by a smaller maximum radius (100 km drops Mumbai)',
+-  coalesce(array_agg(id ORDER BY id), '{}') = ARRAY[
+-    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014'],
+-  coalesce(string_agg(right(id, 2), ',' ORDER BY id), 'none')
+-  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 100, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
+-INSERT INTO public.t_results SELECT 'p5 feed: widening to 200 km expands to Nashik, still not Delhi',
++INSERT INTO public.t_results SELECT 'p5 feed: strictly nearest first by distance, no-position members last (Pune, Pune-with-fix, Mumbai, Nashik, Delhi, Smalltown)',
+   coalesce(array_agg(id ORDER BY cursor_distance_m, id), '{}') = ARRAY[
+     '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014',
+-    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016'],
++    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016',
++    '62000000-0000-0000-0000-000000000013', '62000000-0000-0000-0000-000000000015'],
+   coalesce(string_agg(right(id, 2), ',' ORDER BY cursor_distance_m, id), 'none')
+-  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 200, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
+-INSERT INTO public.t_results SELECT 'p5 feed: distant cities appear within the configured maximum (Delhi at 1500 is out of range at 500)',
+-  NOT EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 500, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
+-              WHERE id = '62000000-0000-0000-0000-000000000013'), 'delhi';
++  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
++INSERT INTO public.t_results SELECT 'p5 feed: a small radius (100 km) no longer drops Mumbai',
++  EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 100, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
++          WHERE id = '62000000-0000-0000-0000-000000000012'), 'mumbai';
++INSERT INTO public.t_results SELECT 'p5 feed: distant cities (Delhi) are reachable even at the default radius',
++  EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 500, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
++          WHERE id = '62000000-0000-0000-0000-000000000013'), 'delhi';
+ 
+ -- 2. Distance labels: city-level, bucketed, never exact; hidden distance respected ----------------------------------
+ INSERT INTO public.t_results SELECT 'p5 feed: city-anchored distances are flagged city, never device',
+-  count(*) = 3 AND bool_and(distance_basis = 'city'), string_agg(distance_basis, ',')
++  count(*) = 6 AND bool_and(distance_basis = 'city') FILTER (WHERE id <> '62000000-0000-0000-0000-000000000015'),
++  string_agg(coalesce(distance_basis, 'none'), ',')
+   FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
+ INSERT INTO public.t_results SELECT 'p5 feed: Mumbai is city-to-city bucketed (115-130 km, multiple of 5)',
+   count(*) = 1 AND bool_and(distance_km BETWEEN 115 AND 130 AND distance_km % 5 = 0), coalesce(max(distance_km)::text, 'none')
+@@ -97,11 +93,13 @@ INSERT INTO public.t_results SELECT 'p5 feed: cursor exposes only the bucket, ne
+   FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 200, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
+ 
+ -- 3. Existing product rules are preserved --------------------------------------------------------------------------
+-INSERT INTO public.t_results SELECT 'p5 feed: blocked, swiped, wrong-gender, suspended and unsupported-city members are excluded',
++INSERT INTO public.t_results SELECT 'p5 feed: blocked, swiped, wrong-gender and suspended members are excluded',
+   NOT EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 99, 500, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
+               WHERE id IN ('62000000-0000-0000-0000-000000000017', '62000000-0000-0000-0000-000000000018',
+-                           '62000000-0000-0000-0000-000000000019', '62000000-0000-0000-0000-00000000001b',
+-                           '62000000-0000-0000-0000-000000000015')), 'excluded';
++                           '62000000-0000-0000-0000-000000000019', '62000000-0000-0000-0000-00000000001b')), 'excluded';
++INSERT INTO public.t_results SELECT 'p5 feed: a member whose city has no known centre is still shown (last)',
++  EXISTS (SELECT 1 FROM public.get_discovery_feed_page(50, 18, 99, 500, '{}', '{}', '{}', NULL, NULL)
++          WHERE id = '62000000-0000-0000-0000-000000000015'), 'smalltown';
+ INSERT INTO public.t_results SELECT 'p5 feed: the age filter still applies',
+   NOT EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
+               WHERE id = '62000000-0000-0000-0000-00000000001a')
+@@ -141,7 +139,8 @@ END $$;
+ INSERT INTO public.t_results SELECT 'p5 feed: paging one at a time yields every eligible profile exactly once, nearest first',
+   (SELECT array_agg(id ORDER BY page) FROM p5_pages) = ARRAY[
+     '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014',
+-    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016']
++    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016',
++    '62000000-0000-0000-0000-000000000013', '62000000-0000-0000-0000-000000000015']
+   AND (SELECT count(DISTINCT id) FROM p5_pages) = (SELECT count(*) FROM p5_pages),
+   coalesce((SELECT string_agg(right(id, 2), ',' ORDER BY page) FROM p5_pages), 'none');
+ RESET ROLE;
+diff --git a/supabase/tests/65_discovery_cursor_hidden_distance.sql b/supabase/tests/65_discovery_cursor_hidden_distance.sql
+index d08bf99..3ffc5a7 100644
+--- a/supabase/tests/65_discovery_cursor_hidden_distance.sql
++++ b/supabase/tests/65_discovery_cursor_hidden_distance.sql
+@@ -63,9 +63,9 @@ INSERT INTO public.t_results SELECT 'p6 cursor: the page after the last member i
+   NOT EXISTS (SELECT 1 FROM public.get_discovery_feed_page(10, 18, 99, 150, '{}', '{t65cursor}', '{}',
+        (SELECT cursor_distance_m FROM t65 WHERE id = '65000000-0000-0000-0000-000000000012'),
+        '65000000-0000-0000-0000-000000000012')), 'end';
+--- Radius membership unchanged: a 5 km radius excludes both (they are ~11 km away).
+-INSERT INTO public.t_results SELECT 'p6 cursor: radius still uses the real bucket (5 km radius excludes both)',
+-  NOT EXISTS (SELECT 1 FROM public.get_discovery_feed_page(50, 18, 99, 5, '{}', '{t65cursor}', '{}', NULL, NULL)), 'radius';
++-- Global feed: the radius is advisory only, so a 5 km radius still returns both (they are ~11 km away).
++INSERT INTO public.t_results SELECT 'p6 cursor: a small radius no longer excludes anyone (global feed)',
++  (SELECT count(*) FROM public.get_discovery_feed_page(50, 18, 99, 5, '{}', '{t65cursor}', '{}', NULL, NULL)) = 2, 'radius';
+ RESET ROLE;
+ DROP TABLE t65;
+ 

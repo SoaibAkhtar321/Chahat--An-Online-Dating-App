@@ -199,7 +199,7 @@ export const LANGUAGES = [
 /** Largest radius the server accepts (app_settings.discovery_max_radius_km, default 500). */
 export const MAX_DISCOVERY_RADIUS_KM = 500;
 
-/** Default MAXIMUM distance. Results are ordered nearest first, so this only bounds how far the feed may reach. */
+/** Legacy distance value sent to the feed RPC. The feed is global (own city, then nearest cities outward), so it no longer limits who is shown. */
 export const DEFAULT_FILTERS: Filters = {
   ageMin: 18,
   ageMax: 35,

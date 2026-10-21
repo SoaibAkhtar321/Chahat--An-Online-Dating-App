@@ -59,6 +59,12 @@ function isFlagOn(env: EnvSource, key: string): boolean {
   return clean(env[key]) === "true";
 }
 
+// Push is ON by default; only an explicit "false" turns it off (kill switch). Devices still ask the user for consent
+// and the OS notification permission before anything is registered.
+function isFlagOff(env: EnvSource, key: string): boolean {
+  return clean(env[key]).toLowerCase() === "false";
+}
+
 function status(missing: string[]): ServiceStatus {
   return { configured: missing.length === 0, missing };
 }
@@ -82,7 +88,7 @@ export function getServiceStatus(env: EnvSource = readPublicEnv()): ServiceStatu
     // Same flag already used by mobile/src/services/subscription.ts (BILLING_ENABLED).
     billing: flagStatus(env, "EXPO_PUBLIC_FEATURE_BILLING"),
     // Turn these on only after the matching server secrets and credentials are attached.
-    push: flagStatus(env, "EXPO_PUBLIC_FEATURE_PUSH"),
+    push: status(isFlagOff(env, "EXPO_PUBLIC_FEATURE_PUSH") ? ["EXPO_PUBLIC_FEATURE_PUSH"] : []),
     calls: flagStatus(env, "EXPO_PUBLIC_FEATURE_CALLS"),
     voiceMessages: flagStatus(env, "EXPO_PUBLIC_FEATURE_VOICE_MESSAGES"),
     coinTopup: flagStatus(env, "EXPO_PUBLIC_FEATURE_COIN_TOPUP"),

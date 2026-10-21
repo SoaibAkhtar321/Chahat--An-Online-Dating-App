@@ -302,8 +302,8 @@ export default function DiscoverScreen() {
             </View>
             <Text style={styles.emptyTitle}>No one new right now</Text>
             <Text style={styles.emptySubtitle}>
-              Nobody new is within your maximum distance. Try a larger distance, wider age or fewer interests in
-              filters, change your location, or check back later.
+              You have seen everyone who matches your filters, in every city. Try a wider age range or fewer
+              interests in filters, or check back later as new people join.
             </Text>
             <TouchableOpacity style={styles.resetBtn} onPress={() => router.push("/settings/location")}>
               <Text style={styles.resetBtnText}>Change location</Text>

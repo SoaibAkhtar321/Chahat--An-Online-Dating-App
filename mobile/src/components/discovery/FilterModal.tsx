@@ -4,10 +4,10 @@ import { X, Check } from "lucide-react-native";
 import { Radii, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Filters } from "../../types";
-import { INTERESTS, LANGUAGES, DEFAULT_FILTERS, MAX_DISCOVERY_RADIUS_KM } from "../../types";
+import { INTERESTS, LANGUAGES, DEFAULT_FILTERS } from "../../types";
 import { Chip } from "../ui/Chip";
 import { Button } from "../ui/Button";
-import { Slider, RangeSlider } from "../ui/Slider";
+import { RangeSlider } from "../ui/Slider";
 import { Alert } from "../../utils/alert";
 import { hasUnsavedChanges } from "../../utils/navigation";
 
@@ -107,20 +107,13 @@ export const FilterModal: React.FC<FilterModalProps> = ({ visible, filters, onCl
             />
           </View>
 
-          {/* Distance Slider */}
+          {/* No distance control: Discover lists the closest people first and keeps widening outward,
+              so distance never hides anybody. */}
           <View style={styles.section}>
-            <Slider
-              label="Maximum Distance"
-              value={localFilters.distance}
-              min={5}
-              max={MAX_DISCOVERY_RADIUS_KM}
-              step={5}
-              unit="km"
-              prefix="Up to "
-              onChange={(distance) => {
-                setLocalFilters((prev) => ({ ...prev, distance }));
-              }}
-            />
+            <Text style={styles.sectionTitle}>Discovery order</Text>
+            <Text style={{ color: Colors.mutedForeground, fontSize: 13, lineHeight: 19 }}>
+              The closest people to you come first, then it keeps widening outward until everyone is shown.
+            </Text>
           </View>
 
           {/* Interests */}

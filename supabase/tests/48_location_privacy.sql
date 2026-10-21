@@ -92,13 +92,13 @@ INSERT INTO public.t_results SELECT 'feed: nearest first (Near before Far)',
   (SELECT array_position(array_agg(id ORDER BY ord), '90000000-0000-0000-0000-000000000002')
         < array_position(array_agg(id ORDER BY ord), '90000000-0000-0000-0000-000000000003')
    FROM (SELECT id, row_number() OVER () ord FROM public.get_discovery_feed_page(50,18,99,500,'{}','{}','{}',NULL,NULL)) q), 'order';
-INSERT INTO public.t_results SELECT 'feed radius 50: includes Near, excludes Far',
+INSERT INTO public.t_results SELECT 'feed radius 50: Far is still returned (global feed), after Near',
   EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,50,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002')
-  AND NOT EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,50,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000003'), 'radius';
+  AND EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,50,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000003'), 'radius';
 INSERT INTO public.t_results SELECT 'feed radius 200 includes Far',
   EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,200,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000003'), 'radius200';
-INSERT INTO public.t_results SELECT 'feed: radius filter follows the bucket (a 6 km neighbour is excluded at radius 3, included at 6)',
-  NOT EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,3,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002')
+INSERT INTO public.t_results SELECT 'feed: radius is advisory only (a 6 km neighbour is returned at radius 3 and at 6)',
+  EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,3,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002')
   AND EXISTS(SELECT 1 FROM public.get_discovery_feed_page(50,18,99,6,'{}','{}','{}',NULL,NULL) WHERE id='90000000-0000-0000-0000-000000000002'), 'bucket radius';
 INSERT INTO public.t_results SELECT 'feed: hidden-distance member shows no distance',
   count(*)=1 AND bool_and(distance_km IS NULL), count(*)::text

@@ -55,34 +55,30 @@ VALUES ('62000000-0000-0000-0000-000000000001', '62000000-0000-0000-0000-0000000
 
 -- 1. City-anchored viewer (no device coordinates) --------------------------------------------------------------------
 SET ROLE authenticated; SET request.jwt.claim.sub = '62000000-0000-0000-0000-000000000001';
-INSERT INTO public.t_results SELECT 'p5 feed: city anchor at 150 km returns Pune, Pune-with-fix and Mumbai only',
+INSERT INTO public.t_results SELECT 'p5 feed: global feed returns every eligible member regardless of the radius (150 km)',
   coalesce(array_agg(id ORDER BY id), '{}') = ARRAY[
-    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000014'],
+    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000013',
+    '62000000-0000-0000-0000-000000000014', '62000000-0000-0000-0000-000000000015', '62000000-0000-0000-0000-000000000016'],
   coalesce(string_agg(right(id, 2), ',' ORDER BY id), 'none')
   FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
-INSERT INTO public.t_results SELECT 'p5 feed: nearest first (Pune, then Pune-with-fix, then Mumbai)',
-  coalesce(array_agg(id ORDER BY cursor_distance_m, id), '{}') = ARRAY[
-    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014', '62000000-0000-0000-0000-000000000012'],
-  coalesce(string_agg(right(id, 2), ',' ORDER BY cursor_distance_m, id), 'none')
-  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
-INSERT INTO public.t_results SELECT 'p5 feed: a farther city is excluded by a smaller maximum radius (100 km drops Mumbai)',
-  coalesce(array_agg(id ORDER BY id), '{}') = ARRAY[
-    '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014'],
-  coalesce(string_agg(right(id, 2), ',' ORDER BY id), 'none')
-  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 100, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
-INSERT INTO public.t_results SELECT 'p5 feed: widening to 200 km expands to Nashik, still not Delhi',
+INSERT INTO public.t_results SELECT 'p5 feed: strictly nearest first by distance, no-position members last (Pune, Pune-with-fix, Mumbai, Nashik, Delhi, Smalltown)',
   coalesce(array_agg(id ORDER BY cursor_distance_m, id), '{}') = ARRAY[
     '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014',
-    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016'],
+    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016',
+    '62000000-0000-0000-0000-000000000013', '62000000-0000-0000-0000-000000000015'],
   coalesce(string_agg(right(id, 2), ',' ORDER BY cursor_distance_m, id), 'none')
-  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 200, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
-INSERT INTO public.t_results SELECT 'p5 feed: distant cities appear within the configured maximum (Delhi at 1500 is out of range at 500)',
-  NOT EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 500, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
-              WHERE id = '62000000-0000-0000-0000-000000000013'), 'delhi';
+  FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
+INSERT INTO public.t_results SELECT 'p5 feed: a small radius (100 km) no longer drops Mumbai',
+  EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 100, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
+          WHERE id = '62000000-0000-0000-0000-000000000012'), 'mumbai';
+INSERT INTO public.t_results SELECT 'p5 feed: distant cities (Delhi) are reachable even at the default radius',
+  EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 500, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
+          WHERE id = '62000000-0000-0000-0000-000000000013'), 'delhi';
 
 -- 2. Distance labels: city-level, bucketed, never exact; hidden distance respected ----------------------------------
 INSERT INTO public.t_results SELECT 'p5 feed: city-anchored distances are flagged city, never device',
-  count(*) = 3 AND bool_and(distance_basis = 'city'), string_agg(distance_basis, ',')
+  count(*) = 6 AND bool_and(distance_basis = 'city') FILTER (WHERE id <> '62000000-0000-0000-0000-000000000015'),
+  string_agg(coalesce(distance_basis, 'none'), ',')
   FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
 INSERT INTO public.t_results SELECT 'p5 feed: Mumbai is city-to-city bucketed (115-130 km, multiple of 5)',
   count(*) = 1 AND bool_and(distance_km BETWEEN 115 AND 130 AND distance_km % 5 = 0), coalesce(max(distance_km)::text, 'none')
@@ -97,11 +93,13 @@ INSERT INTO public.t_results SELECT 'p5 feed: cursor exposes only the bucket, ne
   FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 200, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed;
 
 -- 3. Existing product rules are preserved --------------------------------------------------------------------------
-INSERT INTO public.t_results SELECT 'p5 feed: blocked, swiped, wrong-gender, suspended and unsupported-city members are excluded',
+INSERT INTO public.t_results SELECT 'p5 feed: blocked, swiped, wrong-gender and suspended members are excluded',
   NOT EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 99, 500, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
               WHERE id IN ('62000000-0000-0000-0000-000000000017', '62000000-0000-0000-0000-000000000018',
-                           '62000000-0000-0000-0000-000000000019', '62000000-0000-0000-0000-00000000001b',
-                           '62000000-0000-0000-0000-000000000015')), 'excluded';
+                           '62000000-0000-0000-0000-000000000019', '62000000-0000-0000-0000-00000000001b')), 'excluded';
+INSERT INTO public.t_results SELECT 'p5 feed: a member whose city has no known centre is still shown (last)',
+  EXISTS (SELECT 1 FROM public.get_discovery_feed_page(50, 18, 99, 500, '{}', '{}', '{}', NULL, NULL)
+          WHERE id = '62000000-0000-0000-0000-000000000015'), 'smalltown';
 INSERT INTO public.t_results SELECT 'p5 feed: the age filter still applies',
   NOT EXISTS (SELECT 1 FROM (SELECT * FROM public.get_discovery_feed_page(50, 18, 50, 150, '{}', '{}', '{}', NULL, NULL) WHERE id LIKE '62000000%') AS feed
               WHERE id = '62000000-0000-0000-0000-00000000001a')
@@ -141,7 +139,8 @@ END $$;
 INSERT INTO public.t_results SELECT 'p5 feed: paging one at a time yields every eligible profile exactly once, nearest first',
   (SELECT array_agg(id ORDER BY page) FROM p5_pages) = ARRAY[
     '62000000-0000-0000-0000-000000000011', '62000000-0000-0000-0000-000000000014',
-    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016']
+    '62000000-0000-0000-0000-000000000012', '62000000-0000-0000-0000-000000000016',
+    '62000000-0000-0000-0000-000000000013', '62000000-0000-0000-0000-000000000015']
   AND (SELECT count(DISTINCT id) FROM p5_pages) = (SELECT count(*) FROM p5_pages),
   coalesce((SELECT string_agg(right(id, 2), ',' ORDER BY page) FROM p5_pages), 'none');
 RESET ROLE;

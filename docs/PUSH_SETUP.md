@@ -1,5 +1,11 @@
 # Push Notification Setup (attach later)
 
+**Update:** the client now has push **on by default** (`EXPO_PUBLIC_FEATURE_PUSH` only needs to be set to `false` to switch it off).
+On first run inside the app a member sees the in-app consent notice once, and on agreeing the phone's own notification
+permission prompt follows; the device is also re-registered whenever the app returns to the foreground. Notifications
+still only arrive once the server steps below (Firebase file, EAS FCM credential, `dispatch-push` deployed and scheduled)
+are done: those cannot be done from the app code.
+
 The architecture is complete. Push stays **off** until you do the steps below. While off:
 - the app never asks for notification permission and never registers a device
   (`registerPushNotificationToken` returns `not_configured`),

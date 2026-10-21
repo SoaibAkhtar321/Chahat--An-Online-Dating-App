@@ -14,7 +14,8 @@ describe("appConfig", () => {
       "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
     ]);
     expect(status.billing.configured).toBe(false);
-    expect(status.push.configured).toBe(false);
+    // Push is on by default (users still opt in via the consent notice and OS permission).
+    expect(status.push.configured).toBe(true);
     expect(status.calls.configured).toBe(false);
     expect(status.voiceMessages.configured).toBe(false);
     expect(status.coinTopup.configured).toBe(false);
@@ -50,7 +51,9 @@ describe("appConfig", () => {
     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "True" })).toBe(false);
     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "1" })).toBe(false);
     expect(isServiceConfigured("calls", { EXPO_PUBLIC_FEATURE_CALLS: "false" })).toBe(false);
-    expect(isServiceConfigured("push", { EXPO_PUBLIC_FEATURE_CALLS: "true" })).toBe(false);
+    expect(isServiceConfigured("push", { EXPO_PUBLIC_FEATURE_CALLS: "true" })).toBe(true);
+    expect(isServiceConfigured("push", { EXPO_PUBLIC_FEATURE_PUSH: "false" })).toBe(false);
+    expect(isServiceConfigured("push", {})).toBe(true);
   });
 
   it("lists missing keys across services", () => {

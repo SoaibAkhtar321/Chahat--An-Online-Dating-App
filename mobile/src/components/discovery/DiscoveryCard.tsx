@@ -230,7 +230,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     color: Colors.accent,
   },
   dailyBadge: {
-    backgroundColor: "rgba(255, 107, 129, 0.9)",
+    backgroundColor: "rgba(212, 75, 53, 0.92)",
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: Radii.full,
@@ -328,7 +328,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(255, 107, 129, 0.35)",
+    backgroundColor: "rgba(212, 75, 53, 0.38)",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radii.full,

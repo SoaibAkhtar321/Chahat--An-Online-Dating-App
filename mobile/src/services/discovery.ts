@@ -109,10 +109,11 @@ export interface DiscoveryPage {
 const RADIUS_FALLBACKS_KM = [250, 100, 50, 25];
 
 /**
- * One page of the feed, nearest first. `filters.distance` is the member's MAXIMUM radius: the server orders by
- * distance (device coordinates, else city centres) and keyset-pages with (distance, id), so a sparse
- * neighbourhood naturally continues into neighbouring and farther cities up to that maximum, with no
- * duplicates across pages. The deck is only empty when nobody eligible is within the maximum radius.
+ * One page of the feed. The server returns a GLOBAL feed ordered by real distance from the member's (rounded) device
+ * location, nearest first, with no upper limit: nearby people, then progressively farther ones, including other
+ * states and countries. Members with no usable position come last. Keyset paging on (key, id) means no duplicates
+ * across pages. `filters.distance` is only sent for compatibility with the RPC signature and no longer hides anyone;
+ * the deck is empty only when nobody eligible (age, interests, languages, blocks, swipes) is left anywhere.
  */
 export async function fetchDiscoveryPage(
   filters?: import("../types").Filters,

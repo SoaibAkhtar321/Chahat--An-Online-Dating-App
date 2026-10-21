@@ -63,9 +63,9 @@ INSERT INTO public.t_results SELECT 'p6 cursor: the page after the last member i
   NOT EXISTS (SELECT 1 FROM public.get_discovery_feed_page(10, 18, 99, 150, '{}', '{t65cursor}', '{}',
        (SELECT cursor_distance_m FROM t65 WHERE id = '65000000-0000-0000-0000-000000000012'),
        '65000000-0000-0000-0000-000000000012')), 'end';
--- Radius membership unchanged: a 5 km radius excludes both (they are ~11 km away).
-INSERT INTO public.t_results SELECT 'p6 cursor: radius still uses the real bucket (5 km radius excludes both)',
-  NOT EXISTS (SELECT 1 FROM public.get_discovery_feed_page(50, 18, 99, 5, '{}', '{t65cursor}', '{}', NULL, NULL)), 'radius';
+-- Global feed: the radius is advisory only, so a 5 km radius still returns both (they are ~11 km away).
+INSERT INTO public.t_results SELECT 'p6 cursor: a small radius no longer excludes anyone (global feed)',
+  (SELECT count(*) FROM public.get_discovery_feed_page(50, 18, 99, 5, '{}', '{t65cursor}', '{}', NULL, NULL)) = 2, 'radius';
 RESET ROLE;
 DROP TABLE t65;
 

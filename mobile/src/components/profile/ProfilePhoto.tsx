@@ -32,7 +32,9 @@ export function ProfilePhoto({
 
   return (
     <View
-      style={style}
+      // overflow hidden clips the image to the container's rounded shape
+      // (borderRadius alone does not clip child images on Android).
+      style={[style, { overflow: "hidden" }]}
       accessible
       accessibilityRole="image"
       accessibilityLabel={

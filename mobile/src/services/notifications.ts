@@ -8,7 +8,7 @@ import { secureKey } from "./secureKey";
 import { Platform } from "react-native";
 import { isServiceConfigured } from "../config/appConfig";
 import { supabase, isSupabaseConfigured } from "./supabase";
-import { hasConsent } from "./consent";
+import { ensureConsent, fetchMyConsents, hasConsent } from "./consent";
 import { getActiveConversation } from "./activeConversation";
 import { shouldPresentInForeground } from "./notificationPolicy";
 
@@ -62,8 +62,8 @@ const LOCK_SCREEN_DETAILS: readonly LockScreenDetails[] = ["none", "name", "prev
 
 const LEGACY_STORAGE_KEY_NOTICES = "milo_notifications_inbox";
 const LEGACY_STORAGE_KEY_PREFS = "milo_notification_prefs";
-const LEGACY_STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
 const PUSH_PERMISSION_PROMPT_KEY = "milo_push_permission_prompted";
+const LEGACY_STORAGE_KEY_FCM_TOKEN = "milo_fcm_push_token";
 const inboxKey = (userId: string) => `${LEGACY_STORAGE_KEY_NOTICES}:${userId}`;
 const pushTokenKey = (userId: string) => secureKey(`milo_expo_push_token_${userId}`);
 
@@ -322,6 +322,32 @@ export async function registerPushNotificationToken(
       status: "error",
       error: err instanceof Error ? err.message : "Could not register push notifications.",
     };
+  }
+}
+
+const pushNoticeShownKey = (userId: string) => `chahat_push_notice_shown:${userId}`;
+
+/**
+ * First-run notification opt-in. Runs once per account on a real phone: shows the in-app notice (consent is required by
+ * privacy law before a device token is stored), and when the person agrees, continues straight to the system
+ * notification permission (Android 13+ and iOS ask at runtime) and registers the device. Declining is remembered and
+ * never re-asked automatically; it can be changed any time in Settings. Members who already agreed are registered by the
+ * normal sign-in flow, and members who withdrew are left alone.
+ */
+export async function promptForPushOnce(
+  userId: string,
+): Promise<PushRegistrationResult | { status: "skipped" }> {
+  try {
+    if (!userId || !isServiceConfigured("push") || !isSupabaseConfigured()) return { status: "skipped" };
+    if ((Platform.OS !== "ios" && Platform.OS !== "android") || !Device.isDevice) return { status: "skipped" };
+    const state = (await fetchMyConsents()).push_notifications;
+    if (state.decision !== null) return { status: "skipped" };
+    if (await AsyncStorage.getItem(pushNoticeShownKey(userId))) return { status: "skipped" };
+    await AsyncStorage.setItem(pushNoticeShownKey(userId), "1");
+    if (!(await ensureConsent("push_notifications"))) return { status: "skipped" };
+    return await registerPushNotificationToken(userId);
+  } catch {
+    return { status: "skipped" };
   }
 }
 
