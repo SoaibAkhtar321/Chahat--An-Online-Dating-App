@@ -108,8 +108,6 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
       "15 days validity",
       "All Premium features",
       "Read Receipts Control (Plus and VIP only)",
-      "Priority Profile Visibility",
-      "Advanced Search Filters",
     ],
   },
   vip: {
@@ -123,9 +121,7 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
       "5 minutes/day video calling",
       "1 month validity",
       "All Plus features",
-      "Incognito Mode (full privacy)",
       "Exclusive VIP Badge",
-      "Priority Match Distribution",
     ],
   },
 };

@@ -8,6 +8,7 @@ import {
   TextInputProps,
   ViewStyle,
 } from "react-native";
+import { Eye, EyeOff } from "lucide-react-native";
 import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -56,7 +57,11 @@ export const Input: React.FC<InputProps> = ({
             accessibilityLabel={revealed ? "Hide password" : "Show password"}
             activeOpacity={0.7}
           >
-            <Text style={styles.actionText}>{revealed ? "Hide" : "Show"}</Text>
+            {revealed ? (
+              <EyeOff size={20} color={Colors.mutedForeground} />
+            ) : (
+              <Eye size={20} color={Colors.mutedForeground} />
+            )}
           </TouchableOpacity>
         ) : null}
       </View>

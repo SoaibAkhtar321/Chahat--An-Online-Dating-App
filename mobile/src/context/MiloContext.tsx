@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { AppState } from "react-native";
 import type { Profile, MatchItem, Filters, SwipeResponse } from "../types";
 import { DEFAULT_FILTERS } from "../types";
 import { useAuth } from "./AuthContext";
@@ -105,6 +106,16 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await getUserSubscription();
       if (subscriptionRequest.current === request && activeUserId.current === user?.id) {
         setSubscription(result);
+        // The like allowance depends on the plan (paid = unlimited), so re-read it whenever the plan is re-read.
+        try {
+          const quota = await getDailyLikeQuota();
+          if (subscriptionRequest.current === request && activeUserId.current === user?.id) {
+            setDailyLikeLimit(quota.dailyLimit);
+            setLikesRemaining(quota.likesRemaining);
+          }
+        } catch (quotaError) {
+          console.warn("Could not refresh like quota:", quotaError);
+        }
       }
     } catch (error) {
       if (subscriptionRequest.current === request && activeUserId.current === user?.id) {
@@ -188,6 +199,16 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     refreshSubscription();
   }, [refreshSubscription]);
+
+  // Keep the plan in sync with the server: a renewal, expiry or refund that happened while the app was in the
+  // background is picked up as soon as the person comes back.
+  useEffect(() => {
+    if (!user?.id) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshSubscription();
+    });
+    return () => sub.remove();
+  }, [user?.id, refreshSubscription]);
 
   useEffect(() => {
     if (isLoggedIn && user) {

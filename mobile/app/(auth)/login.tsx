@@ -17,6 +17,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { signInUser, resetPassword } from "../../src/services/auth";
+import { GoogleSignInButton } from "../../src/components/auth/GoogleSignInButton";
 import { useAuth } from "../../src/context/AuthContext";
 
 export default function LoginScreen() {
@@ -172,6 +173,8 @@ export default function LoginScreen() {
                 {forgotPassword ? "Back to log in" : "Forgot password?"}
               </Text>
             </TouchableOpacity>
+
+            {!forgotPassword && <GoogleSignInButton />}
           </View>
 
           <View style={styles.footer}>

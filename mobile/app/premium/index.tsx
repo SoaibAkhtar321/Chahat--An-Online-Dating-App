@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Crown,
@@ -38,7 +38,7 @@ import {
 
 export default function PremiumScreen() {
   const { colors, isDark } = useTheme();
-  const { dailyLikeLimit } = useMilo();
+  const { dailyLikeLimit, refreshSubscription } = useMilo();
   const [selectedTier, setSelectedTier] = useState<PlanTier>("premium");
   const [selectedDuration, setSelectedDuration] = useState<"1m" | "3m" | "6m" | "12m">("1m");
   const [currentSub, setCurrentSub] = useState<UserSubscription | null>(null);
@@ -83,6 +83,7 @@ export default function PremiumScreen() {
         if (!active) return;
         setProcessing(false);
         if (event.status === "completed") {
+          void refreshSubscription();
           void getUserSubscription()
             .then((subscription) => {
               if (active) {
@@ -156,6 +157,7 @@ export default function PremiumScreen() {
       Alert.alert("Success", "Your subscription is active!");
       const updated = await getUserSubscription();
       setCurrentSub(updated);
+      void refreshSubscription();
     } else {
       if (result.status === "pending") {
         Alert.alert("Google Play purchase", result.error || "Waiting for Google Play.");
@@ -176,6 +178,7 @@ export default function PremiumScreen() {
 
     if (res.success && res.tier) {
       Alert.alert("Purchases Restored", `Your ${PLANS[res.tier].name} subscription was restored.`);
+      void refreshSubscription();
       try {
         setCurrentSub(await getUserSubscription());
         setSubscriptionError("");
@@ -306,10 +309,10 @@ export default function PremiumScreen() {
           {[
             {
               name: "Daily Likes",
-              free: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
-              prem: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
-              plus: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
-              vip: dailyLikeLimit === null ? "—" : `${dailyLikeLimit} / day`,
+              free: dailyLikeLimit === null ? "—" : dailyLikeLimit < 0 ? "50 / day" : `${dailyLikeLimit} / day`,
+              prem: "Unlimited",
+              plus: "Unlimited",
+              vip: "Unlimited",
             },
             {
               name: "See Who Liked You",
@@ -319,22 +322,7 @@ export default function PremiumScreen() {
               vip: "✓",
             },
             { name: "Rewind Pass", free: "—", prem: "✓", plus: "✓", vip: "✓" },
-            {
-              name: "Smart Icebreakers",
-              free: "—",
-              prem: "✓",
-              plus: "✓",
-              vip: "✓",
-            },
             { name: "Read Receipts", free: "—", prem: "—", plus: "✓", vip: "✓" },
-            {
-              name: "Priority Recommendations",
-              free: "—",
-              prem: "—",
-              plus: "✓",
-              vip: "✓",
-            },
-            { name: "Incognito Mode", free: "—", prem: "—", plus: "—", vip: "✓" },
             {
               name: "Profile Verification Badge",
               free: "Free",
@@ -621,6 +609,17 @@ export default function PremiumScreen() {
             <RefreshCw size={13} color={colors.mutedForeground} />
             <Text style={[styles.restoreBtnText, { color: colors.mutedForeground }]}>
               {restoring ? "Checking purchases..." : "Restore purchases"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.restoreBtn}
+            onPress={() => void Linking.openURL("https://play.google.com/store/account/subscriptions")}
+            activeOpacity={0.7}
+            accessibilityRole="link"
+          >
+            <Text style={[styles.restoreBtnText, { color: colors.mutedForeground }]}>
+              Manage or cancel subscription
             </Text>
           </TouchableOpacity>
         </View>

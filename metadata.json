@@ -1,6 +1,0 @@
-{
-  "name": "Milo Dating App",
-  "description": "Milo dating app — authentic connections, verified profiles, and seamless matching.",
-  "permissions": [],
-  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

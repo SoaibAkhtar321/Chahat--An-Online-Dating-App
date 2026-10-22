@@ -18,6 +18,8 @@ import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { signUpUser } from "../../src/services/auth";
 import { setPendingSignup } from "../../src/services/pendingSignup";
+import { GoogleSignInButton } from "../../src/components/auth/GoogleSignInButton";
+import { useAuth } from "../../src/context/AuthContext";
 import { LegalAcceptanceCheckbox } from "../../src/components/legal/LegalAcceptanceCheckbox";
 import { currentLegalAcceptanceClaim } from "../../src/constants/legalVersions";
 import { validateLegalAcceptance } from "../../src/utils/legalGate";
@@ -26,6 +28,7 @@ export default function SignupScreen() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
+  const { refreshProfile } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,6 +73,12 @@ export default function SignupScreen() {
       return;
     }
 
+    if (res.signedIn) {
+      await refreshProfile();
+      router.replace("/");
+      return;
+    }
+
     setPendingSignup(email, password);
     router.push("/(auth)/verify");
   };
@@ -96,9 +105,7 @@ export default function SignupScreen() {
           </TouchableOpacity>
 
           <Text style={styles.title}>Create your account</Text>
-          <Text style={styles.subtitle}>
-            Free with email. We'll send you a link to confirm your account.
-          </Text>
+          <Text style={styles.subtitle}>Join Chahat in under a minute.</Text>
 
           <View style={styles.form}>
             <Input
@@ -146,6 +153,8 @@ export default function SignupScreen() {
               disabled={loading}
               size="lg"
             />
+
+            <GoogleSignInButton />
           </View>
 
           <View style={styles.footer}>

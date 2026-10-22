@@ -18,6 +18,8 @@ interface AuthContextType {
   profile: MeProfile | null;
   loading: boolean;
   profileError: boolean;
+  /** Short technical reason the last profile load failed (shown on the retry screen to make problems diagnosable). */
+  profileErrorDetail?: string | null;
   isLoggedIn: boolean;
   isOnboarded: boolean;
   legalStatus: LegalGateStatus;
@@ -46,6 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState(false);
+  const [profileErrorDetail, setProfileErrorDetail] = useState<string | null>(null);
   const [legalStatus, setLegalStatus] = useState<LegalGateStatus>("unknown");
   const activeUserId = useRef<string | null>(null);
   const profileRequest = useRef(0);
@@ -64,10 +67,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUserProfile = useCallback(async (currentUser: User, request: number) => {
     try {
-      const currentProfile = await fetchMyProfile(currentUser.id, currentUser.email || "");
+      // A brand-new account can race its profile row: retry briefly before showing the error screen.
+      let currentProfile: Awaited<ReturnType<typeof fetchMyProfile>> | undefined;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          currentProfile = await fetchMyProfile(currentUser.id, currentUser.email || "");
+          break;
+        } catch (loadError) {
+          if (attempt >= 2) throw loadError;
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          if (profileRequest.current !== request || activeUserId.current !== currentUser.id) return;
+        }
+      }
       if (profileRequest.current !== request || activeUserId.current !== currentUser.id) return;
       setProfile(currentProfile);
       setProfileError(false);
+      setProfileErrorDetail(null);
       void loadLegalStatus(currentUser.id, request);
       void registerPushNotificationToken(currentUser.id).then((result) => {
         if (result.status === "error") console.warn("Push registration failed:", result.error);
@@ -77,6 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("Failed to load profile", error);
       setProfile(null);
       setProfileError(true);
+      setProfileErrorDetail(error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200));
     } finally {
       if (profileRequest.current === request && activeUserId.current === currentUser.id) {
         setLoading(false);
@@ -252,6 +268,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         loading,
         profileError,
+        profileErrorDetail,
         isLoggedIn: !!user,
         isOnboarded,
         legalStatus,

@@ -18,7 +18,6 @@ import {
   X,
   Heart,
   Gem,
-  Rocket,
   MapPin,
   Crown,
 } from "lucide-react-native";
@@ -174,34 +173,6 @@ export default function DiscoverScreen() {
     }
   };
 
-  const handleBoost = () => {
-    if (!hasEntitlement(subscription?.tier || "free", "priorityVisibility")) {
-      Alert.alert(
-        "Boost is CHAHAT Plus / VIP",
-        "Priority Visibility & Boost is available with CHAHAT Plus and VIP. Upgrade to jump to top profiles in your area.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Upgrade", onPress: () => router.push("/premium") },
-        ],
-      );
-      return;
-    }
-
-    if (isBoosting) {
-      Alert.alert(
-        "Boost Active",
-        `Your profile is boosted for another ${boostTimeRemaining} minutes.`,
-      );
-      return;
-    }
-    if (!triggerBoost()) {
-      Alert.alert(
-        "Boost unavailable",
-        "Boost has not been activated because the server-side boost service is not configured.",
-      );
-    }
-  };
-
   const handlePullRefresh = async () => {
     setRefreshing(true);
     try {
@@ -264,7 +235,9 @@ export default function DiscoverScreen() {
               CHAHAT {subscription.tier.toUpperCase()} ·{" "}
               {dailyLikeLimit === null
                 ? "Like limit unavailable"
-                : `${likesRemaining} likes left today`}
+                : likesRemaining < 0
+                  ? "Unlimited likes"
+                  : `${likesRemaining} likes left today`}
             </Text>
           </View>
         ) : (
@@ -411,16 +384,6 @@ export default function DiscoverScreen() {
             activeOpacity={0.7}
           >
             <Gem size={20} color={Colors.accent} />
-          </TouchableOpacity>
-
-          {/* Boost */}
-          <TouchableOpacity
-            onPress={handleBoost}
-            accessibilityLabel="Boost your profile"
-            style={[styles.smallBtn, isBoosting && styles.boostBtnActive]}
-            activeOpacity={0.7}
-          >
-            <Rocket size={20} color={isBoosting ? Colors.primaryForeground : Colors.primary} />
           </TouchableOpacity>
         </View>
       )}

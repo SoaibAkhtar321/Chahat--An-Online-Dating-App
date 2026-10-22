@@ -15,11 +15,7 @@ import { Layout, Radii, Spacing, Typography, ThemeColors } from "../../src/const
 import { useTheme } from "../../src/context/ThemeContext";
 import { Button } from "../../src/components/ui/Button";
 import { Input } from "../../src/components/ui/Input";
-import {
-  checkSignupConfirmed,
-  resendConfirmation,
-  verifySignupCode,
-} from "../../src/services/auth";
+import { checkSignupConfirmed, resendConfirmation } from "../../src/services/auth";
 import { clearPendingSignup, getPendingSignup } from "../../src/services/pendingSignup";
 import { useHardwareBack } from "../../src/hooks/useHardwareBack";
 
@@ -33,7 +29,6 @@ export default function VerifyScreen() {
   const router = useRouter();
   const pending = getPendingSignup();
   const [email, setEmail] = useState(pending?.email ?? "");
-  const [code, setCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -77,17 +72,19 @@ export default function VerifyScreen() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  const handleVerify = async () => {
-    if (!email.trim()) {
-      setError("Enter your email address.");
+  // "I've confirmed my email": the link may have been opened in any browser, so check with the saved credentials.
+  const handleConfirmed = async () => {
+    setError(null);
+    setMessage(null);
+    if (!pending) {
+      router.replace("/(auth)/login");
       return;
     }
-    setError(null);
     setVerifying(true);
-    const res = await verifySignupCode(email, code);
+    const result = await checkSignupConfirmed(pending.email, pending.password);
     setVerifying(false);
-    if (res.success) finish();
-    else setError(res.error || "Could not verify the code.");
+    if (result === "confirmed") finish();
+    else setError("We haven't seen the confirmation yet. Open the link in the email, then tap this again.");
   };
 
   const handleResend = async () => {
@@ -97,7 +94,7 @@ export default function VerifyScreen() {
     const res = await resendConfirmation(email);
     setResending(false);
     if (res.success) {
-      setMessage("A new code has been sent to your email.");
+      setMessage("A new confirmation email is on its way.");
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } else {
       setError(res.error || "Could not resend the email. Try again in a minute.");
@@ -133,10 +130,10 @@ export default function VerifyScreen() {
           <MailCheck size={40} color={Colors.primary} />
         </View>
 
-        <Text style={styles.title}>Check your inbox</Text>
+        <Text style={styles.title}>Confirm your email</Text>
         <Text style={styles.subtitle}>
-          We sent a 6-digit code to {email || "your email"}. Enter it below to activate your Chahat
-          account. You can also tap the link in the email, then come back here to continue.
+          We sent a confirmation link to {email || "your email"}. Open it on this phone and you'll come straight back
+          into Chahat. If you opened it somewhere else, tap the button below.
         </Text>
 
         {!pending ? (
@@ -150,24 +147,15 @@ export default function VerifyScreen() {
           />
         ) : null}
 
-        <Input
-          label="Verification code"
-          placeholder="123456"
-          keyboardType="number-pad"
-          maxLength={8}
-          value={code}
-          onChangeText={setCode}
-          error={error ?? undefined}
-        />
         <Button
-          title={verifying ? "Verifying…" : "Verify and continue"}
-          onPress={handleVerify}
+          title={verifying ? "Checking…" : pending ? "I've confirmed my email" : "Go to log in"}
+          onPress={handleConfirmed}
           loading={verifying}
-          disabled={code.trim().length < 6}
           size="lg"
           style={styles.fullWidth}
         />
 
+        {error ? <Text style={styles.errorNote}>{error}</Text> : null}
         {message ? <Text style={styles.noticeText}>{message}</Text> : null}
 
         <View style={styles.secondaryActions}>
@@ -234,6 +222,13 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
   },
   fullWidth: {
     alignSelf: "stretch",
+  },
+  errorNote: {
+    color: Colors.destructive,
+    textAlign: "center",
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    marginTop: Spacing.lg,
   },
   noticeText: {
     color: Colors.success,

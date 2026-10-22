@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured, getConfigStatus } from "./supabase";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { clearNotificationState, unregisterPushNotificationToken } from "./notifications";
 import { LEGAL_ACCEPTANCE_METADATA_KEY, type LegalAcceptanceClaim } from "../constants/legalVersions";
 
@@ -7,7 +8,16 @@ export interface AuthResult {
   success: boolean;
   error?: string;
   isUnconfirmed?: boolean;
+  /** Sign-up only: the account was created and the person is already signed in (no e-mail code step). */
+  signedIn?: boolean;
+  /** Sign-up only: a confirmation link was e-mailed; the person must open it before logging in. */
+  needsConfirmation?: boolean;
 }
+
+const RATE_LIMIT_PATTERN = /rate.*limit|too many requests|over_email_send_rate_limit|over_request_rate_limit/i;
+// The real server window is not 60 seconds (e-mail limits are hourly), so never promise a short wait.
+const RATE_LIMIT_MESSAGE =
+  "Too many attempts from this device or network. Please wait a few minutes before trying again. Retrying sooner can extend the wait.";
 
 const CONFIG_ERROR =
   "Backend connection not configured: Please provide EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in mobile/.env.";
@@ -45,12 +55,8 @@ export async function signUpUser(
           error: "An account with this email already exists. Please log in.",
         };
       }
-      if (/rate.*limit|too many requests|over_email_send_rate_limit/i.test(error.message)) {
-        return {
-          success: false,
-          error:
-            "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
-        };
+      if (RATE_LIMIT_PATTERN.test(error.message)) {
+        return { success: false, error: RATE_LIMIT_MESSAGE };
       }
       return { success: false, error: error.message };
     }
@@ -59,14 +65,15 @@ export async function signUpUser(
       return { success: false, error: "An account with this email already exists." };
     }
 
-    return { success: true };
+    // Confirm-email OFF in Supabase: a live session comes back and the person is signed in straight away.
+    if (data.session) return { success: true, signedIn: true };
+
+    // Confirm-email ON: a confirmation LINK was e-mailed. No code is typed in the app; the link opens the app (or the
+    // person taps "I've confirmed" on the next screen) and they are signed in.
+    return { success: true, needsConfirmation: true };
   } catch (err: any) {
-    if (/rate.*limit|too many requests/i.test(err?.message || "")) {
-      return {
-        success: false,
-        error:
-          "Too many sign-up attempts. For security, please wait 60 seconds before trying again.",
-      };
+    if (RATE_LIMIT_PATTERN.test(err?.message || "")) {
+      return { success: false, error: RATE_LIMIT_MESSAGE };
     }
     return { success: false, error: err.message || "Failed to sign up" };
   }
@@ -112,11 +119,8 @@ export async function signInUser(email: string, password: string): Promise<AuthR
           error: "Please verify your email address to continue.",
         };
       }
-      if (/rate.*limit|too many requests/i.test(error.message)) {
-        return {
-          success: false,
-          error: "Too many sign-in attempts. Please wait 60 seconds before trying again.",
-        };
+      if (RATE_LIMIT_PATTERN.test(error.message)) {
+        return { success: false, error: RATE_LIMIT_MESSAGE };
       }
       if (/invalid/i.test(error.message)) {
         return { success: false, error: "Incorrect email or password." };
@@ -126,11 +130,8 @@ export async function signInUser(email: string, password: string): Promise<AuthR
 
     return { success: true };
   } catch (err: any) {
-    if (/rate.*limit|too many requests/i.test(err?.message || "")) {
-      return {
-        success: false,
-        error: "Too many sign-in attempts. Please wait 60 seconds before trying again.",
-      };
+    if (RATE_LIMIT_PATTERN.test(err?.message || "")) {
+      return { success: false, error: RATE_LIMIT_MESSAGE };
     }
     return { success: false, error: err.message || "Failed to sign in" };
   }
@@ -249,36 +250,6 @@ export async function updateRecoveryPassword(
   }
 }
 
-/** Confirms a signup with the 6-digit code from the e-mail. On success the session is created, so no second login is needed. */
-export async function verifySignupCode(
-  email: string,
-  code: string,
-): Promise<{ success: boolean; error?: string }> {
-  if (!isSupabaseConfigured()) return { success: false, error: CONFIG_ERROR };
-  const token = code.replace(/\s+/g, "");
-  if (!/^\d{6,8}$/.test(token)) {
-    return { success: false, error: "Enter the code from your email." };
-  }
-  try {
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token,
-      type: "signup",
-    });
-    if (error) {
-      return {
-        success: false,
-        error: /expired|invalid/i.test(error.message)
-          ? "That code is incorrect or has expired. Check it or request a new one."
-          : error.message,
-      };
-    }
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Could not verify the code" };
-  }
-}
-
 /**
  * Used while the verify screen is open: once the e-mail has been confirmed (by link, on any browser or device) the
  * stored credentials sign the person in automatically. Returns "pending" until then.
@@ -318,6 +289,34 @@ export async function resendConfirmation(
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || "Could not resend confirmation email" };
+  }
+}
+
+/**
+ * "Continue with Google". Supabase runs the OAuth flow in the system browser and returns to the app on the
+ * chahat://callback link, which completeAuthLink turns into a session (same path as e-mail links).
+ * Needs the Google provider enabled in Supabase and chahat://callback in its redirect URLs (see docs/GOOGLE_SIGN_IN.md).
+ */
+export async function signInWithGoogle(): Promise<{ success: boolean; cancelled?: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) return { success: false, error: CONFIG_ERROR };
+  try {
+    const redirectTo = Linking.createURL("callback");
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error || !data?.url) {
+      return { success: false, error: error?.message || "Could not start Google sign-in." };
+    }
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== "success") return { success: false, cancelled: true };
+    const done = await completeAuthLink(result.url);
+    return done.success ? { success: true } : { success: false, error: done.error };
+  } catch (err: any) {
+    if (RATE_LIMIT_PATTERN.test(err?.message || "")) {
+      return { success: false, error: RATE_LIMIT_MESSAGE };
+    }
+    return { success: false, error: err?.message || "Could not sign in with Google." };
   }
 }
 

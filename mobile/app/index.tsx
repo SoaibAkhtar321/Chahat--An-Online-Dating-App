@@ -1,8 +1,9 @@
 import React, { useMemo, useEffect } from "react";
-import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from "react-native";
+import { View, ActivityIndicator, StyleSheet, Text } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/context/AuthContext";
-import { ThemeColors } from "../src/constants/theme";
+import { Layout, Spacing, ThemeColors, Typography } from "../src/constants/theme";
+import { Button } from "../src/components/ui/Button";
 import { useTheme } from "../src/context/ThemeContext";
 import { Alert } from "../src/utils/alert";
 
@@ -16,6 +17,7 @@ export default function Index() {
     loading,
     profile,
     profileError,
+    profileErrorDetail,
     legalStatus,
     refreshLegalStatus,
     refreshProfile,
@@ -39,29 +41,29 @@ export default function Index() {
     }
   }, [loading, isLoggedIn, isOnboarded, profile, legalStatus, router]);
 
+  const signOutSafely = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      Alert.alert(
+        "Could not sign out securely",
+        error instanceof Error
+          ? error.message
+          : "The device notification token could not be removed. Retry when connected.",
+      );
+    }
+  };
+
   if (!loading && isLoggedIn && !profile && profileError) {
     return (
       <View style={styles.container}>
-        <Text style={{ marginBottom: 16 }}>Could not load your profile.</Text>
-        <TouchableOpacity onPress={() => refreshProfile()}>
-          <Text style={{ color: Colors.primary, marginBottom: 16 }}>Try again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={async () => {
-            try {
-              await signOut();
-            } catch (error) {
-              Alert.alert(
-                "Could not sign out securely",
-                error instanceof Error
-                  ? error.message
-                  : "The device notification token could not be removed. Retry when connected.",
-              );
-            }
-          }}
-        >
-          <Text>Sign out</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>We couldn't load your profile</Text>
+        <Text style={styles.body}>Check your internet connection and try again. Your account is safe.</Text>
+        {profileErrorDetail ? <Text style={styles.detail}>{profileErrorDetail}</Text> : null}
+        <View style={styles.actions}>
+          <Button title="Try again" size="lg" onPress={() => refreshProfile()} />
+          <Button title="Sign out" variant="text" onPress={signOutSafely} />
+        </View>
       </View>
     );
   }
@@ -69,13 +71,12 @@ export default function Index() {
   if (!loading && isLoggedIn && profile && legalStatus === "error") {
     return (
       <View style={styles.container}>
-        <Text style={{ marginBottom: 16 }}>Could not check your Terms and Privacy acceptance.</Text>
-        <TouchableOpacity onPress={() => refreshLegalStatus()}>
-          <Text style={{ color: Colors.primary, marginBottom: 16 }}>Try again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => signOut().catch(() => {})}>
-          <Text>Sign out</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>We couldn't check your agreements</Text>
+        <Text style={styles.body}>Check your internet connection and try again.</Text>
+        <View style={styles.actions}>
+          <Button title="Try again" size="lg" onPress={() => refreshLegalStatus()} />
+          <Button title="Sign out" variant="text" onPress={() => signOut().catch(() => {})} />
+        </View>
       </View>
     );
   }
@@ -92,7 +93,35 @@ const createStyles = (Colors: ThemeColors) =>
     container: {
       flex: 1,
       backgroundColor: Colors.background,
-      justifyContent: "center",
       alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: Layout.screenPadding,
+    },
+    title: {
+      fontSize: Typography.sizes.xl,
+      fontWeight: Typography.weights.bold,
+      fontFamily: Typography.fontDisplay,
+      color: Colors.foreground,
+      textAlign: "center",
+    },
+    body: {
+      fontSize: Typography.sizes.base,
+      color: Colors.mutedForeground,
+      textAlign: "center",
+      lineHeight: 22,
+      marginTop: Spacing.sm,
+    },
+    detail: {
+      fontSize: Typography.sizes.xs,
+      color: Colors.mutedForeground,
+      textAlign: "center",
+      marginTop: Spacing.md,
+    },
+    actions: {
+      alignSelf: "stretch",
+      maxWidth: 320,
+      width: "100%",
+      marginTop: Spacing.xxl,
+      gap: Spacing.sm,
     },
   });

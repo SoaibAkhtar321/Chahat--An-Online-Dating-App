@@ -197,7 +197,9 @@ export default function MeScreen() {
               <Text style={styles.planCardSubtitle}>
                 {planTier === "free"
                   ? `${likesRemaining} likes left today · Resets midnight`
-                  : `${likesRemaining} likes left today · Active`}
+                  : likesRemaining < 0
+                    ? "Unlimited likes · Active"
+                    : `${likesRemaining} likes left today · Active`}
               </Text>
             </View>
             <View style={styles.planUpgradeBtn}>
