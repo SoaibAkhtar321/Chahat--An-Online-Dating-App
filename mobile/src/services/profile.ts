@@ -22,7 +22,7 @@ export async function fetchMyProfile(userId: string, _email: string): Promise<Me
     supabase
       .from("profiles")
       .select(
-        "id, name, gender, seeking, city, bio, work, education, intents, interests, languages, lifestyle, prompt, onboarded, voice_intro_path, voice_intro_duration_sec",
+        "id, name, gender, seeking, city, bio, work, education, intents, interests, languages, lifestyle, prompt, onboarded",
       )
       .eq("id", userId)
       .maybeSingle(),
@@ -34,6 +34,12 @@ export async function fetchMyProfile(userId: string, _email: string): Promise<Me
   if (!profileRes.data) throw new Error("Your profile record is not available yet. Please retry.");
   const row = profileRes.data as any;
   // dob is not readable via table select (privacy); fetch own dob through a dedicated RPC.
+  // The voice-intro columns are not column-readable on profiles (only update-granted), so read the member's own
+  // intro through its dedicated RPC. It is optional: a failure here must never block the profile from loading.
+  const voiceIntroRes = await supabase.rpc("get_my_voice_intro");
+  const voiceIntroRow = Array.isArray(voiceIntroRes?.data)
+    ? (voiceIntroRes.data[0] as { voice_intro_path?: string | null; voice_intro_duration_sec?: number | null } | undefined)
+    : undefined;
   const { data: ownDob, error: dobError } = await supabase.rpc("get_my_dob");
   if (dobError) throw new Error(`birth date load failed: ${dobError.message}`);
   // photos is not readable via table select (privacy stopgap); fetch own photos through a dedicated RPC.
@@ -76,8 +82,8 @@ export async function fetchMyProfile(userId: string, _email: string): Promise<Me
     ageMax: stateData.ageMax ?? 35,
     distance: stateData.distance ?? 50,
     onboarded: !!row?.onboarded,
-    voiceIntroPath: row?.voice_intro_path ?? null,
-    voiceIntroDurationSec: row?.voice_intro_duration_sec ?? null,
+    voiceIntroPath: voiceIntroRow?.voice_intro_path ?? null,
+    voiceIntroDurationSec: voiceIntroRow?.voice_intro_duration_sec ?? null,
     verificationStatus: stateData.verification?.status ?? "none",
   };
 }
