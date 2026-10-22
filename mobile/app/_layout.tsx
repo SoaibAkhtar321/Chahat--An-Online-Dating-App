@@ -18,7 +18,12 @@ import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 import { registerDefaultCallProvider } from "../src/services/registerCallProvider";
 
 // Registers the call media adapter once; it reports "unavailable" if the SDK or App ID is missing.
-registerDefaultCallProvider();
+try {
+  registerDefaultCallProvider();
+} catch (error) {
+  // Calling is optional: a problem with the call SDK must never stop the app from starting.
+  console.warn("Call provider registration failed:", error);
+}
 
 // Show a visible error screen (with retry) instead of a blank screen when a route throws
 export { ErrorBoundary } from "expo-router";

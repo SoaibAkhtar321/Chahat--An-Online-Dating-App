@@ -70,8 +70,8 @@
         "expo-build-properties",
         {
           "android": {
-            "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableProguardInReleaseBuilds": false,
+            "enableShrinkResourcesInReleaseBuilds": false,
             "useLegacyPackaging": true,
             "extraProguardRules": "-keep class io.agora.** { *; }\n-dontwarn io.agora.**\n-keep class com.android.billingclient.** { *; }\n-dontwarn com.android.billingclient.**"
           }
