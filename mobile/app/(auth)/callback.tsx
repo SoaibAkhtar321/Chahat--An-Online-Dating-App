@@ -1,7 +1,7 @@
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 // TODO: change this import to wherever your Supabase client is created
-import { supabase } from "../lib/supabase";
+import { supabase } from '../../src/services/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 

@@ -38,6 +38,15 @@ VALUES (
 )
 ON CONFLICT (user_id, ist_date) DO UPDATE SET likes_used = EXCLUDED.likes_used;
 
+-- Free user (c2): 7 likes used, so the configured limit and remaining count are observable.
+INSERT INTO public.user_daily_quotas (user_id, ist_date, likes_used)
+VALUES (
+  '00000000-0000-0000-0000-0000000000c2',
+  (timezone('Asia/Kolkata', now()))::date,
+  7
+)
+ON CONFLICT (user_id, ist_date) DO UPDATE SET likes_used = EXCLUDED.likes_used;
+
 INSERT INTO public.user_subscriptions (user_id, tier, status, starts_at, expires_at, auto_renew)
 VALUES (
   '00000000-0000-0000-0000-0000000000c1',
@@ -60,11 +69,21 @@ CALL public.expect_fail(
   'authenticated cannot mark account pending deletion',
   'SELECT public.begin_account_deletion(''00000000-0000-0000-0000-0000000000c1''::uuid)'
 );
+-- Paid plans have unlimited likes (migration 20260101005100).
+INSERT INTO public.t_results
+SELECT 'daily quota RPC reports unlimited likes for an active paid plan',
+  public.get_daily_like_quota()->>'daily_limit' = '-1'
+    AND public.get_daily_like_quota()->>'likes_remaining' = '-1'
+    AND public.get_daily_like_quota()->>'unlimited' = 'true',
+  public.get_daily_like_quota()::text;
+-- Free plan keeps the authoritative configured limit and remaining count.
+SET request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000c2';
 INSERT INTO public.t_results
 SELECT 'daily quota RPC returns authoritative configured limit and remaining',
   public.get_daily_like_quota()->>'daily_limit' = '20'
     AND public.get_daily_like_quota()->>'likes_remaining' = '13',
   public.get_daily_like_quota()::text;
+SET request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000c1';
 DO $$
 DECLARE result jsonb;
 BEGIN
