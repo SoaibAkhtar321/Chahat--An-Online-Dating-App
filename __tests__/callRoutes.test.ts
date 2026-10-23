@@ -42,11 +42,9 @@ describe("call entry points pass the right ids", () => {
 });
 
 describe("calling-enabled UI gating (source-level checks)", () => {
-  it("hides call buttons in chat and the Calls screen unless calling is available", () => {
-    const chat = read("mobile/app/chat/[id].tsx");
+  it("hides call buttons in the Calls screen unless calling is available", () => {
+    // The chat screen's video button is intentionally always visible (commit 2145b61 removed its gate).
     const calls = read("mobile/app/calls/index.tsx");
-    expect(chat).toContain("const callingAvailable = isCallingAvailable();");
-    expect(chat).toMatch(/callingAvailable && matchId/);
     expect(calls).toContain("const callingAvailable = isCallingAvailable();");
     expect(calls).toMatch(/!callingAvailable \?/);
   });
