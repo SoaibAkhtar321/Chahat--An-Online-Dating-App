@@ -1,54 +1,3 @@
-Time:        5.055 s, estimated 11 s
-Ran all test suites matching /__tests__\\themeCoverage.test.ts|__tests__\\chatRepliesScreen.test.tsx/i.
-PS C:\Chahat> cd C:\Chahat
->> git add mobile/src/components/chat/ImageViewerModal.tsx __tests__/themeCoverage.test.ts
->> git commit -m "Fix CI: ImageViewerModal safe-area fallback, register in theme coverage"
->> git push
-warning: in the working copy of 'mobile/src/components/chat/ImageViewerModal.tsx', CRLF will be replaced by LF the next time Git touches it
-[main 3cb1f5a] Fix CI: ImageViewerModal safe-area fallback, register in theme coverage
- 2 files changed, 19 insertions(+), 4 deletions(-)
-Enumerating objects: 17, done.
-Counting objects: 100% (17/17), done.
-Delta compression using up to 8 threads
-Compressing objects: 100% (9/9), done.
-Writing objects: 100% (9/9), 1.06 KiB | 363.00 KiB/s, done.
-Total 9 (delta 8), reused 0 (delta 0), pack-reused 0 (from 0)
-remote: Resolving deltas: 100% (8/8), completed with 8 local objects.
-remote: This repository moved. Please use the new location:
-remote:   https://github.com/SoaibAkhtar321/Chahat--An-Online-Dating-App.git
-To https://github.com/SoaibAkhtar321/Milo-Prototype-Baseline.git
-   a6eee65..3cb1f5a  main -> main
-PS C:\Chahat> git show 2145b61 -- "mobile/app/chat/[id].tsx" | Select-String "callingAvailable|isCallingAvailable" -Context 4,4
->> Get-Content __tests__\legalAcceptanceFlow.test.tsx -Raw
-
-  @@ -17,7 +17,6 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-   import { clearActiveConversation, setActiveConversation } from 
-"../../src/services/activeConversation";
-   import { useScreenProtection } from "../../src/hooks/useScreenProtection";
-   import { buildNewCallRoute } from "../../src/services/calls";
-> -import { isCallingAvailable } from "../../src/services/callMedia";
-   import { isServiceConfigured } from "../../src/config/appConfig";
-   import { Image } from "expo-image";
-   import * as ImagePicker from "expo-image-picker";
-  @@ -44,6 +43,7 @@ import { MessageActionSheet } from "../../src/components/chat/MessageActionSheet
-  @@ -106,7 +106,6 @@ export default function ChatDetailScreen() {
-     const styles = useMemo(() => createStyles(Colors), [Colors]);
-     const router = useRouter();
-     const { id: matchId } = useLocalSearchParams<{ id: string }>();
-> -  const callingAvailable = isCallingAvailable();
-     // Off unless EXPO_PUBLIC_FEATURE_VOICE_MESSAGES is exactly "true" (development/test builds only).
-     const voiceEnabled = isServiceConfigured("voiceMessages");
-     const { user } = useAuth();
-  @@ -120,6 +119,8 @@ export default function ChatDetailScreen() {
-  -            <Trophy size={19} color={Colors.accent} />
-  +            <Video size={20} color={Colors.primary} />
-             </TouchableOpacity>
-   
-> -          {callingAvailable && matchId ? (
-  -            <TouchableOpacity
-  -              style={styles.actionIcon}
-  -              accessibilityLabel="Start video call"
-  -              onPress={() => router.push(buildNewCallRoute(matchId, "video"))}
 import React from "react";
 import * as fs from "fs";
 import * as path from "path";
@@ -74,12 +23,19 @@ jest.mock("expo-router", () => ({
 jest.mock("../mobile/src/context/ThemeContext", () => ({
   useTheme: () => ({ colors: mockLightColors, isDark: false }),
 }));
-jest.mock("lucide-react-native", () => ({ ArrowLeft: () => null, Check: () => null }));
+jest.mock("lucide-react-native", () => ({ ArrowLeft: () => null, Check: () => null, Eye: () => null, EyeOff: () => null }));
 jest.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: any) => require("react").createElement("View", null, children),
 }));
 jest.mock("../mobile/src/services/auth", () => ({
   signUpUser: (...args: any[]) => mockSignUpUser(...args),
+}));
+jest.mock("../mobile/src/context/AuthContext", () => ({
+  useAuth: () => ({ refreshProfile: jest.fn() }),
+}));
+// The Google button pulls in AuthContext -> supabase -> native AsyncStorage, which does not exist under Jest.
+jest.mock("../mobile/src/components/auth/GoogleSignInButton", () => ({
+  GoogleSignInButton: () => null,
 }));
 jest.mock("../mobile/src/components/ui/Button", () => {
   const React = require("react");
@@ -263,7 +219,3 @@ describe("legalAcceptance service", () => {
     expect(await svc.acceptCurrentLegalDocuments()).toMatchObject({ success: false });
   });
 });
-
-
-
-PS C:\Chahat> 
