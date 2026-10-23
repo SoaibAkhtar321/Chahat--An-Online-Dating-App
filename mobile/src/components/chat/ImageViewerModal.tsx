@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { X } from "lucide-react-native";
-import { SafeAreaInsetsContext } from "react-native-safe-area-context";
+import * as SafeArea from "react-native-safe-area-context";
 
 interface ImageViewerModalProps {
   /** Image to show full screen. null keeps the viewer closed. */
@@ -19,11 +19,25 @@ interface ImageViewerModalProps {
   onClose: () => void;
 }
 
+interface Insets {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+const ZERO_INSETS: Insets = { top: 0, bottom: 0, left: 0, right: 0 };
+
+// Use the library's insets context when available. If it is missing (no provider, or a test mock without the
+// export), fall back to zero insets instead of throwing.
+const FallbackContext = React.createContext<Insets | null>(null);
+const InsetsContext: React.Context<Insets | null> =
+  (SafeArea as { SafeAreaInsetsContext?: React.Context<Insets | null> }).SafeAreaInsetsContext ?? FallbackContext;
+
 /** Full-screen photo viewer (WhatsApp style): black background, image fitted to the screen. */
 export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ uri, onClose }) => {
   const { width, height } = useWindowDimensions();
-  // Context read (not useSafeAreaInsets) so rendering without a SafeAreaProvider falls back to 0 instead of throwing.
-  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, bottom: 0, left: 0, right: 0 };
+  const insets = useContext(InsetsContext) ?? ZERO_INSETS;
 
   return (
     <Modal

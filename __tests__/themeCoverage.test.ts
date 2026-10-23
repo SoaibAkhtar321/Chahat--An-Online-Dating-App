@@ -57,6 +57,7 @@ const REVIEWED_HARDCODED_COLOR_FILES = [
   "app/profile/[id].tsx",
   "src/components/chat/ChatBubble.tsx",
   "src/components/chat/CoupleGamesModal.tsx",
+  "src/components/chat/ImageViewerModal.tsx",
   "src/components/discovery/DiscoveryCard.tsx",
   "src/components/profile/PhotoUploader.tsx",
   "src/components/ui/DatePicker.tsx",
