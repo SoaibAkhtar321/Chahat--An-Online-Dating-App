@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import {
   Modal,
   View,
@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { X } from "lucide-react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 
 interface ImageViewerModalProps {
   /** Image to show full screen. null keeps the viewer closed. */
@@ -22,7 +22,8 @@ interface ImageViewerModalProps {
 /** Full-screen photo viewer (WhatsApp style): black background, image fitted to the screen. */
 export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ uri, onClose }) => {
   const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  // Context read (not useSafeAreaInsets) so rendering without a SafeAreaProvider falls back to 0 instead of throwing.
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, bottom: 0, left: 0, right: 0 };
 
   return (
     <Modal
