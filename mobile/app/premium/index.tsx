@@ -1,20 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  Crown,
-  Check,
-  Sparkles,
-  Zap,
-  ShieldCheck,
-  CheckCircle2,
-  Gem,
-  Award,
-  Lock,
-  ArrowRight,
-  RefreshCw,
-  Info,
-} from "lucide-react-native";
+import { Crown, ShieldCheck, CheckCircle2, Award, RefreshCw } from "lucide-react-native";
 import { Radii, Shadows, Typography, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
@@ -37,7 +24,7 @@ import {
 } from "../../src/services/subscription";
 
 export default function PremiumScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { dailyLikeLimit, refreshSubscription } = useMilo();
   const [selectedTier, setSelectedTier] = useState<PlanTier>("premium");
   const [selectedDuration, setSelectedDuration] = useState<"1m" | "3m" | "6m" | "12m">("1m");
@@ -77,7 +64,7 @@ export default function PremiumScreen() {
         })
         .catch((error) => {
           console.warn("Google Play product catalog unavailable:", error);
-          if (active) setSubscriptionError("Google Play product catalog is unavailable.");
+          if (active) setSubscriptionError("Plans are unavailable right now.");
         });
       void listenForPurchaseUpdates((event) => {
         if (!active) return;
@@ -124,9 +111,13 @@ export default function PremiumScreen() {
     };
   }, []);
 
-  const productPrice = (productId: string) =>
-    billingProducts.find((product) => product.productId === productId)?.localizedPrice ??
-    (BILLING_ENABLED ? "Price unavailable" : "Google Play price");
+  // Returns the store price when we have it, otherwise null (nothing is shown).
+  const productPrice = (productId: string | null): string | null =>
+    productId
+      ? (billingProducts.find((product) => product.productId === productId)?.localizedPrice ??
+        null)
+      : null;
+
   const tierProductId =
     selectedTier === "premium"
       ? PLAY_PRODUCT_IDS.premium["1m"]
@@ -139,6 +130,13 @@ export default function PremiumScreen() {
   const activeDurationObj =
     PREMIUM_BILLING_DURATIONS.find((d) => d.id === selectedDuration) ||
     PREMIUM_BILLING_DURATIONS[0]!;
+
+  const ctaPrice =
+    selectedTier === "free"
+      ? null
+      : selectedTier === "premium"
+        ? productPrice(PLAY_PRODUCT_IDS.premium[selectedDuration])
+        : productPrice(tierProductId);
 
   const handleSelectOrPurchase = async () => {
     if (selectedTier === "free") {
@@ -160,14 +158,10 @@ export default function PremiumScreen() {
       void refreshSubscription();
     } else {
       if (result.status === "pending") {
-        Alert.alert("Google Play purchase", result.error || "Waiting for Google Play.");
+        Alert.alert("Payment pending", result.error || "Waiting for your payment to complete.");
         return;
       }
-      Alert.alert(
-        "Google Play Billing",
-        result.error ||
-          "Google Play payment sheet is connecting. Server verification is mandatory for tier upgrades.",
-      );
+      Alert.alert("Purchase", result.error || "Could not start the payment. Please try again.");
     }
   };
 
@@ -192,24 +186,19 @@ export default function PremiumScreen() {
     }
   };
 
+  const buttonTitle = processing
+    ? "Connecting..."
+    : selectedTier === "free"
+      ? `Free Plan Active (${dailyLikeLimit ?? "—"} Likes/Day)`
+      : BILLING_ENABLED
+        ? "Continue to payment"
+        : "Coming soon";
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Header title="CHAHAT Premium" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {!BILLING_ENABLED && (
-          <View
-            style={[
-              styles.singleMonthNoteBox,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.singleMonthNoteText, { color: colors.mutedForeground }]}>
-              Google Play checkout is disabled in this build. Displayed reference pricing is not a
-              live price or charge.
-            </Text>
-          </View>
-        )}
         {/* Hero Branding */}
         <View
           style={[styles.heroBox, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -264,198 +253,25 @@ export default function PremiumScreen() {
           </View>
         </View>
 
-        {/* What You Get With Each Plan Section */}
+        {/* Plans */}
         <Text style={[styles.sectionHeading, { color: colors.mutedForeground }]}>
-          WHAT YOU GET WITH EACH PLAN
-        </Text>
-
-        <View
-          style={[
-            styles.comparisonCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View style={[styles.matrixHeaderRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.matrixColFeature, { color: colors.mutedForeground }]}>
-              Feature
-            </Text>
-            <Text style={[styles.matrixColPlan, { color: colors.foreground }]}>Free</Text>
-            <Text
-              style={[
-                styles.matrixColPlan,
-                { color: colors.primary, fontWeight: Typography.weights.bold },
-              ]}
-            >
-              Prem
-            </Text>
-            <Text
-              style={[
-                styles.matrixColPlan,
-                { color: colors.accent, fontWeight: Typography.weights.bold },
-              ]}
-            >
-              Plus
-            </Text>
-            <Text
-              style={[
-                styles.matrixColPlan,
-                { color: colors.primary, fontWeight: Typography.weights.bold },
-              ]}
-            >
-              VIP
-            </Text>
-          </View>
-
-          {[
-            {
-              name: "Daily Likes",
-              free: dailyLikeLimit === null ? "—" : dailyLikeLimit < 0 ? "50 / day" : `${dailyLikeLimit} / day`,
-              prem: "Unlimited",
-              plus: "Unlimited",
-              vip: "Unlimited",
-            },
-            {
-              name: "See Who Liked You",
-              free: "—",
-              prem: "✓",
-              plus: "✓",
-              vip: "✓",
-            },
-            { name: "Rewind Pass", free: "—", prem: "✓", plus: "✓", vip: "✓" },
-            { name: "Read Receipts", free: "—", prem: "—", plus: "✓", vip: "✓" },
-            {
-              name: "Profile Verification Badge",
-              free: "Free",
-              prem: "Free",
-              plus: "Free",
-              vip: "Free",
-            },
-            {
-              name: "Safety, Block & Report",
-              free: "Free",
-              prem: "Free",
-              plus: "Free",
-              vip: "Free",
-            },
-          ].map((row, idx) => (
-            <View key={idx} style={[styles.matrixRow, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.matrixRowLabel, { color: colors.foreground }]}>{row.name}</Text>
-              <Text style={[styles.matrixRowCell, { color: colors.mutedForeground }]}>
-                {row.free}
-              </Text>
-              <Text
-                style={[
-                  styles.matrixRowCell,
-                  { color: colors.primary, fontWeight: Typography.weights.semibold },
-                ]}
-              >
-                {row.prem}
-              </Text>
-              <Text
-                style={[
-                  styles.matrixRowCell,
-                  { color: colors.accent, fontWeight: Typography.weights.semibold },
-                ]}
-              >
-                {row.plus}
-              </Text>
-              <Text
-                style={[
-                  styles.matrixRowCell,
-                  { color: colors.foreground, fontWeight: Typography.weights.bold },
-                ]}
-              >
-                {row.vip}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Billing Duration Selector (Approved for Premium only) */}
-        {selectedTier === "premium" ? (
-          <>
-            <Text style={[styles.sectionHeading, { color: colors.mutedForeground, marginTop: 24 }]}>
-              1. SELECT PREMIUM DURATION
-            </Text>
-            <View style={styles.durationGrid}>
-              {PREMIUM_BILLING_DURATIONS.map((dur) => {
-                const isSelected = selectedDuration === dur.id;
-                const productId = PLAY_PRODUCT_IDS.premium[dur.id];
-                return (
-                  <TouchableOpacity
-                    key={dur.id}
-                    style={[
-                      styles.durationCard,
-                      {
-                        backgroundColor: colors.card,
-                        borderColor: isSelected ? colors.primary : colors.border,
-                      },
-                    ]}
-                    onPress={() => setSelectedDuration(dur.id)}
-                    activeOpacity={0.8}
-                  >
-                    {dur.popular && (
-                      <View style={[styles.durationBadge, { backgroundColor: colors.accent }]}>
-                        <Text style={styles.durationBadgeText}>BEST VALUE</Text>
-                      </View>
-                    )}
-                    <Text
-                      style={[
-                        styles.durationLabel,
-                        { color: isSelected ? colors.primary : colors.foreground },
-                        isSelected && { fontWeight: Typography.weights.bold },
-                      ]}
-                    >
-                      {dur.label}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.durationPrice,
-                        { color: isSelected ? colors.primary : colors.foreground },
-                      ]}
-                    >
-                      {productPrice(productId)}
-                    </Text>
-                    {dur.savings && (
-                      <Text style={[styles.durationSavings, { color: colors.success }]}>
-                        {dur.savings}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        ) : selectedTier === "plus" || selectedTier === "vip" ? (
-          <View
-            style={[
-              styles.singleMonthNoteBox,
-              { backgroundColor: colors.card, borderColor: colors.border, marginTop: 24 },
-            ]}
-          >
-            <Text style={[styles.singleMonthNoteTitle, { color: colors.foreground }]}>
-              Monthly Plan Pricing
-            </Text>
-            <Text style={[styles.singleMonthNoteText, { color: colors.mutedForeground }]}>
-              {selectedTier === "plus" ? "CHAHAT Plus: ₹199/month" : "CHAHAT VIP: ₹399/month"}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Plan Tiers Selection */}
-        <Text
-          style={[
-            styles.sectionHeading,
-            { color: colors.mutedForeground, marginTop: selectedTier === "free" ? 24 : 12 },
-          ]}
-        >
-          2. CHOOSE YOUR PLAN
+          CHOOSE YOUR PLAN
         </Text>
         <View style={styles.plansContainer}>
           {(["premium", "plus", "vip", "free"] as PlanTier[]).map((tierKey) => {
             const plan = PLANS[tierKey];
             const isSelected = selectedTier === tierKey;
             const isCurrent = currentSub?.tier === tierKey;
+            const cardPrice =
+              tierKey === "free"
+                ? "Free"
+                : productPrice(
+                    tierKey === "premium"
+                      ? PLAY_PRODUCT_IDS.premium["1m"]
+                      : tierKey === "plus"
+                        ? PLAY_PRODUCT_IDS.plus["1m"]
+                        : PLAY_PRODUCT_IDS.vip["1m"],
+                  );
 
             return (
               <TouchableOpacity
@@ -495,16 +311,13 @@ export default function PremiumScreen() {
                     </Text>
                   </View>
 
-                  <View style={styles.planPriceCol}>
-                    <Text style={[styles.planPrice, { color: colors.foreground }]}>
-                      {plan.monthlyPrice === 0 ? "Free" : productPrice(tierProductId ?? "")}
-                    </Text>
-                    {plan.monthlyPrice > 0 && (
-                      <Text style={[styles.planPeriod, { color: colors.mutedForeground }]}>
-                        /month
+                  {cardPrice ? (
+                    <View style={styles.planPriceCol}>
+                      <Text style={[styles.planPrice, { color: colors.foreground }]}>
+                        {cardPrice}
                       </Text>
-                    )}
-                  </View>
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* Features List */}
@@ -556,42 +369,83 @@ export default function PremiumScreen() {
           })}
         </View>
 
+        {/* Duration (Premium only) */}
+        {selectedTier === "premium" && (
+          <>
+            <Text style={[styles.sectionHeading, { color: colors.mutedForeground }]}>
+              CHOOSE DURATION
+            </Text>
+            <View style={styles.durationGrid}>
+              {PREMIUM_BILLING_DURATIONS.map((dur) => {
+                const isSelected = selectedDuration === dur.id;
+                const price = productPrice(PLAY_PRODUCT_IDS.premium[dur.id]);
+                return (
+                  <TouchableOpacity
+                    key={dur.id}
+                    style={[
+                      styles.durationCard,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                    ]}
+                    onPress={() => setSelectedDuration(dur.id)}
+                    activeOpacity={0.8}
+                  >
+                    {dur.popular && (
+                      <View style={[styles.durationBadge, { backgroundColor: colors.accent }]}>
+                        <Text style={styles.durationBadgeText}>BEST VALUE</Text>
+                      </View>
+                    )}
+                    <Text
+                      style={[
+                        styles.durationLabel,
+                        { color: isSelected ? colors.primary : colors.foreground },
+                        isSelected && { fontWeight: Typography.weights.bold },
+                      ]}
+                    >
+                      {dur.label}
+                    </Text>
+                    {price ? (
+                      <Text
+                        style={[
+                          styles.durationPrice,
+                          { color: isSelected ? colors.primary : colors.foreground },
+                        ]}
+                      >
+                        {price}
+                      </Text>
+                    ) : null}
+                    {dur.savings && (
+                      <Text style={[styles.durationSavings, { color: colors.success }]}>
+                        {dur.savings}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
+
         {/* Action Button Card */}
         <View
           style={[styles.ctaCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
-          <Text
-            style={[
-              styles.singleMonthNoteText,
-              { color: colors.mutedForeground, marginBottom: 10 },
-            ]}
-          >
-            {BILLING_ENABLED
-              ? "Google Play displays the current price and handles payment. Entitlements are enabled only after server verification."
-              : "Prices shown are reference prices. Google Play checkout is not configured in this build; no charge can be made here."}
-          </Text>
           <View style={styles.ctaSummaryRow}>
             <Text style={[styles.ctaPlanSummary, { color: colors.foreground }]}>
               {PLANS[selectedTier].name}
               {selectedTier === "premium" ? ` · ${activeDurationObj.label}` : ""}
             </Text>
-            <Text style={[styles.ctaTotalAmount, { color: colors.primary }]}>
-              {selectedTier === "free"
-                ? "₹0"
-                : selectedTier === "premium"
-                  ? productPrice(PLAY_PRODUCT_IDS.premium[selectedDuration])
-                  : productPrice(tierProductId ?? "")}
-            </Text>
+            {selectedTier === "free" || ctaPrice ? (
+              <Text style={[styles.ctaTotalAmount, { color: colors.primary }]}>
+                {selectedTier === "free" ? "₹0" : ctaPrice}
+              </Text>
+            ) : null}
           </View>
 
           <Button
-            title={
-              processing
-                ? "Connecting..."
-                : selectedTier === "free"
-                  ? `Free Plan Active (${dailyLikeLimit ?? "—"} Likes/Day)`
-                  : `Upgrade to ${PLANS[selectedTier].name}`
-            }
+            title={buttonTitle}
             loading={processing}
             disabled={
               selectedTier !== "free" &&
@@ -709,46 +563,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     marginLeft: Spacing.xs,
   },
-  comparisonCard: {
-    borderRadius: Radii.xl,
-    borderWidth: 1,
-    overflow: "hidden",
-    ...Shadows.card,
-  },
-  matrixHeaderRow: {
-    flexDirection: "row",
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderBottomWidth: 1,
-    alignItems: "center",
-  },
-  matrixColFeature: {
-    flex: 2.2,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-  },
-  matrixColPlan: {
-    flex: 1,
-    fontSize: Typography.sizes.xs,
-    textAlign: "center",
-  },
-  matrixRow: {
-    flexDirection: "row",
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderBottomWidth: 1,
-    alignItems: "center",
-  },
-  matrixRowLabel: {
-    flex: 2.2,
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.medium,
-  },
-  matrixRowCell: {
-    flex: 1,
-    fontSize: Typography.sizes.xs,
-    textAlign: "center",
-  },
   durationGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -788,20 +602,6 @@ const styles = StyleSheet.create({
   durationSavings: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.semibold,
-    marginTop: Spacing.xs,
-  },
-  singleMonthNoteBox: {
-    borderRadius: Radii.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    marginBottom: Spacing.lg,
-  },
-  singleMonthNoteTitle: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-  },
-  singleMonthNoteText: {
-    fontSize: Typography.sizes.xs,
     marginTop: Spacing.xs,
   },
   plansContainer: {
@@ -866,10 +666,6 @@ const styles = StyleSheet.create({
   planPrice: {
     fontSize: Typography.sizes.xxl,
     fontWeight: Typography.weights.bold,
-  },
-  planPeriod: {
-    fontSize: Typography.sizes.xs,
-    marginTop: -2,
   },
   featuresList: {
     gap: Spacing.sm,
