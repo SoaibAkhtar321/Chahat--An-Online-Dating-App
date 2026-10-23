@@ -25,6 +25,8 @@ interface ChatBubbleProps {
   replyUnavailable?: boolean;
   /** Tap on the quote: jump to the original message. Ignored while the original is unavailable. */
   onReplyPress?: (replyToId: string) => void;
+  /** Tap on the photo: open it full screen. */
+  onImagePress?: (uri: string) => void;
 }
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
@@ -36,6 +38,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   partnerName = "",
   replyUnavailable = false,
   onReplyPress,
+  onImagePress,
 }) => {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
@@ -178,7 +181,16 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           ) : null}
 
           {!isDeleted && message.image ? (
-            <Image source={{ uri: message.image }} style={styles.image} contentFit="cover" />
+            <Pressable
+              testID={`message-image-${message.id}`}
+              onPress={onImagePress ? () => onImagePress(message.image as string) : undefined}
+              onLongPress={onLongPress ? () => onLongPress(message) : undefined}
+              delayLongPress={350}
+              accessibilityRole="imagebutton"
+              accessibilityLabel="Open photo"
+            >
+              <Image source={{ uri: message.image }} style={styles.image} contentFit="cover" />
+            </Pressable>
           ) : null}
 
           {isDeleted ? null : isVoice ? (

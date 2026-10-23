@@ -1,90 +1,58 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Layout, Spacing, Typography } from "../../src/constants/theme";
-import { useTheme } from "../../src/context/ThemeContext";
-import { Button } from "../../src/components/ui/Button";
-import { completeAuthLink } from "../../src/services/auth";
+// TODO: change this import to wherever your Supabase client is created
+import { supabase } from "../lib/supabase";
 
-export default function AuthCallbackScreen() {
-  const url = Linking.useURL();
-  const router = useRouter();
-  const { colors } = useTheme();
-  const [error, setError] = useState<string | null>(null);
+WebBrowser.maybeCompleteAuthSession();
 
-  useEffect(() => {
-    let active = true;
-    if (!url)
-      return () => {
-        active = false;
-      };
+// Lets the callback screen know Google sign-in is handling the redirect.
+export const googleAuth = { inProgress: false };
 
-    void completeAuthLink(url).then((result) => {
-      if (!active) return;
-      if (!result.success) {
-        setError(result.error || "This link could not be verified.");
-        return;
-      }
-      if (result.flow === "recovery") {
-        router.replace("/reset-password?mode=update");
-      } else {
-        router.replace("/");
-      }
+export async function signInWithGoogle(): Promise<{ success: boolean; error?: string }> {
+  googleAuth.inProgress = true;
+  try {
+    const redirectTo = Linking.createURL("auth/callback");
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, skipBrowserRedirect: true },
     });
+    if (error || !data?.url) {
+      return { success: false, error: error?.message ?? "Could not start Google sign-in." };
+    }
 
-    return () => {
-      active = false;
-    };
-  }, [url, router]);
+    const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (res.type !== "success") return { success: false, error: "Sign-in cancelled." };
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {error ? (
-        <>
-          <Text style={[styles.title, { color: colors.foreground }]}>Link problem</Text>
-          <Text style={[styles.message, { color: colors.mutedForeground }]}>{error}</Text>
-          <Button
-            title="Back to sign in"
-            onPress={() => router.replace("/(auth)/login")}
-            size="lg"
-            style={styles.action}
-          />
-        </>
-      ) : (
-        <>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.message, { color: colors.mutedForeground }]}>
-            Verifying your secure account link…
-          </Text>
-        </>
-      )}
-    </SafeAreaView>
-  );
+    const url = res.url;
+    const query = url.includes("?") ? url.split("?")[1].split("#")[0] : "";
+    const fragment = url.includes("#") ? url.split("#")[1] : "";
+    const params = new URLSearchParams(fragment || query);
+
+    const errorDescription = params.get("error_description");
+    if (errorDescription) return { success: false, error: errorDescription };
+
+    const code = params.get("code");
+    if (code) {
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) return { success: false, error: exchangeError.message };
+      return { success: true };
+    }
+
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    if (access_token && refresh_token) {
+      const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+      if (sessionError) return { success: false, error: sessionError.message };
+      return { success: true };
+    }
+
+    return { success: false, error: "No session returned from Google." };
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? "Google sign-in failed." };
+  } finally {
+    setTimeout(() => {
+      googleAuth.inProgress = false;
+    }, 1500);
+  }
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: Layout.screenPadding,
-    gap: Spacing.lg,
-  },
-  title: {
-    fontSize: Typography.sizes.xxl,
-    fontWeight: Typography.weights.bold,
-    fontFamily: Typography.fontDisplay,
-    textAlign: "center",
-  },
-  message: {
-    fontSize: Typography.sizes.base,
-    lineHeight: 22,
-    textAlign: "center",
-  },
-  action: {
-    alignSelf: "stretch",
-    marginTop: Spacing.sm,
-  },
-});

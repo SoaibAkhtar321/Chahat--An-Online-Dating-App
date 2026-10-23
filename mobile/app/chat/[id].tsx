@@ -17,7 +17,6 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
 import { useScreenProtection } from "../../src/hooks/useScreenProtection";
 import { buildNewCallRoute } from "../../src/services/calls";
-import { isCallingAvailable } from "../../src/services/callMedia";
 import { isServiceConfigured } from "../../src/config/appConfig";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -44,6 +43,7 @@ import { MessageActionSheet } from "../../src/components/chat/MessageActionSheet
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
+import { ImageViewerModal } from "../../src/components/chat/ImageViewerModal";
 import { SMART_ICEBREAKERS, type Icebreaker } from "../../src/constants/icebreakers";
 import { useAuth } from "../../src/context/AuthContext";
 import { useMilo } from "../../src/context/MiloContext";
@@ -106,7 +106,6 @@ export default function ChatDetailScreen() {
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const router = useRouter();
   const { id: matchId } = useLocalSearchParams<{ id: string }>();
-  const callingAvailable = isCallingAvailable();
   // Off unless EXPO_PUBLIC_FEATURE_VOICE_MESSAGES is exactly "true" (development/test builds only).
   const voiceEnabled = isServiceConfigured("voiceMessages");
   const { user } = useAuth();
@@ -120,6 +119,8 @@ export default function ChatDetailScreen() {
   // Emoji reactions: messageId -> (userId -> emoji). Loaded with the thread, kept live through Realtime.
   const [reactions, setReactions] = useState<ReactionMap>({});
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  // Photo opened full screen from a chat bubble.
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
   // The message the next send replies to (shown as a bar above the input).
   const [replyDraft, setReplyDraft] = useState<Message | null>(null);
   const [sending, setSending] = useState(false);
@@ -468,7 +469,7 @@ export default function ChatDetailScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.7,
     });
 
@@ -675,21 +676,11 @@ export default function ChatDetailScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.actionIcon}
-            onPress={() => setShowGamesModal(true)}
-            accessibilityLabel="Couple games"
+            accessibilityLabel="Start video call"
+            onPress={() => router.push(buildNewCallRoute(matchId, "video"))}
           >
-            <Trophy size={19} color={Colors.accent} />
+            <Video size={20} color={Colors.primary} />
           </TouchableOpacity>
-
-          {callingAvailable && matchId ? (
-            <TouchableOpacity
-              style={styles.actionIcon}
-              accessibilityLabel="Start video call"
-              onPress={() => router.push(buildNewCallRoute(matchId, "video"))}
-            >
-              <Video size={20} color={Colors.primary} />
-            </TouchableOpacity>
-          ) : null}
 
           <TouchableOpacity style={styles.actionIcon} accessibilityLabel="More options"
             onPress={() => setMenuVisible(!menuVisible)}>
@@ -801,6 +792,7 @@ export default function ChatDetailScreen() {
               partnerName={otherUser.name}
               replyUnavailable={isReplyUnavailable(item, messages, deletionContext())}
               onReplyPress={scrollToMessage}
+              onImagePress={setViewerUri}
               showDayHeader={
                 index === 0 ||
                 new Date(messages[index - 1]!.at).toDateString() !==
@@ -1027,6 +1019,9 @@ export default function ChatDetailScreen() {
         </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Full-screen photo viewer */}
+      <ImageViewerModal uri={viewerUri} onClose={() => setViewerUri(null)} />
 
       {/* Couple Games Modal */}
       <CoupleGamesModal
