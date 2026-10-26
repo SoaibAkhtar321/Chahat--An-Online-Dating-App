@@ -90,7 +90,9 @@ describe("coin purchase client", () => {
 describe("insufficient coins during a call", () => {
   it("maps the server code to a clear client error", async () => {
     const error = { context: { json: async () => ({ code: "insufficient_coins" }) } };
-    await expect(requestCallToken("call-1", async () => ({ data: null, error }), true)).rejects.toMatchObject({ code: "insufficient_coins" });
-    expect(new CallError("insufficient_coins").message).toMatch(/coins/);
+    await expect(requestCallToken("call-1", async () => ({ data: null, error }), true)).rejects.toMatchObject({ code: "allowance_ended" });
+    // There is no coin concept in the app: running out of call time points to Premium instead.
+    expect(new CallError("allowance_ended").message).toMatch(/Premium/);
+    expect(new CallError("allowance_ended").message).not.toMatch(/coins/i);
   });
 });

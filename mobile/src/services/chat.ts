@@ -1,3 +1,4 @@
+import { previewForSystemBody } from "../utils/callEvents";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Message, MatchItem, Profile } from "../types";
 import {
@@ -123,7 +124,9 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
             text:
               last.message_type === "voice" || last.audio_path
                 ? `Voice note ${last.audio_duration_sec ? `(${last.audio_duration_sec}s)` : "🎤"}`
-                : last.body,
+                : last.message_type === "system"
+                  ? previewForSystemBody(last.body, last.sender === currentUserId)
+                  : last.body,
             at: new Date(last.created_at).getTime(),
             status: last.read_at ? "read" : "sent",
             image: last.image_path ? await getSignedUrl("chat", last.image_path) : undefined,
@@ -558,7 +561,7 @@ export function subscribeToMatchMessages(
         onMessageReceived(mapMessageRow(msg, currentUserId ?? ""));
 
         // If the incoming message is from the other user, dispatch to in-app notifications
-        if (currentUserId && msg.sender !== currentUserId) {
+        if (currentUserId && msg.sender !== currentUserId && msg.message_type !== "system") {
           pushNotificationToInbox(currentUserId, {
             kind: "message",
             title: "New Message",

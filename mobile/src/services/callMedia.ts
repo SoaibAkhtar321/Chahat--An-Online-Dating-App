@@ -11,18 +11,29 @@ export type CallErrorCode =
   | "unauthenticated"
   | "rate_limited"
   | "insufficient_coins"
+  | "allowance_ended"
   | "call_unavailable"
   | "permission_denied"
   | "network"
   | "provider_error"
   | "invalid_state";
 
+/** Shown when today's free video-call time is used up. There is no coin concept in the app. */
+export const PREMIUM_CALL_MESSAGE =
+  "Your free video-call time for today is over. Get Premium to keep calling, with up to 5 minutes of video calling every day.";
+
+/** True for errors that should offer the Premium upgrade. */
+export function isPremiumCallError(code: CallErrorCode | undefined): boolean {
+  return code === "insufficient_coins" || code === "allowance_ended";
+}
+
 const USER_MESSAGES: Record<CallErrorCode, string> = {
   calling_disabled: "Calling is not available yet.",
   provider_not_configured: "Calling is not available yet.",
   unauthenticated: "Please sign in again to join the call.",
   rate_limited: "Too many call attempts. Please wait a moment and try again.",
-  insufficient_coins: "You don't have enough coins to continue this call.",
+  insufficient_coins: PREMIUM_CALL_MESSAGE,
+  allowance_ended: PREMIUM_CALL_MESSAGE,
   call_unavailable: "This call is no longer available.",
   permission_denied: "Microphone or camera permission is needed to join the call.",
   network: "Network problem. Check your connection and try again.",
@@ -57,8 +68,8 @@ export interface CallMediaSession {
   setMicrophoneEnabled(enabled: boolean): Promise<void>;
   setCameraEnabled(enabled: boolean): Promise<void>;
   leave(): Promise<void>;
-  /** Called when the provider drops the session (remote hang-up, network loss). */
-  onEnded(listener: () => void): () => void;
+  /** Called when the provider drops the session (remote hang-up, network loss, time allowance over). */
+  onEnded(listener: (reason?: CallErrorCode) => void): () => void;
 }
 
 export interface CallMediaProvider {

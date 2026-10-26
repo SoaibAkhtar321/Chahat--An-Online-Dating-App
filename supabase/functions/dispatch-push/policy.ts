@@ -14,7 +14,7 @@ export interface PushPayload {
   };
   // Calls use their own high-importance channel and the Answer/Decline action category the app registers
   // (mobile/src/services/callNotificationPolicy.ts keeps these names in sync).
-  channelId: "default" | "calls";
+  channelId: "default" | "calls_ring";
   categoryId?: "incoming_call";
   priority: "high";
   ttl: number;
@@ -98,7 +98,7 @@ export function buildPushPayload(
       ...(callType ? { callType } : {}),
       notificationId,
     },
-    channelId: category === "call" ? "calls" : "default",
+    channelId: category === "call" ? "calls_ring" : "default",
     ...(category === "call" ? { categoryId: "incoming_call" as const } : {}),
     priority: "high",
     // A ringing push is worthless once the invitation expires (60 s), so the provider must drop it.

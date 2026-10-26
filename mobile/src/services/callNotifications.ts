@@ -8,6 +8,7 @@ import {
   CALL_ACTION_DECLINE,
   CALL_CATEGORY_ID,
   CALL_CHANNEL_ID,
+  CALL_RINGTONE_FILE,
   parseCallNotificationData,
 } from "./callNotificationPolicy";
 
@@ -26,7 +27,12 @@ export async function ensureCallNotificationSetup(): Promise<void> {
     name: "Incoming calls",
     description: "Rings when someone you matched with calls you.",
     importance: Notifications.AndroidImportance.MAX,
-    sound: "default",
+    // A ~30 s ringtone bundled with the app (like a phone call), not the short default notification beep.
+    sound: CALL_RINGTONE_FILE,
+    audioAttributes: {
+      usage: Notifications.AndroidAudioUsage.NOTIFICATION_RINGTONE,
+      contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+    },
     vibrationPattern: [0, 800, 600, 800, 600, 800],
     enableVibrate: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
@@ -59,11 +65,39 @@ export async function dismissCallNotifications(callId?: string): Promise<void> {
 
 const RING_PATTERN = [0, 800, 600];
 
-/** In-app ring while the app is open. Uses the vibrator only; the push channel provides the sound. */
+let ringSound: { stopAsync(): Promise<unknown>; unloadAsync(): Promise<unknown> } | null = null;
+let ringToken = 0;
+
+/**
+ * In-app ring while the app is open: the bundled ringtone on a loop plus vibration, like a normal call.
+ * Audio problems never throw; the vibration still runs.
+ */
 export function startInAppRing(): void {
   if (Platform.OS === "android") Vibration.vibrate(RING_PATTERN, true);
+  const token = ++ringToken;
+  void (async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Audio } = require("expo-av");
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, shouldDuckAndroid: false });
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const asset = require("../../assets/sounds/chahat_ringtone.wav");
+      const { sound } = await Audio.Sound.createAsync(asset, { shouldPlay: true, isLooping: true, volume: 1 });
+      if (token !== ringToken) {
+        await sound.unloadAsync();
+        return;
+      }
+      ringSound = sound;
+    } catch {
+      // No audio module (Expo Go / tests) or the file could not play: vibration only.
+    }
+  })();
 }
 
 export function stopInAppRing(): void {
+  ringToken++;
   Vibration.cancel();
+  const sound = ringSound;
+  ringSound = null;
+  if (sound) void sound.stopAsync().then(() => sound.unloadAsync()).catch(() => undefined);
 }

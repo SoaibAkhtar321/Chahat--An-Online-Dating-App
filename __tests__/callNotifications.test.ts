@@ -13,6 +13,8 @@ jest.mock("react-native", () => ({
 jest.mock("expo-notifications", () => ({
   AndroidImportance: { MAX: 5 },
   AndroidNotificationVisibility: { PRIVATE: 0 },
+  AndroidAudioUsage: { NOTIFICATION_RINGTONE: 6 },
+  AndroidAudioContentType: { SONIFICATION: 4 },
   setNotificationChannelAsync: (...a: unknown[]) => mockSetChannel(...a),
   setNotificationCategoryAsync: (...a: unknown[]) => mockSetCategory(...a),
   getPresentedNotificationsAsync: () => mockPresented(),
@@ -39,8 +41,16 @@ describe("call channel and actions", () => {
   it("registers a max-importance ringing channel that hides content on the lock screen", async () => {
     await ensureCallNotificationSetup();
     expect(mockSetChannel).toHaveBeenCalledWith(
-      "calls",
-      expect.objectContaining({ importance: 5, sound: "default", enableVibrate: true, lockscreenVisibility: 0, bypassDnd: false }),
+      "calls_ring",
+      expect.objectContaining({
+        importance: 5,
+        // Bundled ~30 s ringtone, played as a ringtone (not the short default notification beep).
+        sound: "chahat_ringtone.wav",
+        audioAttributes: expect.objectContaining({ usage: 6 }),
+        enableVibrate: true,
+        lockscreenVisibility: 0,
+        bypassDnd: false,
+      }),
     );
   });
   it("registers Answer (opens the app) and Decline (does not) on the incoming_call category", async () => {

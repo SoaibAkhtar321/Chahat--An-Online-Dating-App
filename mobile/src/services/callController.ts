@@ -4,6 +4,7 @@
 import {
   CallError,
   toCallError,
+  type CallErrorCode,
   type CallJoinGrant,
   type CallMediaProvider,
   type CallMediaSession,
@@ -119,7 +120,7 @@ export class CallController {
         return;
       }
       this.session = session;
-      this.endedUnsubscribe = session.onEnded(() => this.handleRemoteEnd(session));
+      this.endedUnsubscribe = session.onEnded((reason) => this.handleRemoteEnd(session, reason));
       await session.setMicrophoneEnabled(true);
       if (callType === "video") await session.setCameraEnabled(true);
       if (this.isStale(run)) return;
@@ -184,14 +185,14 @@ export class CallController {
     await this.releaseSession();
   }
 
-  private handleRemoteEnd(session: CallMediaSession): void {
+  private handleRemoteEnd(session: CallMediaSession, reason?: CallErrorCode): void {
     if (this.session !== session) return;
     this.session = null;
     this.endedUnsubscribe?.();
     this.endedUnsubscribe = null;
     void this.safeLeave(session);
     if (this.state.phase === "connected" || this.state.phase === "joining") {
-      this.set({ phase: "ended" });
+      this.set({ phase: "ended", ...(reason ? { error: new CallError(reason) } : {}) });
     }
   }
 

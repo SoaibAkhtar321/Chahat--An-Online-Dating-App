@@ -72,3 +72,24 @@ export async function getMyVideoCalls(): Promise<VideoCall[]> {
   if (!Array.isArray(data)) throw new Error("The server returned an invalid call list.");
   return data as VideoCall[];
 }
+
+/**
+ * Tells the server this phone is in the call. The free/premium time clock starts only when BOTH people
+ * have reported in, so time spent connecting is never charged. Returns the seconds still covered, or
+ * null when the call is not metered. Never throws: a failed report must not drop a working call.
+ */
+export async function markCallConnected(
+  callId: string,
+): Promise<{ bothConnected: boolean; secondsRemaining: number | null } | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const { data, error } = await supabase.rpc("mark_call_connected", { _call_id: callId });
+    if (error || !data?.success) return null;
+    return {
+      bothConnected: data.both_connected === true,
+      secondsRemaining: typeof data.seconds_remaining === "number" ? data.seconds_remaining : null,
+    };
+  } catch {
+    return null;
+  }
+}

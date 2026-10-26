@@ -14,7 +14,7 @@ describe("call push payload", () => {
       category: "call", matchId: MATCH, callId: CALL, callType: "video", notificationId: "n1",
     });
     // Phase 3: ringing push uses the dedicated channel and the Answer/Decline action category.
-    expect(p.channelId).toBe("calls");
+    expect(p.channelId).toBe("calls_ring");
     expect(p.categoryId).toBe("incoming_call");
     expect(p.priority).toBe("high");
     expect(JSON.stringify(p)).not.toMatch(/secret|roomId|token\":/);

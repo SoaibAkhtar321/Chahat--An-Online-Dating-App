@@ -44,7 +44,12 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/sounds/chahat_ringtone.wav"]
+        }
+      ],
       "expo-secure-store",
       [
         "expo-location",

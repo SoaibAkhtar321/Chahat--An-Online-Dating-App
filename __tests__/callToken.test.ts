@@ -40,7 +40,7 @@ describe("requestCallToken", () => {
     ["call_not_allowed", "call_unavailable"],
     ["call_not_accepted", "call_unavailable"],
     ["call_ended", "call_unavailable"],
-    ["call_expired", "call_unavailable"],
+    ["call_expired", "allowance_ended"],
     ["something_new", "provider_error"],
   ])("maps server code %s to %s", async (serverCode, expected) => {
     const invoke = jest.fn(async () => ({ data: null, error: httpError(serverCode) }));

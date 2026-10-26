@@ -62,6 +62,7 @@ describe("calling-enabled UI gating (source-level checks)", () => {
     expect(screen.indexOf("await controller?.hangUp()")).toBeLessThan(
       screen.indexOf("transitionVideoCall(callId, status"),
     );
-    expect(screen).toContain('media.phase === "connected" && (');
+    expect(screen).toContain('const connected = status === "accepted" && media.phase === "connected"');
+    expect(screen).toContain("{connected && (");
   });
 });

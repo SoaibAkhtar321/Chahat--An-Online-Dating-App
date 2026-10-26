@@ -9,6 +9,7 @@ import React from "react";
 import { PermissionsAndroid, Platform, View } from "react-native";
 import {
   CallError,
+  type CallErrorCode,
   type CallJoinGrant,
   type CallMediaProvider,
   type CallMediaSession,
@@ -18,6 +19,8 @@ import {
 export interface AgoraVideoState {
   localVideoReady: boolean;
   remoteUid: number | null;
+  /** True once the other person's video frames are actually arriving (not just that they joined). */
+  remoteVideoReady: boolean;
 }
 
 /** Optional video surface exposed by sessions that can render video (Agora). */
@@ -79,9 +82,9 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
       if (!callId || !userId) throw new CallError("unauthenticated");
 
       const engine = sdk.createAgoraRtcEngine();
-      const endedListeners = new Set<() => void>();
+      const endedListeners = new Set<(reason?: CallErrorCode) => void>();
       const videoListeners = new Set<(s: AgoraVideoState) => void>();
-      let video: AgoraVideoState = { localVideoReady: false, remoteUid: null };
+      let video: AgoraVideoState = { localVideoReady: false, remoteUid: null, remoteVideoReady: false };
       let left = false;
       let joined = false;
       let rejoinFailed = false;
@@ -90,9 +93,9 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
         video = { ...video, ...patch };
         videoListeners.forEach((l) => l(video));
       };
-      const notifyEnded = () => {
+      const notifyEnded = (reason?: CallErrorCode) => {
         if (left) return;
-        endedListeners.forEach((l) => l());
+        endedListeners.forEach((l) => l(reason));
       };
       const release = async () => {
         if (left) return;
@@ -121,9 +124,17 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
           resolveJoined();
         },
         onUserJoined: (_conn: unknown, remoteUid: number) => setVideo({ remoteUid }),
+        // Frames from the other person are really being decoded (2 = DECODING). Until then the call screen
+        // shows a "waiting for camera" hint instead of an unexplained black rectangle.
+        onRemoteVideoStateChanged: (_conn: unknown, uid: number, state: number) => {
+          if (state === 2) setVideo({ remoteUid: uid, remoteVideoReady: true });
+          else if (state === 0 || state === 3) setVideo({ remoteVideoReady: false });
+        },
+        onFirstRemoteVideoDecoded: (_conn: unknown, uid: number) =>
+          setVideo({ remoteUid: uid, remoteVideoReady: true }),
         // One-to-one call: when the other person leaves or drops, the call is over.
         onUserOffline: () => {
-          setVideo({ remoteUid: null });
+          setVideo({ remoteUid: null, remoteVideoReady: false });
           notifyEnded();
         },
         onConnectionStateChanged: (_conn: unknown, state: number) => {
@@ -141,10 +152,11 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
           try {
             const fresh = await deps.renewToken(callId);
             await engine.renewToken(fresh.token);
-          } catch {
-            // The server refused a new token (call over, out of coins, rate limit): end cleanly.
+          } catch (cause) {
+            // The server refused a new token (call over, time allowance used up, rate limit): end cleanly and
+            // say why, so the screen can offer Premium instead of a generic "call ended".
             rejoinFailed = true;
-            notifyEnded();
+            notifyEnded(cause instanceof CallError ? cause.code : undefined);
           }
         },
         onRequestToken: () => {

@@ -2,7 +2,11 @@
 // Names here must match supabase/functions/dispatch-push/policy.ts (channelId / categoryId).
 import { isValidUUID } from "../utils/validation";
 
-export const CALL_CHANNEL_ID = "calls";
+// "calls_ring" replaces the old "calls" channel: Android never lets an app change the sound of an existing channel,
+// so the ringtone needs a new channel id. Keep in sync with supabase/functions/dispatch-push/policy.ts.
+export const CALL_CHANNEL_ID = "calls_ring";
+/** File name of the ringtone bundled by the expo-notifications plugin (app.json -> sounds). */
+export const CALL_RINGTONE_FILE = "chahat_ringtone.wav";
 export const CALL_CATEGORY_ID = "incoming_call";
 export const CALL_ACTION_ANSWER = "answer";
 export const CALL_ACTION_DECLINE = "decline";

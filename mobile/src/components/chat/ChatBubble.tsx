@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Pressable, Alert } from "react-native";
 import { Image } from "expo-image";
-import { Check, CheckCheck, AlertCircle, Play, Pause, Mic, Ban, Camera } from "lucide-react-native";
+import { Check, CheckCheck, AlertCircle, Play, Pause, Mic, Ban, Camera, Video, VideoOff } from "lucide-react-native";
 import { Radii, Typography, ThemeColors, Layout, Spacing } from "../../constants/theme";
 import { useTheme } from "../../context/ThemeContext";
 import type { Message } from "../../types";
@@ -9,6 +9,7 @@ import { getAudioPlayerAdapter } from "../../services/voiceMedia";
 import { DELETED_BY_ME_PREVIEW_TEXT, DELETED_PREVIEW_TEXT } from "../../utils/messageState";
 import type { ReactionSummary } from "../../utils/reactions";
 import { replyAuthorLabel, replySnippet } from "../../utils/replies";
+import { callEventLabel, isMissedForViewer, parseCallEvent } from "../../utils/callEvents";
 
 interface ChatBubbleProps {
   message: Message;
@@ -99,6 +100,50 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       );
     }
   };
+
+  // Call history ("Missed video call", "Video call · 0:23") is a centered system line, not a bubble.
+  const callEvent = message.messageType === "system" ? parseCallEvent(message.text) : null;
+  if (callEvent) {
+    const missed = isMissedForViewer(callEvent, isMe);
+    const Icon = callEvent.outcome === "ended" ? Video : VideoOff;
+    return (
+      <View style={styles.container}>
+        {showDayHeader && (
+          <View style={styles.dayHeader}>
+            <Text style={styles.dayHeaderText}>{formatDateHeader(message.at)}</Text>
+          </View>
+        )}
+        <View
+          style={{ alignItems: "center", marginVertical: 6 }}
+          testID={`call-event-${message.id}`}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: Radii.full,
+              backgroundColor: Colors.card,
+              borderWidth: 1,
+              borderColor: Colors.border,
+            }}
+          >
+            <Icon size={16} color={missed ? Colors.destructive : Colors.mutedForeground} />
+            <Text
+              style={{
+                color: missed ? Colors.destructive : Colors.mutedForeground,
+                fontSize: Typography.sizes.sm,
+              }}
+            >
+              {callEventLabel(callEvent, isMe)} · {timeStr}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
