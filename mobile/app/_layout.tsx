@@ -14,6 +14,7 @@ import { NotificationResponseHandler } from "../src/components/notifications/Not
 import { MiloProvider } from "../src/context/MiloContext";
 import { IncomingCallProvider } from "../src/context/IncomingCallContext";
 import { IncomingCallOverlay } from "../src/components/calls/IncomingCallOverlay";
+import { PurchaseReconciler } from "../src/components/billing/PurchaseReconciler";
 import { ThemeProvider, useTheme } from "../src/context/ThemeContext";
 import { registerDefaultCallProvider } from "../src/services/registerCallProvider";
 
@@ -104,6 +105,7 @@ export default function RootLayout() {
           <MiloProvider>
             <IncomingCallProvider>
               <NotificationResponseHandler />
+              <PurchaseReconciler />
               <RootNavigation />
               <IncomingCallOverlay />
             </IncomingCallProvider>

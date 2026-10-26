@@ -6,12 +6,19 @@ import {
   isUpgradeRequiredError,
   parseLikesAccess,
   parseReceivedLikes,
+  parseSentLikes,
   type LikesAccess,
+  type ReceivedLike,
 } from "./likesPolicy";
 import type { Profile } from "../types";
 
 export type ReceivedLikesResult =
   | { status: "ok"; profiles: Profile[] }
+  | { status: "upgrade_required" }
+  | { status: "error"; message: string };
+
+export type SentLikesResult =
+  | { status: "ok"; profiles: Profile[]; matchedIds: string[] }
   | { status: "upgrade_required" }
   | { status: "error"; message: string };
 
@@ -33,28 +40,47 @@ export async function fetchReceivedLikes(): Promise<ReceivedLikesResult> {
       return { status: "error", message: "Could not load your likes. Please try again." };
     }
     const likes = parseReceivedLikes(data);
-    const signed = await getSignedUrls(
-      "photos",
-      likes.flatMap((l) => l.photoPaths),
-    );
-    const profiles: Profile[] = likes.map((l) => ({
-      id: l.id,
-      name: l.name,
-      age: l.age ?? 0,
-      city: l.city,
-      distanceKm: null,
-      bio: "",
-      photos: l.photoPaths.map((p) => signed[p] || "").filter(Boolean),
-      interests: [],
-      intent: "",
-      intents: [],
-      languages: [],
-      lastActiveMin: 0,
-      likesYou: true,
-      isDemo: false,
-    })) as Profile[];
+    const profiles = await toProfiles(likes, true);
     return { status: "ok", profiles };
   } catch {
     return { status: "error", message: "Could not load your likes. Please try again." };
   }
+}
+
+export async function fetchSentLikes(): Promise<SentLikesResult> {
+  try {
+    const { data, error } = await supabase.rpc("get_my_sent_likes", { _limit: 50 });
+    if (error) {
+      if (isUpgradeRequiredError(error)) return { status: "upgrade_required" };
+      return { status: "error", message: "Could not load the profiles you liked. Please try again." };
+    }
+    const likes = parseSentLikes(data);
+    const profiles = await toProfiles(likes, false);
+    return { status: "ok", profiles, matchedIds: likes.filter((l) => l.isMatch).map((l) => l.id) };
+  } catch {
+    return { status: "error", message: "Could not load the profiles you liked. Please try again." };
+  }
+}
+
+async function toProfiles(likes: ReceivedLike[], likesYou: boolean): Promise<Profile[]> {
+  const signed = await getSignedUrls(
+    "photos",
+    likes.flatMap((l) => l.photoPaths),
+  );
+  return likes.map((l) => ({
+    id: l.id,
+    name: l.name,
+    age: l.age ?? 0,
+    city: l.city,
+    distanceKm: null,
+    bio: "",
+    photos: l.photoPaths.map((p) => signed[p] || "").filter(Boolean),
+    interests: [],
+    intent: "",
+    intents: [],
+    languages: [],
+    lastActiveMin: 0,
+    likesYou,
+    isDemo: false,
+  })) as Profile[];
 }

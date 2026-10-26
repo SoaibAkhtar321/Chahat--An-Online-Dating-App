@@ -11,7 +11,7 @@ import { Button } from "../../src/components/ui/Button";
 import { useAuth } from "../../src/context/AuthContext";
 import { Alert } from "../../src/utils/alert";
 import { isSupabaseConfigured } from "../../src/services/supabase";
-import { fetchLikesAccess, fetchReceivedLikes } from "../../src/services/likes";
+import { fetchLikesAccess, fetchReceivedLikes, fetchSentLikes } from "../../src/services/likes";
 import { submitSwipe } from "../../src/services/discovery";
 import type { Profile } from "../../src/types";
 
@@ -19,6 +19,7 @@ const { width } = Dimensions.get("window");
 const CARD_SIZE = (width - 48) / 2;
 
 type LoadState = "loading" | "ready" | "error";
+type LikesTab = "received" | "sent";
 
 export default function LikesScreen() {
   const { colors: Colors } = useTheme();
@@ -32,6 +33,10 @@ export default function LikesScreen() {
   const [eligible, setEligible] = useState(false);
   const [count, setCount] = useState(0);
   const [likers, setLikers] = useState<Profile[]>([]);
+  const [tab, setTab] = useState<LikesTab>("received");
+  const [sent, setSent] = useState<Profile[]>([]);
+  const [sentMatched, setSentMatched] = useState<string[]>([]);
+  const [sentState, setSentState] = useState<LoadState>("loading");
 
   const load = useCallback(async () => {
     if (!backend) return;
@@ -67,10 +72,37 @@ export default function LikesScreen() {
     }
   }, [backend]);
 
+  // The "You liked" list. The server re-checks the membership on every call, so a lapsed subscription simply
+  // gets upgrade_required here and the screen falls back to the normal locked view.
+  const loadSent = useCallback(async () => {
+    if (!backend) return;
+    setSentState("loading");
+    const result = await fetchSentLikes();
+    if (result.status === "ok") {
+      setSent(result.profiles);
+      setSentMatched(result.matchedIds);
+      setSentState("ready");
+    } else if (result.status === "upgrade_required") {
+      setSent([]);
+      setSentMatched([]);
+      setEligible(false);
+      setTab("received");
+      setSentState("ready");
+    } else {
+      setSentState("error");
+    }
+  }, [backend]);
+
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (tab === "sent" && eligible) void loadSent();
+    }, [tab, eligible, loadSent]),
   );
 
   // No backend configured (local preview): fall back to the demo deck, as before.
@@ -78,6 +110,8 @@ export default function LikesScreen() {
   const shown = backend ? likers : previewLikers;
   const isPremiumUser = backend ? eligible : true;
   const total = backend ? count : previewLikers.length;
+
+  const showingSent = backend && isPremiumUser && tab === "sent";
 
   const handleLikeBack = async (id: string) => {
     if (!user) return;
@@ -99,13 +133,92 @@ export default function LikesScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Likes</Text>
         <Text style={styles.subtitle}>
-          {backend && !isPremiumUser
+          {showingSent
+            ? sentState === "ready" && sent.length > 0
+              ? `You liked ${sent.length} ${sent.length === 1 ? "person" : "people"}`
+              : "Profiles you have liked will show up here."
+            : backend && !isPremiumUser
               ? "Premium members can see who likes them."
               : total > 0
-              ? `${total} ${total === 1 ? "person" : "people"} liked you`
-              : "No new likes right now. Keep your profile fresh!"}
+                ? `${total} ${total === 1 ? "person" : "people"} liked you`
+                : "No new likes right now. Keep your profile fresh!"}
         </Text>
 
+        {backend && isPremiumUser && (
+          <View style={styles.segment} accessibilityRole="tablist">
+            {(["received", "sent"] as const).map((key) => (
+              <TouchableOpacity
+                key={key}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === key }}
+                onPress={() => setTab(key)}
+                style={[styles.segmentBtn, tab === key && styles.segmentBtnActive]}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.segmentText, tab === key && styles.segmentTextActive]}>
+                  {key === "received" ? "Liked you" : "You liked"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {showingSent && (
+          <>
+            <View style={styles.grid}>
+              {sent.map((profile) => (
+                <View key={profile.id} style={styles.gridItem}>
+                  <TouchableOpacity
+                    style={styles.card}
+                    onPress={() =>
+                      router.push({ pathname: "/profile/[id]", params: { id: profile.id } })
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <ProfilePhoto uri={profile.photos[0]} name={profile.name} style={styles.image} />
+                    <View style={styles.cardFooter}>
+                      <Text style={styles.cardName}>
+                        {profile.name}
+                        {profile.age ? `, ${profile.age}` : ""}
+                      </Text>
+                      {sentMatched.includes(profile.id) ? (
+                        <View style={styles.matchedBadge}>
+                          <Text style={styles.matchedText}>Matched</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+            {sentState === "ready" && sent.length === 0 && (
+              <View style={styles.premiumBanner}>
+                <Text style={styles.bannerTitle}>You haven't liked anyone yet</Text>
+                <Text style={styles.bannerDesc}>
+                  Profiles you like in Discover will be listed here so you can find them again.
+                </Text>
+                <Button
+                  title="Go to Discover"
+                  onPress={() => router.push("/(tabs)/discover")}
+                  style={styles.bannerBtn}
+                />
+              </View>
+            )}
+            {sentState === "error" && (
+              <View style={styles.premiumBanner}>
+                <Text style={styles.bannerDesc}>Could not load the profiles you liked.</Text>
+                <Button
+                  title="Try again"
+                  variant="ghost"
+                  onPress={() => void loadSent()}
+                  style={styles.bannerBtn}
+                />
+              </View>
+            )}
+          </>
+        )}
+
+        {!showingSent && (
         <View style={styles.grid}>
           {shown.map((profile) => (
             <View key={profile.id} style={styles.gridItem}>
@@ -134,8 +247,9 @@ export default function LikesScreen() {
             </View>
           ))}
         </View>
+        )}
 
-        {state === "ready" && isPremiumUser && total === 0 && (
+        {!showingSent && state === "ready" && isPremiumUser && total === 0 && (
           <View style={styles.premiumBanner}>
             <Text style={styles.bannerTitle}>No likes yet</Text>
             <Text style={styles.bannerDesc}>
@@ -149,7 +263,7 @@ export default function LikesScreen() {
           </View>
         )}
 
-        {(state === "ready" || state === "error") && backend && !isPremiumUser && (
+        {!showingSent && (state === "ready" || state === "error") && backend && !isPremiumUser && (
           <View style={styles.premiumBanner}>
             <Text style={styles.bannerTitle}>See who likes you</Text>
             <Text style={styles.bannerDesc}>
@@ -262,6 +376,42 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     fontSize: Typography.sizes.xs,
     color: Colors.mutedForeground,
     fontWeight: Typography.weights.semibold,
+  },
+  segment: {
+    flexDirection: "row",
+    backgroundColor: Colors.secondary,
+    borderRadius: Radii.full,
+    padding: 4,
+    marginBottom: Spacing.lg,
+  },
+  segmentBtn: {
+    flex: 1,
+    minHeight: Layout.minTap,
+    borderRadius: Radii.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentBtnActive: {
+    backgroundColor: Colors.primary,
+  },
+  segmentText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.mutedForeground,
+  },
+  segmentTextActive: {
+    color: Colors.primaryForeground,
+  },
+  matchedBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radii.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+  },
+  matchedText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primaryForeground,
   },
   premiumBanner: {
     backgroundColor: Colors.secondary,

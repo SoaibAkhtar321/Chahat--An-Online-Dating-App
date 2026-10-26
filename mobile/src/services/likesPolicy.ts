@@ -83,3 +83,26 @@ export function parseReceivedLikes(rows: unknown): ReceivedLike[] {
   }
   return out;
 }
+
+export interface SentLike {
+  id: string;
+  name: string;
+  age: number | null;
+  city: string;
+  photoPaths: string[];
+  likedAt: string;
+  isPriority: boolean;
+  isMatch: boolean;
+}
+
+/** Maps get_my_sent_likes() rows to the screen model, dropping malformed rows. */
+export function parseSentLikes(rows: unknown): SentLike[] {
+  if (!Array.isArray(rows)) return [];
+  const out: SentLike[] = [];
+  for (const row of rows) {
+    const [like] = parseReceivedLikes([row]);
+    if (!like) continue;
+    out.push({ ...like, isMatch: (row as Record<string, unknown>).is_match === true });
+  }
+  return out;
+}

@@ -8,7 +8,7 @@ jest.mock("../mobile/src/services/storage", () => ({
   getSignedUrls: (...a: unknown[]) => mockGetSignedUrls(...a),
 }));
 
-import { fetchLikesAccess, fetchReceivedLikes } from "../mobile/src/services/likes";
+import { fetchLikesAccess, fetchReceivedLikes, fetchSentLikes } from "../mobile/src/services/likes";
 
 beforeEach(() => {
   mockRpc.mockReset();
@@ -49,6 +49,43 @@ describe("likes service", () => {
   it("reports a generic error for other failures", async () => {
     mockRpc.mockResolvedValue({ data: null, error: { code: "500", message: "internal detail" } });
     const res = await fetchReceivedLikes();
+    expect(res.status).toBe("error");
+    expect(JSON.stringify(res)).not.toMatch(/internal detail/);
+  });
+});
+
+describe("sent likes (profiles I liked)", () => {
+  it("calls only get_my_sent_likes, with no user id parameter", async () => {
+    mockRpc.mockResolvedValue({ data: [], error: null });
+    await fetchSentLikes();
+    expect(mockRpc).toHaveBeenCalledWith("get_my_sent_likes", { _limit: 50 });
+  });
+  it("maps upgrade_required to upgrade_required with no profiles and no photo requests", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { code: "42501", message: "upgrade_required" } });
+    expect(await fetchSentLikes()).toEqual({ status: "upgrade_required" });
+    expect(mockGetSignedUrls).not.toHaveBeenCalled();
+  });
+  it("returns profiles with signed photos and which of them are matches", async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        { id: "u1", name: "Asha", age: 27, city: "Delhi", photos: [{ path: "p/1.jpg" }], kind: "like", liked_at: "t", is_match: true },
+        { id: "u2", name: "Ravi", age: 30, city: "Pune", photos: [], kind: "priority", liked_at: "t", is_match: false },
+        { name: "no id, dropped" },
+      ],
+      error: null,
+    });
+    mockGetSignedUrls.mockResolvedValue({ "p/1.jpg": "https://signed/1" });
+    const res = await fetchSentLikes();
+    expect(res.status).toBe("ok");
+    if (res.status === "ok") {
+      expect(res.profiles.map((p) => p.id)).toEqual(["u1", "u2"]);
+      expect(res.profiles[0].photos).toEqual(["https://signed/1"]);
+      expect(res.matchedIds).toEqual(["u1"]);
+    }
+  });
+  it("reports a generic error for other failures", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { code: "500", message: "internal detail" } });
+    const res = await fetchSentLikes();
     expect(res.status).toBe("error");
     expect(JSON.stringify(res)).not.toMatch(/internal detail/);
   });
