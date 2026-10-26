@@ -65,7 +65,11 @@ export async function fetchVoiceIntros(
   if (ids.length === 0) return {};
   try {
     const { data, error } = await supabase.rpc("get_voice_intros", { _ids: ids });
-    if (error || !Array.isArray(data)) return {};
+    if (error || !Array.isArray(data)) {
+      // Most often: migration 20260101004750 (get_voice_intros) has not been applied to this Supabase project.
+      if (error) console.warn("get_voice_intros failed:", error.message);
+      return {};
+    }
     const rows = data as Array<{
       id: string;
       voice_intro_path: string | null;
@@ -79,6 +83,10 @@ export async function fetchVoiceIntros(
     for (const row of rows) {
       const url = row.voice_intro_path ? signed[row.voice_intro_path] : undefined;
       if (url) out[row.id] = { url, durationSec: row.voice_intro_duration_sec ?? 0 };
+      else if (row.voice_intro_path) {
+        // Most often: migration 20260101005200 (voice_intro_visibility_fix) has not been applied, so Storage denies the signed URL.
+        console.warn("Voice intro exists but could not be signed (check the voice-intros read policy):", row.voice_intro_path);
+      }
     }
     return out;
   } catch (err) {

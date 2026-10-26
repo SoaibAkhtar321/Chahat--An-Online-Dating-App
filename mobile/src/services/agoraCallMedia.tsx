@@ -191,6 +191,20 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
       }
 
       const RtcSurfaceView = sdk.RtcSurfaceView;
+      // RtcSurfaceView renders the native "AgoraRtcSurfaceView" component. When the installed app binary does not
+      // contain it (old/Expo Go build, or a new-architecture mismatch) that component is `undefined`, and rendering
+      // it crashes the call screen with "Element type is invalid ... got: undefined". Detect that up front and
+      // fall back to a call without a video surface instead of crashing.
+      let surfaceUsable = false;
+      try {
+        const nativeView = Object.getOwnPropertyDescriptor(RtcSurfaceView?.prototype ?? {}, "view")?.get?.call({});
+        surfaceUsable = !!nativeView;
+      } catch {
+        surfaceUsable = false;
+      }
+      if (callType === "video" && !surfaceUsable && typeof __DEV__ !== "undefined" && __DEV__) {
+        console.warn("Agora RtcSurfaceView native component is missing; video surface disabled. Rebuild the app.");
+      }
       const session: CallSessionWithVideo = {
         async setMicrophoneEnabled(enabled) {
           engine.muteLocalAudioStream(!enabled);
@@ -206,7 +220,7 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
         },
       };
 
-      if (callType === "video" && RtcSurfaceView) {
+      if (callType === "video" && RtcSurfaceView && surfaceUsable) {
         session.video = {
           getState: () => video,
           subscribe(listener) {
