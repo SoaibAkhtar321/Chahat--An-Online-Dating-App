@@ -226,7 +226,6 @@ describe("static privacy guarantees", () => {
     const app = JSON.parse(read("mobile/app.json")).expo;
     const plugin = app.plugins.find((p: unknown) => Array.isArray(p) && p[0] === "expo-location");
     expect(plugin[1].isAndroidBackgroundLocationEnabled).toBe(false);
-    expect(plugin[1].isIosBackgroundLocationEnabled).toBe(false);
     expect(app.android.permissions).not.toContain("android.permission.ACCESS_BACKGROUND_LOCATION");
   });
 

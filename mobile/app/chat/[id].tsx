@@ -8,7 +8,6 @@ import {
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
@@ -772,7 +771,7 @@ export default function ChatDetailScreen() {
 
       {/* Message List */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={undefined}
         style={styles.chatArea}
       >
         <FlatList

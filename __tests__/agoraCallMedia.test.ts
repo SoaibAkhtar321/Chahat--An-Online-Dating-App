@@ -37,7 +37,11 @@ function makeSdk(opts: { autoJoin?: boolean } = { autoJoin: true }) {
     createAgoraRtcEngine: () => engine,
     ChannelProfileType: { ChannelProfileCommunication: 0 },
     ClientRoleType: { ClientRoleBroadcaster: 1 },
-    RtcSurfaceView: () => null,
+    RtcSurfaceView: class {
+      get view() {
+        return () => null;
+      }
+    },
   };
   return { sdk, engine, getHandler: () => handler };
 }

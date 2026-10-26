@@ -7,7 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { LocationPicker } from "../../src/components/location/LocationPicker";
@@ -405,7 +404,7 @@ export default function OnboardingScreen() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={undefined}
       >
         <View style={styles.header}>
           {step > 0 ? (

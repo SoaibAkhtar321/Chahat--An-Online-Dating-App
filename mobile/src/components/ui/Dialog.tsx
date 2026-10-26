@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import {
   Modal,
   KeyboardAvoidingView,
-  Platform,
   View,
   Text,
   StyleSheet,
@@ -44,7 +43,7 @@ export const Dialog: React.FC<DialogProps> = ({
       <TouchableWithoutFeedback onPress={onCancel}>
         <KeyboardAvoidingView
           style={styles.overlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="height"
         >
           <TouchableWithoutFeedback>
             <View style={styles.content}>
