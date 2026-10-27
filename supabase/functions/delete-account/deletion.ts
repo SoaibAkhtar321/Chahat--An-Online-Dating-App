@@ -171,6 +171,18 @@ export async function executeAccountDeletion(
     const { error: delErr } = await admin.auth.admin.deleteUser(uid);
     if (delErr && !/not.?found/i.test(delErr.message)) throw new Error(delErr.message);
 
+    // Defence in depth, best effort only. Between the first purge and the Auth deletion the caller's access token is
+    // still valid, and some tables are keyed by the user id as plain text with no foreign key (for example `blocks`),
+    // so a row could be written for this user in that window. purge_user_data is idempotent (one audit row per
+    // account), so run it once more. A failure here must NOT turn a finished deletion into a failure: the Auth user is
+    // already gone, so a retry would only get 401.
+    try {
+      const { error: sweepErr } = await admin.rpc("purge_user_data", { _uid: uid });
+      if (sweepErr) log.warn(`delete-account: final sweep failed after Auth deletion: ${safeErrorSummary(sweepErr)}`);
+    } catch (sweepError) {
+      log.warn(`delete-account: final sweep failed after Auth deletion: ${safeErrorSummary(sweepError)}`);
+    }
+
     return { ok: true };
   } catch (e: any) {
     // Raw DB/Storage errors can embed user ids, e-mails or object paths: log a redacted summary only.

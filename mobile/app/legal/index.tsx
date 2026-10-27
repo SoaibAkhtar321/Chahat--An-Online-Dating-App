@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
@@ -8,6 +9,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { Header } from "../../src/components/ui/Header";
 import { LEGAL_DOCUMENT_VERSIONS } from "../../src/constants/legalVersions";
 import { OPERATOR_DETAILS, isOperatorPlaceholder } from "../../src/constants/operatorDetails";
+import { legalWebsiteUrl, type LegalWebsiteLink } from "../../src/constants/legalLinks";
 import { fetchMyConsents, type ConsentState } from "../../src/services/consent";
 import type { ConsentPurpose } from "../../src/constants/consentNotices";
 
@@ -58,6 +60,31 @@ function NavLink({ label, path }: { label: string; path: string }) {
       onPress={() => router.push(path as never)}
       activeOpacity={0.7}
       accessibilityRole="link"
+    >
+      <Text style={styles.linkLabel}>{label}</Text>
+      <ChevronRight size={18} color={Colors.mutedForeground} />
+    </TouchableOpacity>
+  );
+}
+
+// Opens an official page of the legal website in the in-app browser. These pages only show information (the delete page
+// asks the person to sign in and confirm on the website itself); nothing here starts a deletion.
+function WebLink({ label, link }: { label: string; link: LegalWebsiteLink }) {
+  const { Colors, styles } = useLegalStyles();
+  const open = async () => {
+    try {
+      await WebBrowser.openBrowserAsync(legalWebsiteUrl(link));
+    } catch {
+      Alert.alert("Could not open the page", `Please try again, or visit ${legalWebsiteUrl(link)} in your browser.`);
+    }
+  };
+  return (
+    <TouchableOpacity
+      style={styles.linkRow}
+      onPress={() => void open()}
+      activeOpacity={0.7}
+      accessibilityRole="link"
+      accessibilityLabel={`${label}, opens the Chahat website`}
     >
       <Text style={styles.linkLabel}>{label}</Text>
       <ChevronRight size={18} color={Colors.mutedForeground} />
@@ -123,6 +150,13 @@ export default function LegalAndPrivacyScreen() {
         <Section title="Terms & Conditions and Privacy Policy" expanded={open === "documents"} onToggle={() => toggle("documents")}>
           <NavLink label="Terms of Service" path="/legal/terms" />
           <NavLink label="Privacy Policy" path="/legal/privacy" />
+          <Text style={styles.subheading}>Official website pages</Text>
+          <WebLink label="Privacy Policy (website)" link="privacy" />
+          <WebLink label="Terms of Service (website)" link="terms" />
+          <WebLink label="Community Guidelines" link="communityGuidelines" />
+          <WebLink label="Child Safety Standards" link="childSafety" />
+          <WebLink label="Delete your account (website)" link="deleteAccount" />
+          <WebLink label="Support" link="support" />
           <P>
             Current versions: Terms {LEGAL_DOCUMENT_VERSIONS.terms}, Privacy Policy {LEGAL_DOCUMENT_VERSIONS.privacy}. You
             confirm them when you sign up, and you will be asked again if they change.
@@ -196,7 +230,7 @@ export default function LegalAndPrivacyScreen() {
             of this kind straight away.
           </P>
           <Detail label="Child safety contact" value={OPERATOR_DETAILS.childSafetyContact} />
-          <Detail label="Child safety standards (web page)" value={OPERATOR_DETAILS.childSafetyStandardsUrl} />
+          <WebLink label="Child Safety Standards (website)" link="childSafety" />
           <NavLink label="Safety Centre and emergency helplines" path="/safety" />
         </Section>
 

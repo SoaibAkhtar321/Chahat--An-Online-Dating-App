@@ -147,6 +147,9 @@ supabase db push
 # replays are rejected.
 # Also configure SUPABASE_SERVICE_ROLE_KEY and GOOGLE_VISION_API_KEY as remote secrets.
 supabase functions deploy delete-account
+# cleanup-chat-media (removes media of "delete for everyone" messages) is NOT deployed by this runbook step. It needs its
+# own secret, Vault entries and pg_cron schedule: follow docs/MESSAGE_DELETION.md ("Cleanup worker") before enabling
+# message deletion for real users.
 # Billing stays disabled in app builds by default; configure provider credentials before enabling it.
 supabase functions deploy verify-purchase
 supabase functions deploy google-play-notifications

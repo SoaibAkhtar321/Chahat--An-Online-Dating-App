@@ -11,7 +11,6 @@ export const OPERATOR_DETAILS = {
   grievanceOfficerEmail: "[GRIEVANCE OFFICER EMAIL - to be confirmed]",
   grievanceTimelines: "[ACKNOWLEDGEMENT AND RESOLUTION TIMELINES - to be confirmed with legal review]",
   childSafetyContact: "[CHILD SAFETY CONTACT NAME AND EMAIL - to be confirmed]",
-  childSafetyStandardsUrl: "[PUBLIC WEB PAGE FOR CHILD SAFETY STANDARDS - to be confirmed]",
   privacyRequestResponseTime: "[RESPONSE TIME FOR PRIVACY REQUESTS - to be confirmed with legal review]",
   dataRetentionPeriods: "[RETENTION PERIODS FOR RETAINED RECORDS - to be confirmed with legal review]",
   refundPolicy: "[REFUND POLICY - to be confirmed]",

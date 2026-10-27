@@ -172,6 +172,39 @@ describe("delete-account: ordering, idempotency and partial failure", () => {
     expect(idx("rpc:purge_user_data")).toBeLessThan(idx("auth.deleteUser"));
   });
 
+  it("runs one more idempotent purge after the Auth user is deleted", async () => {
+    const { admin, calls } = fakeAdmin();
+    expect(await executeAccountDeletion(admin, UID)).toEqual({ ok: true });
+    const purges = calls.map((c, i) => (c === "rpc:purge_user_data" ? i : -1)).filter((i) => i >= 0);
+    expect(purges).toHaveLength(2);
+    expect(purges[1]).toBeGreaterThan(calls.findIndex((c) => c.startsWith("auth.deleteUser")));
+  });
+
+  it("still reports success, with a redacted warning, when the final sweep fails", async () => {
+    const { admin } = fakeAdmin();
+    let purgeCalls = 0;
+    const base = admin.rpc.bind(admin);
+    admin.rpc = async (name, args) => {
+      if (name === "purge_user_data" && ++purgeCalls === 2) {
+        return { error: { message: `boom for ${UID} a@b.com` } };
+      }
+      return base(name, args);
+    };
+    const warn = jest.fn();
+    const error = jest.fn();
+    expect(await executeAccountDeletion(admin, UID, { log: { warn, error } })).toEqual({ ok: true });
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).not.toContain(UID);
+    expect(String(warn.mock.calls[0][0])).not.toContain("a@b.com");
+  });
+
+  it("does not run the final sweep when Auth deletion fails", async () => {
+    const { admin, calls } = fakeAdmin({ authError: "database error deleting user" });
+    await executeAccountDeletion(admin, UID);
+    expect(calls.filter((c) => c === "rpc:purge_user_data")).toHaveLength(1);
+  });
+
   it.each(["begin_account_deletion", "clear_profile_photos_for_deletion", "purge_user_data"])(
     "does not delete the Auth user or report success when %s fails",
     async (failing) => {
