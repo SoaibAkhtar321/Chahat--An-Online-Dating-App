@@ -129,3 +129,51 @@ describe("Agora call media adapter", () => {
     expect(callIdFromRoomId("other")).toBeNull();
   });
 });
+
+describe("Agora shared engine and two-way audio", () => {
+  const withAudioApi = (engine: any) => {
+    Object.assign(engine, {
+      enableLocalAudio: jest.fn(),
+      muteAllRemoteAudioStreams: jest.fn(),
+      adjustRecordingSignalVolume: jest.fn(),
+      adjustPlaybackSignalVolume: jest.fn(),
+      updateChannelMediaOptions: jest.fn(),
+    });
+    return engine;
+  };
+
+  test("explicitly turns on capture, publishing and remote audio after joining", async () => {
+    const { sdk, engine } = makeSdk();
+    withAudioApi(engine);
+    await createAgoraCallProvider(deps(sdk)).join(grant, { callType: "video" });
+    expect(engine.enableLocalAudio).toHaveBeenCalledWith(true);
+    expect(engine.muteLocalAudioStream).toHaveBeenCalledWith(false);
+    expect(engine.muteAllRemoteAudioStreams).toHaveBeenCalledWith(false);
+    expect(engine.updateChannelMediaOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ publishMicrophoneTrack: true, autoSubscribeAudio: true }),
+    );
+  });
+
+  test("a finished call cannot destroy the shared engine of the next call", async () => {
+    const { sdk, engine } = makeSdk();
+    withAudioApi(engine);
+    const provider = createAgoraCallProvider(deps(sdk));
+    const first: any = await provider.join(grant, { callType: "video" });
+    const second: any = await provider.join(grant, { callType: "video" });
+    await first.leave(); // stale cleanup of the older session
+    expect(engine.release).not.toHaveBeenCalled();
+    await second.leave();
+    expect(engine.release).toHaveBeenCalledTimes(1);
+  });
+
+  test("reports a microphone failure so the screen can tell the user", async () => {
+    const { sdk, engine, getHandler } = makeSdk();
+    withAudioApi(engine);
+    const session: any = await createAgoraCallProvider(deps(sdk)).join(grant, { callType: "video" });
+    getHandler().onLocalAudioStateChanged({}, 3, 0);
+    expect(session.video.getState().micProblem).toBe(true);
+    expect(engine.enableLocalAudio).toHaveBeenCalledWith(false); // one automatic restart attempt
+    getHandler().onLocalAudioStateChanged({}, 2, 0);
+    expect(session.video.getState().micProblem).toBe(false);
+  });
+});

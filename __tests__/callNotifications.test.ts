@@ -16,6 +16,7 @@ jest.mock("expo-notifications", () => ({
   AndroidAudioUsage: { NOTIFICATION_RINGTONE: 6 },
   AndroidAudioContentType: { SONIFICATION: 4 },
   setNotificationChannelAsync: (...a: unknown[]) => mockSetChannel(...a),
+  deleteNotificationChannelAsync: async () => undefined,
   setNotificationCategoryAsync: (...a: unknown[]) => mockSetCategory(...a),
   getPresentedNotificationsAsync: () => mockPresented(),
   dismissNotificationAsync: (...a: unknown[]) => mockDismiss(...a),

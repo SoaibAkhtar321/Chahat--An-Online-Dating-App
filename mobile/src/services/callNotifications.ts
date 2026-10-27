@@ -67,6 +67,7 @@ const RING_PATTERN = [0, 800, 600];
 
 let ringSound: { stopAsync(): Promise<unknown>; unloadAsync(): Promise<unknown> } | null = null;
 let ringToken = 0;
+let ringReleasePromise: Promise<void> = Promise.resolve();
 
 /**
  * In-app ring while the app is open: the bundled ringtone on a loop plus vibration, like a normal call.
@@ -79,7 +80,6 @@ export function startInAppRing(): void {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { Audio } = require("expo-av");
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, shouldDuckAndroid: false });
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const asset = require("../../assets/sounds/chahat_ringtone.wav");
       const { sound } = await Audio.Sound.createAsync(asset, { shouldPlay: true, isLooping: true, volume: 1 });
@@ -99,5 +99,16 @@ export function stopInAppRing(): void {
   Vibration.cancel();
   const sound = ringSound;
   ringSound = null;
-  if (sound) void sound.stopAsync().then(() => sound.unloadAsync()).catch(() => undefined);
+  if (sound) {
+    ringReleasePromise = sound
+      .stopAsync()
+      .then(() => sound.unloadAsync())
+      .then(() => undefined)
+      .catch(() => undefined);
+  }
+}
+
+/** Resolves once the in-app ringtone has fully released the speaker. The call waits for this before joining. */
+export function ringReleased(): Promise<void> {
+  return ringReleasePromise;
 }

@@ -327,6 +327,9 @@ export default function CallScreen() {
     showVideo &&
     !((controller?.getSession() as CallSessionWithVideo | null)?.video?.getState().remoteVideoReady ?? false);
 
+  const micProblem =
+    connected && ((controller?.getSession() as CallSessionWithVideo | null)?.video?.getState().micProblem ?? false);
+
   return (
     <SafeAreaView style={styles.container}>
       {showVideo ? (
@@ -348,6 +351,12 @@ export default function CallScreen() {
         <Text style={styles.callType}>{statusMessage}</Text>
         {showVideo && waitingForCamera ? (
           <Text style={styles.callType}>Waiting for {partner.name}'s camera…</Text>
+        ) : null}
+        {micProblem ? (
+          <Text style={styles.error}>
+            Your microphone isn't working, so they can't hear you. Allow the microphone for Chahat in Settings and
+            close other apps that use it.
+          </Text>
         ) : null}
         {connected && secondsLeft !== null ? (
           <Text style={[styles.timer, secondsLeft <= 5 && { color: Colors.destructive }]}>

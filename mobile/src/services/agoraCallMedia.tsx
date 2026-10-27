@@ -21,6 +21,8 @@ export interface AgoraVideoState {
   remoteUid: number | null;
   /** True once the other person's video frames are actually arriving (not just that they joined). */
   remoteVideoReady: boolean;
+  /** True when the microphone could not start (permission, or another app is using it). */
+  micProblem: boolean;
 }
 
 /** Optional video surface exposed by sessions that can render video (Agora). */
@@ -42,6 +44,21 @@ export interface AgoraProviderDeps {
 }
 
 const JOIN_TIMEOUT_MS = 20_000;
+
+// react-native-agora returns ONE shared engine for the whole app. If a finished call's asynchronous cleanup
+// runs after the next call has started, its release() destroys the NEW call's engine, which shows up as
+// one-way or missing audio. So: a new join waits for the previous cleanup, and only the latest owner may release.
+let engineOwner = 0;
+let pendingRelease: Promise<void> = Promise.resolve();
+
+async function waitForInAppRingToStop(): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    await require("./callNotifications").ringReleased();
+  } catch {
+    // Not available (tests / other platforms): nothing to wait for.
+  }
+}
 
 function defaultLoadSdk(): any | null {
   try {
@@ -81,13 +98,23 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
       const userId = await deps.getUserId();
       if (!callId || !userId) throw new CallError("unauthenticated");
 
+      // The ringtone must have let go of the speaker/audio focus, and any previous call must be fully released.
+      await waitForInAppRingToStop();
+      await pendingRelease;
       const engine = sdk.createAgoraRtcEngine();
+      const owner = ++engineOwner;
       const endedListeners = new Set<(reason?: CallErrorCode) => void>();
       const videoListeners = new Set<(s: AgoraVideoState) => void>();
-      let video: AgoraVideoState = { localVideoReady: false, remoteUid: null, remoteVideoReady: false };
+      let video: AgoraVideoState = {
+        localVideoReady: false,
+        remoteUid: null,
+        remoteVideoReady: false,
+        micProblem: false,
+      };
       let left = false;
       let joined = false;
       let rejoinFailed = false;
+      let micRetried = false;
 
       const setVideo = (patch: Partial<AgoraVideoState>) => {
         video = { ...video, ...patch };
@@ -100,15 +127,20 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
       const release = async () => {
         if (left) return;
         left = true;
-        try {
-          engine.unregisterEventHandler?.(handler);
-        } catch {}
-        try {
-          await engine.leaveChannel();
-        } catch {}
-        try {
-          engine.release();
-        } catch {}
+        const done = (async () => {
+          try {
+            engine.unregisterEventHandler?.(handler);
+          } catch {}
+          try {
+            await engine.leaveChannel();
+          } catch {}
+          try {
+            // Only the newest session owns the shared engine; an older one must not destroy it.
+            if (owner === engineOwner) engine.release();
+          } catch {}
+        })();
+        pendingRelease = pendingRelease.then(() => done);
+        await done;
       };
 
       let resolveJoined: () => void = () => {};
@@ -162,6 +194,21 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
         onRequestToken: () => {
           if (!rejoinFailed) void handler.onTokenPrivilegeWillExpire();
         },
+        // Microphone health. state 3 = FAILED (no permission / mic busy). Try once to restart capture, then tell the screen.
+        onLocalAudioStateChanged: (_conn: unknown, state: number) => {
+          if (state === 3) {
+            setVideo({ micProblem: true });
+            if (!micRetried) {
+              micRetried = true;
+              try {
+                engine.enableLocalAudio(false);
+                engine.enableLocalAudio(true);
+              } catch {}
+            }
+          } else if (state === 1 || state === 2) {
+            setVideo({ micProblem: false });
+          }
+        },
         onLocalVideoStateChanged: (_src: unknown, state: number) => {
           // 1 = capturing, 2 = encoding
           if (state === 1 || state === 2) setVideo({ localVideoReady: true });
@@ -190,6 +237,22 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
           autoSubscribeVideo: callType === "video",
         });
         if (typeof code === "number" && code < 0) throw new CallError("provider_error");
+        // Be explicit about two-way audio instead of relying on defaults: capture on, published, not muted,
+        // remote audio subscribed and audible, loudspeaker route for video calls.
+        try {
+          engine.enableLocalAudio(true);
+          engine.muteLocalAudioStream(false);
+          engine.muteAllRemoteAudioStreams(false);
+          engine.adjustRecordingSignalVolume(100);
+          engine.adjustPlaybackSignalVolume(100);
+          engine.updateChannelMediaOptions({
+            publishMicrophoneTrack: true,
+            autoSubscribeAudio: true,
+            clientRoleType: sdk.ClientRoleType.ClientRoleBroadcaster,
+          });
+        } catch {
+          // Best-effort hardening; the join options above already enable audio.
+        }
 
         await Promise.race([
           joinedPromise,
