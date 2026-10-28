@@ -249,9 +249,9 @@ describe("static privacy guarantees", () => {
     expect(app.android.permissions).not.toContain("android.permission.ACCESS_BACKGROUND_LOCATION");
   });
 
-  it("expo-location is pinned to the SDK 52 line in both manifests", () => {
+  it("expo-location is pinned to the SDK 54 line in both manifests", () => {
     for (const p of ["package.json", "mobile/package.json"]) {
-      expect(JSON.parse(read(p)).dependencies["expo-location"]).toBe("~18.0.10");
+      expect(JSON.parse(read(p)).dependencies["expo-location"]).toBe("~19.0.8");
     }
   });
 
