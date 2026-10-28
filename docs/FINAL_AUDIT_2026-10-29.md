@@ -37,8 +37,7 @@ email verification flows were reviewed; no defects found. Shared-profile links o
 after login.
 
 ## Still needed before the Play Store AAB (not code in this ZIP)
-1. **Google Play Billing Library 7** (react-native-iap 12): needs the react-native-iap 14 upgrade or Play's extension
-   to 1 Nov 2026. This is the main blocker for purchases.
+1. ~~Google Play Billing Library 7~~ **Done:** moved to expo-iap 3.4.13 (Billing 8.3), see docs/BILLING_LIBRARY_8.md.
 2. Plus/VIP prices and a VIP benefit (decision).
 3. Confirm all Edge Functions are deployed: `npx supabase functions list` should show issue-call-token, verify-purchase,
    google-play-notifications, dispatch-push, agora-ncs, delete-account, request-account-deletion,

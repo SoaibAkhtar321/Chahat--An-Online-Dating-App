@@ -97,7 +97,8 @@
             "extraProguardRules": "-keep class io.agora.** { *; }\n-dontwarn io.agora.**\n-keep class com.android.billingclient.** { *; }\n-dontwarn com.android.billingclient.**"
           }
         }
-      ]
+      ],
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true

@@ -6,7 +6,8 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { Platform } from "react-native";
 import * as Crypto from "expo-crypto";
-import type { Purchase, PurchaseError, Subscription } from "react-native-iap";
+// expo-iap (OpenIAP) uses Google Play Billing Library 8 (required by Play from 2026; Billing 7 is no longer accepted).
+import type { Purchase, ProductSubscription } from "expo-iap";
 import { VERIFICATION_ENABLED } from "../constants/features";
 
 export const BILLING_ENABLED = process.env.EXPO_PUBLIC_FEATURE_BILLING === "true";
@@ -314,31 +315,39 @@ let purchaseInProgress = false;
 const purchasesBeingVerified = new Set<string>();
 
 function isPurchased(purchase: Purchase): boolean {
-  return purchase.purchaseStateAndroid === 1;
+  return purchase.purchaseState === "purchased";
+}
+
+type IapModule = typeof import("expo-iap");
+
+/** Loaded only when billing is used, so builds without the native module (Expo Go, tests) still start. */
+async function loadIap(): Promise<IapModule> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return require("expo-iap") as IapModule;
 }
 
 export async function loadPlayBillingCatalog(): Promise<PlayBillingProduct[]> {
   if (!BILLING_ENABLED || Platform.OS !== "android") return [];
-  const iap = await import("react-native-iap");
+  const iap = await loadIap();
   await iap.initConnection();
-  const subscriptions = await iap.getSubscriptions({ skus: ALL_PRODUCT_IDS });
-  return subscriptions.map((subscription: Subscription) => {
+  const fetched = (await iap.fetchProducts({ skus: ALL_PRODUCT_IDS, type: "subs" })) ?? [];
+  return (fetched as ProductSubscription[]).map((subscription) => {
     if (subscription.platform !== "android") {
       return {
-        productId: subscription.productId,
+        productId: subscription.id,
         localizedPrice: null,
         currencyCode: null,
         offerToken: null,
       };
     }
-    const offer =
-      subscription.subscriptionOfferDetails.find((item) => item.offerId === null) ??
-      subscription.subscriptionOfferDetails[0];
+    // Prepaid plans have one base-plan offer (offerId null); never pick a promotional offer by accident.
+    const offers = subscription.subscriptionOfferDetailsAndroid ?? [];
+    const offer = offers.find((item) => !item.offerId) ?? offers[0];
     const phase =
       offer?.pricingPhases.pricingPhaseList.find((item) => item.recurrenceMode === 1) ??
       offer?.pricingPhases.pricingPhaseList[0];
     return {
-      productId: subscription.productId,
+      productId: subscription.id,
       localizedPrice: phase?.formattedPrice ?? null,
       currencyCode: phase?.priceCurrencyCode ?? null,
       offerToken: offer?.offerToken ?? null,
@@ -350,14 +359,14 @@ export async function listenForPurchaseUpdates(
   onEvent: (event: BillingEvent) => void,
 ): Promise<() => void> {
   if (!BILLING_ENABLED || Platform.OS !== "android") return () => {};
-  const iap = await import("react-native-iap");
+  const iap = await loadIap();
   await iap.initConnection();
   const updated = iap.purchaseUpdatedListener((purchase: Purchase) => {
     void handlePurchaseUpdate(purchase, iap, onEvent);
   });
-  const failed = iap.purchaseErrorListener((error: PurchaseError) => {
+  const failed = iap.purchaseErrorListener((error: { code?: unknown; message?: string }) => {
     purchaseInProgress = false;
-    if (error.code === "E_USER_CANCELLED") {
+    if (String(error.code) === "user-cancelled") {
       onEvent({ status: "cancelled" });
     } else {
       onEvent({ status: "failed", error: error.message || "Google Play purchase failed." });
@@ -371,10 +380,10 @@ export async function listenForPurchaseUpdates(
 
 async function handlePurchaseUpdate(
   purchase: Purchase,
-  iap: typeof import("react-native-iap"),
+  iap: IapModule,
   onEvent: (event: BillingEvent) => void,
 ): Promise<void> {
-  if (purchase.purchaseStateAndroid === 2) {
+  if (purchase.purchaseState === "pending") {
     purchaseInProgress = false;
     onEvent({
       status: "pending",
@@ -400,7 +409,7 @@ async function handlePurchaseUpdate(
       store: "google_play",
       productId: purchase.productId,
       purchaseToken: token,
-      orderId: purchase.transactionId,
+      orderId: purchase.transactionId ?? undefined,
     });
     if (!result.success || !result.tier || result.tier === "free") {
       onEvent({ status: "failed", error: result.error ?? "Purchase verification failed." });
@@ -511,12 +520,17 @@ export async function purchaseSubscription(
       Crypto.CryptoDigestAlgorithm.SHA256,
       userRes.user.id,
     );
-    const iap = await import("react-native-iap");
+    const iap = await loadIap();
     purchaseInProgress = true;
-    await iap.requestSubscription({
-      sku: productId,
-      subscriptionOffers: [{ sku: productId, offerToken: product.offerToken }],
-      obfuscatedAccountIdAndroid,
+    await iap.requestPurchase({
+      type: "subs",
+      request: {
+        android: {
+          skus: [productId],
+          subscriptionOffers: [{ sku: productId, offerToken: product.offerToken }],
+          obfuscatedAccountId: obfuscatedAccountIdAndroid,
+        },
+      },
     });
     return {
       success: false,
@@ -641,16 +655,16 @@ export async function restorePurchases(): Promise<RestorePurchasesResult> {
   }
 
   try {
-    const iap = await import("react-native-iap");
+    const iap = await loadIap();
     await iap.initConnection();
-    const purchases = await iap.getAvailablePurchases();
+    const purchases = (await iap.getAvailablePurchases()) ?? [];
     for (const purchase of purchases) {
       if (!isPurchased(purchase) || !purchase.purchaseToken || !purchase.productId) continue;
       const result = await verifyAndCreditPurchase({
         store: "google_play",
         productId: purchase.productId,
         purchaseToken: purchase.purchaseToken,
-        orderId: purchase.transactionId,
+        orderId: purchase.transactionId ?? undefined,
       });
       if (result.success) {
         try {
