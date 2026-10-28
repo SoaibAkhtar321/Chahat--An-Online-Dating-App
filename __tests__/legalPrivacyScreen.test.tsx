@@ -177,7 +177,11 @@ describe("Legal & Privacy screen", () => {
 
 describe("operator details", () => {
   it("every detail is a bracketed placeholder until someone confirms it", () => {
-    expect(unresolvedOperatorDetails().sort()).toEqual(Object.keys(OPERATOR_DETAILS).sort());
+    // 2026-10-29: the details the public website already states are filled in the same way; only the three items the
+    // operator has not decided yet (also "not yet set" on the website) remain visible placeholders.
+    expect(unresolvedOperatorDetails().sort()).toEqual(
+      ["dataRetentionPeriods", "privacyRequestResponseTime", "serviceProviderConfirmation"].sort(),
+    );
   });
 
   it("recognises a confirmed value as not a placeholder", () => {

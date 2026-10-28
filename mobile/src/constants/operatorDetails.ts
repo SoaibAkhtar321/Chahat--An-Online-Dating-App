@@ -1,19 +1,18 @@
 // Operator, grievance and contact details shown on the Legal & Privacy screen.
 //
-// NOTHING here has been confirmed. Every value in square brackets is a clearly marked placeholder that the app shows as
-// "Not yet provided". Replace a placeholder with the real value (no brackets) once the operator and legal reviewer have
-// confirmed it. Do not invent details: a wrong grievance officer or address is worse than a visible gap.
+// Same facts as the public website (chahat-admin-legal lib/legal.ts, 2026-10-29) so the app and site never disagree.
+// Items the operator has not decided yet stay as [bracketed] placeholders and show "Not yet provided" in both.
 export const OPERATOR_DETAILS = {
-  operatorName: "[OPERATOR LEGAL NAME - to be confirmed]",
-  registeredAddress: "[REGISTERED ADDRESS - to be confirmed]",
-  supportEmail: "[SUPPORT EMAIL - to be confirmed]",
-  grievanceOfficerName: "[GRIEVANCE OFFICER NAME - to be confirmed]",
-  grievanceOfficerEmail: "[GRIEVANCE OFFICER EMAIL - to be confirmed]",
-  grievanceTimelines: "[ACKNOWLEDGEMENT AND RESOLUTION TIMELINES - to be confirmed with legal review]",
-  childSafetyContact: "[CHILD SAFETY CONTACT NAME AND EMAIL - to be confirmed]",
+  operatorName: "Chahat Friendship App Operations",
+  registeredAddress: "Bodhi Chhapra A.D.O Tola, Gaithihaw Mus. Ghithihaw Aht., PO: Gethihawa, Dist: Kushinagar, Uttar Pradesh, 274802, India",
+  supportEmail: "milodating2026@gmail.com",
+  grievanceOfficerName: "Grievance Redressal Officer",
+  grievanceOfficerEmail: "milodating2026@gmail.com",
+  grievanceTimelines: "We acknowledge complaints within 24 hours and resolve them within 15 days.",
+  childSafetyContact: "milodating2026@gmail.com",
   privacyRequestResponseTime: "[RESPONSE TIME FOR PRIVACY REQUESTS - to be confirmed with legal review]",
   dataRetentionPeriods: "[RETENTION PERIODS FOR RETAINED RECORDS - to be confirmed with legal review]",
-  refundPolicy: "[REFUND POLICY - to be confirmed]",
+  refundPolicy: "Refunds are handled under Google Play's refund policies and applicable consumer law. This does not limit any rights you have by law.",
   serviceProviderConfirmation: "[FINAL LIST OF SERVICE PROVIDERS AND PROCESSING LOCATIONS - to be confirmed]",
 } as const;
 

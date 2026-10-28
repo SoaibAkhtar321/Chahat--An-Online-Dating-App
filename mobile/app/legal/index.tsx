@@ -173,7 +173,7 @@ export default function LegalAndPrivacyScreen() {
             Service providers that help run Chahat, used only where the feature is switched on: Supabase (database,
             sign-in, file storage and server functions), Google Play (payments for paid plans), Google Cloud Vision
             (automated checks on profile photos), Expo push notification service with Firebase Cloud Messaging
-            (notifications) and Agora (voice and video calls).
+            (notifications) and Agora (video calls, which are not recorded).
           </P>
           <Detail label="Provider list and processing locations" value={OPERATOR_DETAILS.serviceProviderConfirmation} />
           <Text style={styles.subheading}>Your optional choices</Text>

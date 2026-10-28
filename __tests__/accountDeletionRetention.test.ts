@@ -73,7 +73,7 @@ describe("Step 5: in-app deletion route and consequences", () => {
   it("tells the user what is deleted, what is kept, the Play subscription and retry before confirming", () => {
     expect(settings).toMatch(/verification selfie/);
     expect(settings).toMatch(/Kept without a link to you/);
-    expect(settings).toMatch(/cancel it in Google Play first/);
+    expect(settings).toMatch(/plans are prepaid and never renew/);
     expect(settings).toMatch(/retry from Settings/);
     expect(settings).toMatch(/Type DELETE to confirm/);
   });

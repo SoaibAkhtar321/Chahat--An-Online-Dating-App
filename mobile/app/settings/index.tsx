@@ -593,7 +593,7 @@ export default function SettingsScreen() {
       <Dialog
         visible={deleteStep === 1}
         title="Delete your account?"
-        body={"This permanently deletes your profile, photos (including any verification selfie), matches, chat messages and media (also from the people you chatted with), location, notification settings, coin balance and your Terms and consent records, along with your sign-in. It cannot be undone.\n\nKept without a link to you: reports about members and anonymous deletion and payment records. Deleting does not cancel a Google Play subscription, so cancel it in Google Play first. If it fails part-way, some data may already be gone; retry from Settings to finish. See Legal & Privacy for details."}
+        body={"This permanently deletes your profile, photos (including any verification selfie), matches, chat messages and media (also from the people you chatted with), location, notification settings, coin balance and your Terms and consent records, along with your sign-in. It cannot be undone.\n\nKept without a link to you: reports about members and anonymous deletion and payment records. Deleting ends any active plan (plans are prepaid and never renew, so there is nothing to cancel in Google Play). If it fails part-way, some data may already be gone; retry from Settings to finish. See Legal & Privacy for details."}
         confirmText="Continue"
         danger
         onConfirm={() => setDeleteStep(2)}

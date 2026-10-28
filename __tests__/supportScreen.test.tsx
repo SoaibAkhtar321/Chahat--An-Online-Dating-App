@@ -62,7 +62,7 @@ describe("Help & Support screen", () => {
     expect(read("mobile/app/_layout.tsx")).toContain('name="support/index"');
   });
 
-  it("does not change the unconfirmed legal operator placeholders", () => {
-    expect(read("mobile/src/constants/operatorDetails.ts")).not.toContain("milodating2026");
+  it("legal operator contact matches the support contact and the website (2026-10-29)", () => {
+    expect(read("mobile/src/constants/operatorDetails.ts")).toContain(`supportEmail: "${SUPPORT_CONTACT.email}"`);
   });
 });
