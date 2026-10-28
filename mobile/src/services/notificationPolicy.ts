@@ -10,7 +10,7 @@ export function resolveNotificationDestination(
 ): NotificationDestination | null {
   if (category === "like") return { kind: "likes" };
   if (
-    (category !== "match" && category !== "message") ||
+    (category !== "match" && category !== "message" && category !== "missed_call") ||
     typeof matchId !== "string" ||
     !isValidUUID(matchId) ||
     !match ||
@@ -33,7 +33,7 @@ export function shouldPresentInForeground(data: unknown, activeMatchId: string |
   if (category === "call") return false;
   if (!activeMatchId) return true;
   if (
-    (category === "message" || category === "match") &&
+    (category === "message" || category === "match" || category === "missed_call") &&
     typeof matchId === "string" &&
     matchId.toLowerCase() === activeMatchId.toLowerCase()
   ) {

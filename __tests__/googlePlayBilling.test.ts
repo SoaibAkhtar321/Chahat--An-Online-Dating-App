@@ -104,77 +104,45 @@ describe("Phase 6: Google Play Billing and Subscriptions", () => {
 
       expect(clientProductIds).toEqual(serverProductIds);
       expect(serverProductIds).toEqual([
-        "chahat_pkg_149_7d",
-        "chahat_pkg_299_15d",
-        "chahat_pkg_499_1m",
         "chahat_plus_1m",
-        "chahat_premium_12m",
         "chahat_premium_1m",
-        "chahat_premium_3m",
-        "chahat_premium_6m",
+        "chahat_premium_1w",
+        "chahat_premium_2m",
         "chahat_vip_1m",
       ]);
     });
 
-    test("product tiers, durations, and Indian Rupee prices are strictly defined", () => {
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_pkg_149_7d).toEqual({
-        tier: "premium",
-        durationMonths: 0.25,
-        durationDays: 7,
-        amountInr: 149,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_pkg_299_15d).toEqual({
-        tier: "plus",
-        durationMonths: 0.5,
-        durationDays: 15,
-        amountInr: 299,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_pkg_499_1m).toEqual({
-        tier: "vip",
-        durationMonths: 1,
-        durationDays: 30,
-        amountInr: 499,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_premium_1m).toEqual({
-        tier: "premium",
-        durationMonths: 1,
-        amountInr: 99,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_premium_3m).toEqual({
-        tier: "premium",
-        durationMonths: 3,
-        amountInr: 249,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_premium_6m).toEqual({
-        tier: "premium",
-        durationMonths: 6,
-        amountInr: 449,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_premium_12m).toEqual({
-        tier: "premium",
-        durationMonths: 12,
-        amountInr: 799,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_plus_1m).toEqual({
-        tier: "plus",
-        durationMonths: 1,
-        amountInr: 199,
-      });
-      expect(GOOGLE_PLAY_PRODUCTS.chahat_vip_1m).toEqual({
-        tier: "vip",
-        durationMonths: 1,
-        amountInr: 399,
+    test("catalogue: prepaid Premium 1 week / 1 month / 2 months, Plus and VIP 1 month", () => {
+      expect(GOOGLE_PLAY_PRODUCTS).toEqual({
+      chahat_premium_1w: { tier: "premium", durationMonths: 0.25, durationDays: 7, amountInr: 149 },
+      chahat_premium_1m: { tier: "premium", durationMonths: 1, amountInr: 499 },
+      chahat_premium_2m: { tier: "premium", durationMonths: 2, amountInr: 700 },
+      chahat_plus_1m: { tier: "plus", durationMonths: 1, amountInr: 199 },
+      chahat_vip_1m: { tier: "vip", durationMonths: 1, amountInr: 399 },
       });
     });
 
-    test("client multi-month packages align with approved pricing", () => {
-      expect(PREMIUM_BILLING_DURATIONS).toHaveLength(4);
-      expect(PREMIUM_BILLING_DURATIONS.map((d) => ({ months: d.months, price: d.totalPrice }))).toEqual([
-        { months: 1, price: 99 },
-        { months: 3, price: 249 },
-        { months: 6, price: 449 },
-        { months: 12, price: 799 },
-      ]);
+    test("the client offers exactly the Premium durations the server sells, and no fixed prices", () => {
+      expect(PREMIUM_BILLING_DURATIONS.map((d) => d.id)).toEqual(["1w", "1m", "2m"]);
+      for (const d of PREMIUM_BILLING_DURATIONS) {
+        expect(GOOGLE_PLAY_PRODUCTS[PLAY_PRODUCT_IDS.premium[d.id]]?.tier).toBe("premium");
+        expect(JSON.stringify(d)).not.toMatch(/₹|price/i);
+      }
+    });
+
+    test("removed plans can no longer be verified", () => {
+      for (const id of ["chahat_pkg_149_7d", "chahat_pkg_299_15d", "chahat_pkg_499_1m", "chahat_premium_3m",
+        "chahat_premium_6m", "chahat_premium_12m"]) {
+        expect(getGoogleProduct(id)).toBeNull();
+      }
+    });
+
+    test("plan text advertises only enforced benefits, says prepaid, and hard-codes no price", () => {
+      const all = JSON.stringify(PLANS);
+      expect(all).not.toMatch(/Icebreaker|Compatibility|VIP Badge|15 [Dd]ays|₹/);
+      for (const tier of ["premium", "plus", "vip"] as const) {
+        expect(PLANS[tier].tagline).toMatch(/prepaid, no auto-renewal/);
+      }
     });
 
     test("rejects unconfigured, invented, or prototype product IDs", () => {

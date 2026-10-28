@@ -18,6 +18,7 @@ import {
   loadPlayBillingCatalog,
   purchaseSubscription,
   restorePurchases,
+  type BillingDuration,
   type PlanTier,
   type PlayBillingProduct,
   type UserSubscription,
@@ -27,7 +28,7 @@ export default function PremiumScreen() {
   const { colors } = useTheme();
   const { dailyLikeLimit, refreshSubscription } = useMilo();
   const [selectedTier, setSelectedTier] = useState<PlanTier>("premium");
-  const [selectedDuration, setSelectedDuration] = useState<"1m" | "3m" | "6m" | "12m">("1m");
+  const [selectedDuration, setSelectedDuration] = useState<BillingDuration["id"]>("1m");
   const [currentSub, setCurrentSub] = useState<UserSubscription | null>(null);
   const [processing, setProcessing] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -147,8 +148,35 @@ export default function PremiumScreen() {
       return;
     }
 
+    // Prepaid plans do not stack across tiers (the server keeps the new plan's own end date when the tier changes,
+    // and refuses a lower tier while a higher one is active). Tell the member before Google Play charges them.
+    const rank: Record<PlanTier, number> = { free: 0, premium: 1, plus: 2, vip: 3 };
+    const activePaid =
+      currentSub && currentSub.tier !== "free" && currentSub.status === "active" ? currentSub : null;
+    if (activePaid && rank[selectedTier] < rank[activePaid.tier]) {
+      Alert.alert(
+        "You already have a higher plan",
+        `${PLANS[activePaid.tier].name} is active. You can buy ${PLANS[selectedTier].name} after it ends.`,
+      );
+      return;
+    }
+    if (activePaid && rank[selectedTier] > rank[activePaid.tier]) {
+      const proceed = await new Promise<boolean>((resolve) =>
+        Alert.alert(
+          `Switch to ${PLANS[selectedTier].name}?`,
+          `Your remaining ${PLANS[activePaid.tier].name} time is replaced by the new plan, which starts now.`,
+          [
+            { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+            { text: "Continue", onPress: () => resolve(true) },
+          ],
+        ),
+      );
+      if (!proceed) return;
+    }
+
     setProcessing(true);
-    const result = await purchaseSubscription(selectedTier, selectedDuration);
+    // Plus and VIP are sold for 1 month only; the duration picker applies to Premium.
+    const result = await purchaseSubscription(selectedTier, selectedTier === "premium" ? selectedDuration : "1m");
     setProcessing(false);
 
     if (result.success) {
@@ -416,11 +444,6 @@ export default function PremiumScreen() {
                         {price}
                       </Text>
                     ) : null}
-                    {dur.savings && (
-                      <Text style={[styles.durationSavings, { color: colors.success }]}>
-                        {dur.savings}
-                      </Text>
-                    )}
                   </TouchableOpacity>
                 );
               })}

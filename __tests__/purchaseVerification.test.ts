@@ -57,13 +57,9 @@ describe("Google Play purchase verification policy", () => {
 
   test("uses only the server-owned product catalog", () => {
     expect(GOOGLE_PLAY_PRODUCTS).toEqual({
-      chahat_pkg_149_7d: { tier: "premium", durationMonths: 0.25, durationDays: 7, amountInr: 149 },
-      chahat_pkg_299_15d: { tier: "plus", durationMonths: 0.5, durationDays: 15, amountInr: 299 },
-      chahat_pkg_499_1m: { tier: "vip", durationMonths: 1, durationDays: 30, amountInr: 499 },
-      chahat_premium_1m: { tier: "premium", durationMonths: 1, amountInr: 99 },
-      chahat_premium_3m: { tier: "premium", durationMonths: 3, amountInr: 249 },
-      chahat_premium_6m: { tier: "premium", durationMonths: 6, amountInr: 449 },
-      chahat_premium_12m: { tier: "premium", durationMonths: 12, amountInr: 799 },
+      chahat_premium_1w: { tier: "premium", durationMonths: 0.25, durationDays: 7, amountInr: 149 },
+      chahat_premium_1m: { tier: "premium", durationMonths: 1, amountInr: 499 },
+      chahat_premium_2m: { tier: "premium", durationMonths: 2, amountInr: 700 },
       chahat_plus_1m: { tier: "plus", durationMonths: 1, amountInr: 199 },
       chahat_vip_1m: { tier: "vip", durationMonths: 1, amountInr: 399 },
     });
@@ -77,7 +73,7 @@ describe("Google Play purchase verification policy", () => {
       productId: "chahat_premium_1m",
       tier: "premium",
       durationMonths: 1,
-      amountInr: 99,
+      amountInr: 499,
       expiresAt: FUTURE_EXPIRY,
       orderId: "GPA.1234-5678-9012-34567",
       autoRenew: true,

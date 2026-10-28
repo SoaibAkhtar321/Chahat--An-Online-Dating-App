@@ -1,4 +1,4 @@
-export type NotificationCategory = "like" | "match" | "message" | "call";
+export type NotificationCategory = "like" | "match" | "message" | "call" | "missed_call";
 
 export interface PushPayload {
   to: string;
@@ -54,6 +54,8 @@ export function buildPushPayload(
     match: { title: "It's a match!", body: "You have a new connection on Chahat." },
     message: { title: "New message", body: "You received a new message." },
     call: { title: "Incoming call", body: "Someone is calling you on Chahat." },
+    // No caller name (same lock-screen rule as the ringing push); tapping opens the chat to call back.
+    missed_call: { title: "Missed call", body: "You missed a call on Chahat. Tap to call back." },
   }[category];
   const name =
     category === "match" || category === "message" ? cleanText(display.senderName, MAX_NAME) : undefined;
@@ -66,12 +68,12 @@ export function buildPushPayload(
   }
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const callId =
-    category === "call" && typeof routeData.callId === "string" && UUID.test(routeData.callId)
+    (category === "call" || category === "missed_call") && typeof routeData.callId === "string" && UUID.test(routeData.callId)
       ? routeData.callId
       : undefined;
 
   const matchId =
-    (category === "match" || category === "message" || category === "call") &&
+    (category === "match" || category === "message" || category === "call" || category === "missed_call") &&
     typeof routeData.matchId === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(routeData.matchId)
       ? routeData.matchId
@@ -79,11 +81,14 @@ export function buildPushPayload(
 
   // Only the two known call types are ever forwarded; anything else is dropped, never echoed.
   const callType =
-    category === "call" && (routeData.callType === "audio" || routeData.callType === "video")
+    (category === "call" || category === "missed_call") && (routeData.callType === "audio" || routeData.callType === "video")
       ? routeData.callType
       : undefined;
   if (category === "call" && callType) {
     copy.title = callType === "video" ? "Incoming video call" : "Incoming audio call";
+  }
+  if (category === "missed_call" && callType) {
+    copy.title = callType === "video" ? "Missed video call" : "Missed audio call";
   }
 
   return {
