@@ -67,6 +67,8 @@ export interface CallJoinGrant {
 export interface CallMediaSession {
   setMicrophoneEnabled(enabled: boolean): Promise<void>;
   setCameraEnabled(enabled: boolean): Promise<void>;
+  /** Front/back camera. Optional: providers without it simply do not show the button. */
+  switchCamera?(): Promise<void>;
   leave(): Promise<void>;
   /** Called when the provider drops the session (remote hang-up, network loss, time allowance over). */
   onEnded(listener: (reason?: CallErrorCode) => void): () => void;
@@ -116,4 +118,24 @@ export function isCallingAvailable(
   provider: CallMediaProvider = getCallMediaProvider(),
 ): boolean {
   return flagOn && provider.configured;
+}
+
+/** Shown to Premium/Plus/VIP callers whose 5 minutes for today are used (never an upgrade pitch). */
+export const PAID_ALLOWANCE_USED_MESSAGE =
+  "You've used today's 5 minutes of video calling. It renews at midnight (India time).";
+
+/** Turns a raw server/database error from the call RPCs into a sentence a member understands. */
+export function friendlyCallError(cause: unknown, fallback: string): string {
+  const raw = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+  const m = raw.toLowerCase();
+  if (m.includes("already has an active call")) return "One of you is already on a call. Try again in a minute.";
+  if (m.includes("too many call attempts")) return "Too many call attempts. Please wait a few minutes and try again.";
+  if (m.includes("active unblocked match required") || m.includes("not eligible to call"))
+    return "You can only call people you are matched with.";
+  if (m.includes("used today's video-call time") || m.includes("daily_call_allowance_used"))
+    return "The caller has used today's video-call time. It renews at midnight (India time).";
+  if (m.includes("call not found")) return "This call is no longer available.";
+  if (m.includes("authentication required") || m.includes("jwt")) return "Please sign in again to make calls.";
+  if (m.includes("network") || m.includes("fetch")) return "No internet connection. Check your connection and try again.";
+  return fallback;
 }

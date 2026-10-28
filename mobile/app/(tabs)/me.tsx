@@ -92,7 +92,7 @@ export default function MeScreen() {
     },
     {
       icon: Video,
-      label: "Video calls & billing ledger",
+      label: "Video calls",
       onPress: () => router.push("/calls"),
     },
     {
@@ -210,9 +210,11 @@ export default function MeScreen() {
               <Text style={styles.planCardSubtitle}>
                 {planTier === "free"
                   ? `${likesRemaining} likes left today · Resets midnight`
-                  : likesRemaining < 0
-                    ? "Unlimited likes · Active"
-                    : `${likesRemaining} likes left today · Active`}
+                  : `${likesRemaining < 0 ? "Unlimited likes" : `${likesRemaining} likes left today`} · ${
+                      subscription?.expiresAt
+                        ? `Active until ${new Date(subscription.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                        : "Active"
+                    }`}
               </Text>
             </View>
             <View style={styles.planUpgradeBtn}>

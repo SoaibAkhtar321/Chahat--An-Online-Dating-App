@@ -4,14 +4,20 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CallVideoStage, type CallSessionWithVideo } from "../../src/services/agoraCallMedia";
-import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react-native";
+import { Mic, MicOff, Phone, PhoneOff, SwitchCamera, Video, VideoOff } from "lucide-react-native";
 import { Radii, Typography, ThemeColors, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { useMilo } from "../../src/context/MiloContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useCallController } from "../../src/hooks/useCallController";
-import { isCallingAvailable, isPremiumCallError, PREMIUM_CALL_MESSAGE } from "../../src/services/callMedia";
+import {
+  friendlyCallError,
+  isCallingAvailable,
+  isPremiumCallError,
+  PAID_ALLOWANCE_USED_MESSAGE,
+  PREMIUM_CALL_MESSAGE,
+} from "../../src/services/callMedia";
 import { getUserVideoCallAllowance } from "../../src/services/subscription";
 import { formatCallDuration } from "../../src/utils/callEvents";
 import {
@@ -94,7 +100,7 @@ export default function CallScreen() {
         })
         .catch((cause) => {
           if (!cancelled)
-            setError(cause instanceof Error ? cause.message : "Could not load the call.");
+            setError(friendlyCallError(cause, "Could not load the call."));
         });
       return () => {
         cancelled = true;
@@ -112,15 +118,28 @@ export default function CallScreen() {
       setStatus("ended");
       return;
     }
-    void createVideoCall(id, type)
+    // Check today's allowance first, so nobody's phone rings for a call that could not be answered.
+    void getUserVideoCallAllowance()
+      .then((allowance) => {
+        if (cancelled) return null;
+        if (allowance.valid && allowance.secondsRemaining <= 0) {
+          setIsFreePlan(allowance.isFree);
+          if (allowance.isFree) setPremiumPrompt(PREMIUM_CALL_MESSAGE);
+          else setError(PAID_ALLOWANCE_USED_MESSAGE);
+          setStatus("ended");
+          return null;
+        }
+        return createVideoCall(id, type);
+      })
       .then((created) => {
+        if (!created) return;
         if (cancelled) return;
         setCallId(created.callId);
         setStatus("pending");
       })
       .catch((cause) => {
         if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : "Could not create the call request.");
+          setError(friendlyCallError(cause, "Could not start the call. Please try again."));
           setStatus("ended");
         }
       });
@@ -205,9 +224,11 @@ export default function CallScreen() {
     // Only the person who pays for the call (the caller) is offered Premium.
     const amRecipient = Boolean(user?.id && recipientId && user.id === recipientId);
     if (!amRecipient && media.error && isPremiumCallError(media.error.code)) {
-      setPremiumPrompt(PREMIUM_CALL_MESSAGE);
+      // Premium members already have the bigger allowance: tell them when it renews instead of selling Premium.
+      if (isFreePlan === false) setError(PAID_ALLOWANCE_USED_MESSAGE);
+      else setPremiumPrompt(PREMIUM_CALL_MESSAGE);
     }
-  }, [media.error, user?.id, recipientId]);
+  }, [media.error, user?.id, recipientId, isFreePlan]);
 
   // The user is free to stay on the call for the whole covered time. When it is really over, end cleanly.
   const secondsLeft = coveredUntil === null ? null : Math.max(0, Math.ceil((coveredUntil - now) / 1000));
@@ -236,7 +257,7 @@ export default function CallScreen() {
         const next = await transitionVideoCall(callId, status === "pending" ? "cancel" : "end");
         setStatus(next);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not end the call.");
+        setError(friendlyCallError(cause, "Could not end the call."));
         return;
       }
     }
@@ -258,7 +279,7 @@ export default function CallScreen() {
       setStatus(await transitionVideoCall(callId, "accept"));
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not answer the call.");
+      setError(friendlyCallError(cause, "Could not answer the call."));
       await refreshCall().catch(() => undefined);
     } finally {
       setResponding(false);
@@ -272,7 +293,7 @@ export default function CallScreen() {
       setStatus(await transitionVideoCall(callId, "decline"));
       safeBack(router);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not decline the call.");
+      setError(friendlyCallError(cause, "Could not decline the call."));
       await refreshCall().catch(() => undefined);
     } finally {
       setResponding(false);
@@ -360,7 +381,7 @@ export default function CallScreen() {
         ) : null}
         {connected && secondsLeft !== null ? (
           <Text style={[styles.timer, secondsLeft <= 5 && { color: Colors.destructive }]}>
-            Free time left: {formatCallDuration(secondsLeft)}
+            {isFreePlan === false ? "Time left today" : "Free time left"}: {formatCallDuration(secondsLeft)}
           </Text>
         ) : null}
         {callingAvailable ? null : (
@@ -415,6 +436,15 @@ export default function CallScreen() {
                 <VideoOff size={22} color={Colors.foreground} />
               )}
             </TouchableOpacity>
+            {media.cameraEnabled ? (
+              <TouchableOpacity
+                style={styles.mediaBtn}
+                accessibilityLabel="Switch camera"
+                onPress={() => void controller?.switchCamera()}
+              >
+                <SwitchCamera size={22} color={Colors.foreground} />
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
 

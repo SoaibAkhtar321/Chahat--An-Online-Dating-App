@@ -247,6 +247,9 @@ export default function PremiumScreen() {
               <Award size={14} color={colors.primaryForeground} />
               <Text style={[styles.currentActiveBadgeText, { color: colors.primaryForeground }]}>
                 Active: {PLANS[currentSub.tier].name}
+                {currentSub.expiresAt
+                  ? ` · until ${new Date(currentSub.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+                  : ""}
               </Text>
             </View>
           )}

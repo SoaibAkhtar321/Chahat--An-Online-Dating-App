@@ -60,7 +60,7 @@ export default function CallsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Calls & Billing" />
+      <Header title="Video Calls" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Banner with Info */}
@@ -69,8 +69,8 @@ export default function CallsScreen() {
             <Info size={20} color={Colors.primary} />
           </View>
           <Text style={styles.infoText}>
-            Video calling requires mutual consent between matched members. The first minute of every
-            call is always free.
+            You can video call people you have matched with. Free members get 30 seconds of video calling a
+            day; Premium, Plus and VIP get 5 minutes a day. Time resets at midnight (India time).
           </Text>
         </View>
 
@@ -84,7 +84,7 @@ export default function CallsScreen() {
             </View>
             <View style={styles.featureContent}>
               <Text style={styles.featureTitle}>Face-to-Face Video Calls</Text>
-              <Text style={styles.featureDesc}>High-definition video with camera flip, privacy toggle, and live timer.</Text>
+              <Text style={styles.featureDesc}>Video with camera on/off, mute, front/back camera and a live timer.</Text>
             </View>
           </View>
 

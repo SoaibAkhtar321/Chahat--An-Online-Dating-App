@@ -158,6 +158,20 @@ export class CallController {
     }
   }
 
+  /** Front/back camera during a connected video call. */
+  async switchCamera(): Promise<boolean> {
+    if (this.state.phase !== "connected" || !this.session?.switchCamera || this.state.callType !== "video") {
+      return false;
+    }
+    try {
+      await this.session.switchCamera();
+      return true;
+    } catch (cause) {
+      this.set({ error: toCallError(cause) });
+      return false;
+    }
+  }
+
   hangUp(): Promise<void> {
     if (this.disposed) return Promise.resolve();
     if (this.hangUpPromise) return this.hangUpPromise;

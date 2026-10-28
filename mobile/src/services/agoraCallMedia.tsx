@@ -288,6 +288,9 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
           engine.enableLocalVideo(enabled);
           engine.muteLocalVideoStream(!enabled);
         },
+        async switchCamera() {
+          engine.switchCamera();
+        },
         leave: release,
         onEnded(listener) {
           endedListeners.add(listener);
