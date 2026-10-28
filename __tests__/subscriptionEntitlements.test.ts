@@ -292,24 +292,13 @@ describe("T6: Server-side Entitlements and Subscription Security", () => {
   });
 
   describe("6. Approved Pricing & Duration Integrity", () => {
-    test("monthly base prices match fixed requirements", () => {
-      expect(PLANS.free.monthlyPrice).toBe(0);
-      expect(PLANS.premium.monthlyPrice).toBe(99);
-      expect(PLANS.plus.monthlyPrice).toBe(199);
-      expect(PLANS.vip.monthlyPrice).toBe(399);
+    test("no price is hard-coded in the app (Google Play is the only price source)", () => {
+      expect(JSON.stringify(PLANS)).not.toMatch(/₹|monthlyPrice/);
+      expect(JSON.stringify(PREMIUM_BILLING_DURATIONS)).not.toMatch(/₹|price/i);
     });
 
-    test("approved multi-month packages apply strictly to Premium", () => {
-      const packagePrices = PREMIUM_BILLING_DURATIONS.map((d) => ({
-        id: d.id,
-        price: d.totalPrice,
-      }));
-      expect(packagePrices).toEqual([
-        { id: "1m", price: 99 },
-        { id: "3m", price: 249 },
-        { id: "6m", price: 449 },
-        { id: "12m", price: 799 },
-      ]);
+    test("prepaid durations apply strictly to Premium", () => {
+      expect(PREMIUM_BILLING_DURATIONS.map((d) => d.id)).toEqual(["1w", "1m", "2m"]);
     });
 
     test("free plan describes the server-configured daily limit", () => {

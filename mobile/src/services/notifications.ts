@@ -397,6 +397,7 @@ Notifications.setNotificationHandler({
       notification.request.content.data,
       getActiveConversation(),
     );
-    return { shouldShowAlert: present, shouldPlaySound: present, shouldSetBadge: false };
+    // expo-notifications 0.32 (SDK 54): shouldShowAlert was replaced by shouldShowBanner + shouldShowList.
+    return { shouldShowBanner: present, shouldShowList: present, shouldPlaySound: present, shouldSetBadge: false };
   },
 });

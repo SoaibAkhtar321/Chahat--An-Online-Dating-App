@@ -1,6 +1,7 @@
 // Subscription & Pricing Service for Chahat Android.
-// Server-backed entitlement definitions for Free, Premium (₹99), Plus (₹199), and VIP (₹399).
-// Subscriptions are strictly verified against the backend and cannot be granted client-side.
+// Server-backed entitlement definitions for Free, Premium, Plus and VIP. All paid plans are PREPAID Google Play
+// plans that do not auto-renew. Prices come only from Google Play (never hard-coded here); entitlements are
+// verified on the server and cannot be granted client-side. Catalogue: docs/PLAN_CATALOG.md.
 
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { Platform } from "react-native";
@@ -15,114 +16,65 @@ export interface PlanConfig {
   id: PlanTier;
   name: string;
   tagline: string;
-  monthlyPrice: number;
   badge?: string;
   popular?: boolean;
   features: string[];
 }
 
 export interface BillingDuration {
-  id: "1m" | "3m" | "6m" | "12m";
-  months: number;
+  id: "1w" | "1m" | "2m";
   label: string;
-  totalPrice: number;
-  savings?: string;
   popular?: boolean;
 }
 
-// Approved multi-month packages apply specifically to CHAHAT Premium:
-// ₹99 (1 month), ₹249 (3 months), ₹449 (6 months), ₹799 (12 months).
+// Premium is sold for three prepaid periods. The price shown is Google Play's localized price for that product.
 export const PREMIUM_BILLING_DURATIONS: BillingDuration[] = [
-  {
-    id: "1m",
-    months: 1,
-    label: "1 Month",
-    totalPrice: 99,
-  },
-  {
-    id: "3m",
-    months: 3,
-    label: "3 Months",
-    totalPrice: 249,
-    savings: "Save ₹48 (16% Off)",
-  },
-  {
-    id: "6m",
-    months: 6,
-    label: "6 Months",
-    totalPrice: 449,
-    savings: "Save ₹145 (24% Off)",
-  },
-  {
-    id: "12m",
-    months: 12,
-    label: "1 Year",
-    totalPrice: 799,
-    savings: "Save ₹389 (33% Off)",
-    popular: true,
-  },
+  { id: "1w", label: "1 Week" },
+  { id: "1m", label: "1 Month", popular: true },
+  { id: "2m", label: "2 Months" },
 ];
 
+// Only benefits the server actually enforces are listed (see the entitlement matrix in docs).
 export const PLANS: Record<PlanTier, PlanConfig> = {
   free: {
     id: "free",
     name: "Free Plan",
     tagline: "Core features always free",
-    monthlyPrice: 0,
     features: [
       "Create Profile",
       "50 likes per day (server-configured daily limit, resets daily in IST)",
       "30 seconds of free video calling per day (resets at midnight IST)",
-      "Limited Matching & Discover Deck",
-      "Basic Chat — after you match",
-      "Free Selfie/Profile Verification Badge",
+      "Discover, match and chat",
+      "Selfie verification badge",
       "Safety Centre & Block/Report",
     ],
   },
   premium: {
     id: "premium",
-    name: "₹149 Plan (7 Days)",
-    tagline: "Unlimited Likes & 5 Min/Day Video Calling",
-    monthlyPrice: 99,
+    name: "Premium",
+    tagline: "1 week, 1 month or 2 months · prepaid, no auto-renewal",
     popular: true,
-    badge: "7 Days",
     features: [
       "Unlimited Likes",
       "5 minutes/day video calling",
-      "7 days validity",
-      "See Who Liked You",
-      "Undo Last Swipe (Rewind Pass)",
-      "Smart Icebreakers",
-      "Compatibility Score Summary",
+      "See who liked you",
+      "See the profiles you liked",
+      "Rewind profiles you passed",
     ],
   },
   plus: {
     id: "plus",
-    name: "₹299 Plan (15 Days)",
-    tagline: "Popular Value · 15 Days Validity",
-    monthlyPrice: 199,
-    badge: "15 Days",
-    features: [
-      "Unlimited Likes",
-      "5 minutes/day video calling",
-      "15 days validity",
-      "All Premium features",
-      "Read Receipts Control (Plus and VIP only)",
-    ],
+    name: "Plus",
+    tagline: "1 month · prepaid, no auto-renewal",
+    badge: "1 Month",
+    features: ["All Premium features", "Read receipts: see when your messages are read"],
   },
   vip: {
     id: "vip",
-    name: "₹499 Plan (1 Month)",
-    tagline: "Full Month VIP Experience",
-    monthlyPrice: 399,
-    badge: "1 Month VIP",
-    features: [
-      "Unlimited Likes",
-      "5 minutes/day video calling",
-      "1 month validity",
-      "All Plus features",
-      "Exclusive VIP Badge",
-    ],
+    name: "VIP",
+    tagline: "1 month · prepaid, no auto-renewal",
+    badge: "1 Month",
+    features: ["All Plus features"],
   },
 };
 
@@ -338,18 +290,14 @@ export function hasEntitlement(
 // Google Play subscription product IDs (must match Play Console; unverified until configured).
 export const PLAY_PRODUCT_IDS = {
   premium: {
-    "7d": "chahat_pkg_149_7d",
+    "1w": "chahat_premium_1w",
     "1m": "chahat_premium_1m",
-    "3m": "chahat_premium_3m",
-    "6m": "chahat_premium_6m",
-    "12m": "chahat_premium_12m",
+    "2m": "chahat_premium_2m",
   },
   plus: {
-    "15d": "chahat_pkg_299_15d",
     "1m": "chahat_plus_1m",
   },
   vip: {
-    "1m_pkg": "chahat_pkg_499_1m",
     "1m": "chahat_vip_1m",
   },
 } as const;

@@ -9,10 +9,11 @@ import {
 
 describe("Google Play server verification policy", () => {
   it("maps only the approved product identifiers to server-owned plans and durations", () => {
-    expect(getGoogleProduct("chahat_premium_3m")).toEqual({
+    expect(getGoogleProduct("chahat_premium_2m")).toEqual({
       tier: "premium",
-      durationMonths: 3,
+      durationMonths: 2,
     });
+    expect(getGoogleProduct("chahat_premium_3m")).toBeNull();
     expect(getGoogleProduct("chahat_plus_1m")).toEqual({ tier: "plus", durationMonths: 1 });
     expect(getGoogleProduct("unknown_product")).toBeNull();
     expect(getGoogleProduct("manual_grant")).toBeNull();

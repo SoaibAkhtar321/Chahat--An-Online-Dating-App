@@ -49,7 +49,7 @@ export function ProfilePhoto({
     >
       {hasImage ? (
         <Image
-          source={{ uri }}
+          source={uri ? { uri } : null}
           style={[{ width: "100%", height: "100%" }, imageStyle]}
           contentFit={contentFit}
           onLoadStart={() => setLoadedUri(null)}
