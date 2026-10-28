@@ -246,8 +246,13 @@ describe("screen wiring (static)", () => {
     const discover = read("mobile/app/(tabs)/discover.tsx");
     expect(before(discover, 'ensureConsent("location_discovery")', 'router.push("/settings/location")')).toBe(true);
     // The service itself refuses to read the device position without an active grant.
+    // The OS permission flow lives in gpsFix.acquireFreshFix; both callers check consent before invoking it.
     const service = read("mobile/src/services/locationSelection.ts");
-    expect(before(service, 'hasConsent("location_discovery")', "getForegroundPermissionsAsync")).toBe(true);
+    expect(before(service, 'hasConsent("location_discovery")', "await acquireFreshFix()")).toBe(true);
+    const legacy = read("mobile/src/services/location.ts");
+    expect(before(legacy, 'hasConsent("location_discovery")', "await acquireFreshFix()")).toBe(true);
+    expect(service).not.toMatch(/getForegroundPermissionsAsync|requestForegroundPermissionsAsync/);
+    expect(read("mobile/src/services/gpsFix.ts")).toMatch(/requestForegroundPermissionsAsync/);
   });
 
   it("Settings uses consent for both optional purposes and withdraws through the server", () => {

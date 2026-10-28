@@ -25,7 +25,7 @@ CALL public.expect_fail('p5: clients cannot write the city lookup table',
   $q$INSERT INTO public.city_centroids VALUES ('evil', 'Evil', 0, 0)$q$);
 CALL public.expect_fail('p5: clients cannot call the mode trigger function', $q$SELECT public.sync_location_mode()$q$);
 RESET ROLE;
-INSERT INTO public.t_results SELECT 'p5: city lookup is seeded', count(*) = 44, count(*)::text FROM public.city_centroids;
+INSERT INTO public.t_results SELECT 'p5: city lookup is seeded (44 curated + gazetteer, see 71)', count(*) FILTER (WHERE source = 'curated') = 44, count(*)::text FROM public.city_centroids;
 
 -- 2. Input validation: nothing is stored on rejection --------------------------------------------------------------
 SET ROLE authenticated; SET request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';

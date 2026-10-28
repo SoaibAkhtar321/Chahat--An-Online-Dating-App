@@ -186,6 +186,10 @@ export default function LegalAndPrivacyScreen() {
             other members never see your coordinates. Turning it off deletes the stored location. Without it you can
             still discover people by city.
           </P>
+          <P>
+            City and town names and centre points come from the countries-states-cities-database by dr5hn, available
+            under the Open Database License (ODbL) 1.0.
+          </P>
           <View style={styles.choiceRow}>
             <Text style={styles.detailLabel}>Push notifications</Text>
             <Text style={styles.choiceValue}>{choiceLabel(choices?.push_notifications, loaded)}</Text>

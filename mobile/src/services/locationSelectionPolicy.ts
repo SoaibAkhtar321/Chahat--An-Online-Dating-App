@@ -1,105 +1,66 @@
-// Pure rules for the single "Your location" selection (Phase 5). No React Native imports.
-// The server owns the state (get_my_location_selection); nothing here is persisted on the device.
-import { SUPPORTED_CITIES, type CityInfo } from "../constants/cities";
-import { distanceKm, isValidCoordinates, type Coordinates } from "./locationPolicy";
-
-/** Must equal the server's tolerance in set_my_location_selection (city_mismatch above this). */
-export const MAX_CITY_DISTANCE_KM = 150;
+// Pure rules for the single "Your location" selection. No React Native imports.
+// The server owns the state (get_my_location_selection) and the list of places (search_cities over the
+// city_centroids gazetteer); there is no city list in the app and nothing here is persisted on the device.
 
 export type LocationMode = "manual" | "current";
 
 export interface LocationSelection {
   mode: LocationMode;
-  /** Canonical supported city, or null when the member has not chosen one (never defaulted). */
+  /** The selected place exactly as the server stores it, or null when none is chosen (never defaulted). */
   city: string | null;
+  /** State / union territory of the selected place, when known. */
+  state: string | null;
   hasLocation: boolean;
   stale: boolean;
   shareDistance: boolean;
 }
 
-/** Common alternative names, mapped to the supported city they refer to. */
-const ALIASES: Record<string, string> = {
-  bangalore: "Bengaluru",
-  bengaluru: "Bengaluru",
-  "bengaluru urban": "Bengaluru",
-  bombay: "Mumbai",
-  "mumbai suburban": "Mumbai",
-  "new delhi": "Delhi",
-  "delhi ncr": "Delhi",
-  "central delhi": "Delhi",
-  gurgaon: "Gurugram",
-  calcutta: "Kolkata",
-  madras: "Chennai",
-  mysore: "Mysuru",
-  mangalore: "Mangaluru",
-  cochin: "Kochi",
-  trivandrum: "Thiruvananthapuram",
-  vizag: "Visakhapatnam",
-  baroda: "Vadodara",
-  panjim: "Panaji",
-  poona: "Pune",
-  benares: "Varanasi",
-  banaras: "Varanasi",
-};
+export interface CitySearchResult {
+  /** Exact value to send back to set_my_location_selection, e.g. "Kushinagar" or "Gorakhpur, Uttar Pradesh". */
+  name: string;
+  state: string | null;
+}
+
+/** search_cities returns nothing below this; the client does not call it either. */
+export const MIN_SEARCH_LENGTH = 2;
+export const MAX_SEARCH_LENGTH = 80;
 
 export function normalizeCityName(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-const BY_KEY = new Map<string, CityInfo>(SUPPORTED_CITIES.map((c) => [normalizeCityName(c.name), c]));
-
-/** Exact (case-insensitive) lookup of a supported city, including common aliases. */
-export function findSupportedCity(value: string | null | undefined): CityInfo | null {
-  const key = normalizeCityName(value);
-  if (!key) return null;
-  const direct = BY_KEY.get(key);
-  if (direct) return direct;
-  const alias = ALIASES[key];
-  return alias ? (BY_KEY.get(normalizeCityName(alias)) ?? null) : null;
+/** Trimmed query, or null when it is too short / too long to search. */
+export function prepareSearchQuery(query: string | null | undefined): string | null {
+  const q = (query ?? "").replace(/\s+/g, " ").trim();
+  if (q.length < MIN_SEARCH_LENGTH || q.length > MAX_SEARCH_LENGTH) return null;
+  return q;
 }
 
-/** First candidate string (e.g. reverse-geocoder city, subregion, district) that names a supported city. */
-export function matchCityFromCandidates(candidates: Array<string | null | undefined>): CityInfo | null {
-  for (const candidate of candidates) {
-    const hit = findSupportedCity(candidate);
-    if (hit) return hit;
+const cleanText = (v: unknown, max: number): string | null =>
+  typeof v === "string" && v.trim().length > 0 && v.length <= max ? v.trim() : null;
+
+/** Strict parse of search_cities rows. Anything malformed is dropped; duplicates are removed. */
+export function parseCitySearchResults(data: unknown): CitySearchResult[] {
+  if (!Array.isArray(data)) return [];
+  const seen = new Set<string>();
+  const out: CitySearchResult[] = [];
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const name = cleanText(r.name, 80);
+    if (!name) continue;
+    const key = normalizeCityName(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, state: cleanText(r.state, 60) });
   }
-  return null;
+  return out;
 }
 
-/** Nearest supported city to a point, or null when none is within `maxKm`. Never invents a city. */
-export function nearestSupportedCity(point: Coordinates, maxKm: number = MAX_CITY_DISTANCE_KM): CityInfo | null {
-  if (!isValidCoordinates(point)) return null;
-  let best: CityInfo | null = null;
-  let bestKm = Infinity;
-  for (const city of SUPPORTED_CITIES) {
-    const km = distanceKm(point, { latitude: city.latitude, longitude: city.longitude });
-    if (km < bestKm) {
-      best = city;
-      bestKm = km;
-    }
-  }
-  return best && bestKm <= maxKm ? best : null;
-}
-
-/** Case-insensitive search over supported cities: prefix matches first, then substring matches. */
-export function searchCities(query: string, limit = 8): CityInfo[] {
-  const q = normalizeCityName(query);
-  if (!q) return [];
-  // Typing an alternative name ("bang", "gurg") finds the supported city it refers to.
-  const aliasTargets = Object.entries(ALIASES)
-    .filter(([alias]) => alias.startsWith(q))
-    .map(([, target]) => findSupportedCity(target))
-    .filter((c): c is CityInfo => c !== null);
-  const starts: CityInfo[] = [];
-  const contains: CityInfo[] = [];
-  for (const city of SUPPORTED_CITIES) {
-    const name = normalizeCityName(city.name);
-    if (name.startsWith(q)) starts.push(city);
-    else if (name.includes(q)) contains.push(city);
-  }
-  const out = [...starts, ...aliasTargets, ...contains];
-  return out.filter((c, i) => out.indexOf(c) === i).slice(0, limit);
+/** Second line under a search result: the state, unless the name already carries it ("Gorakhpur, Uttar Pradesh"). */
+export function describeSearchResult(result: CitySearchResult): string | null {
+  if (!result.state) return null;
+  return normalizeCityName(result.name).endsWith(`, ${normalizeCityName(result.state)}`) ? null : result.state;
 }
 
 /** Strict parse of get_my_location_selection(); malformed responses return null (the UI then shows an error). */
@@ -107,17 +68,17 @@ export function parseLocationSelection(data: unknown): LocationSelection | null 
   if (!data || typeof data !== "object") return null;
   const d = data as Record<string, unknown>;
   if (d.mode !== "manual" && d.mode !== "current") return null;
-  const city = typeof d.city === "string" && findSupportedCity(d.city) ? (findSupportedCity(d.city) as CityInfo).name : null;
   return {
     mode: d.mode,
-    city,
+    city: cleanText(d.city, 80),
+    state: cleanText(d.state, 60),
     hasLocation: d.has_location === true,
     stale: d.stale === true,
     shareDistance: d.share_distance !== false,
   };
 }
 
-/** "Selected city: Mumbai" / "No city selected yet". */
+/** "Selected city: Kushinagar" / "No city selected yet". */
 export function describeSelection(selection: LocationSelection | null): string {
   if (!selection || !selection.city) return "No city selected yet";
   return `Selected city: ${selection.city}`;
@@ -128,7 +89,7 @@ export function describeMode(selection: LocationSelection | null): string {
   if (!selection || !selection.city) return "Choose how Chahat should find people near you.";
   if (selection.mode === "current") {
     return selection.stale
-      ? "Using your current location. It is out of date, so tap Use my current location to refresh it."
+      ? "Using your current location. It is out of date, so tap Use My Current Location to refresh it."
       : "Using your current location (approximate, about 1 km).";
   }
   return "Using the city you selected. Distances are shown city to city, not exact.";

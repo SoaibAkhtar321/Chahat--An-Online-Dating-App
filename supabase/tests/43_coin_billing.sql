@@ -9,7 +9,10 @@ INSERT INTO public.app_settings (key, value) VALUES
   ('call_rate_audio_coins_per_minute', '4'::jsonb),
   ('call_rate_video_coins_per_minute', '10'::jsonb),
   ('call_free_seconds', '60'::jsonb),
-  ('call_extension_lead_seconds', '20'::jsonb)
+  ('call_extension_lead_seconds', '20'::jsonb),
+  -- 20260101005500 adds a connect grace at accept; this suite's timings assume the free minute starts at
+  -- accept, so pin the grace to 0 here. The grace itself is covered by 70_call_connect_clock.sql.
+  ('call_connect_grace_seconds', '0'::jsonb)
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 CREATE TABLE public.t_calls (label text PRIMARY KEY, id uuid);

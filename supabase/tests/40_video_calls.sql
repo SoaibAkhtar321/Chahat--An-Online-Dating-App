@@ -65,8 +65,9 @@ SET ROLE authenticated;
 SET request.jwt.claim.sub = '60000000-0000-0000-0000-000000000002';
 SELECT public.transition_video_call((SELECT id FROM first_call), 'accept');
 INSERT INTO public.t_results
-SELECT 'free call receives server-owned 60-second allowance',
-  free_seconds_remaining BETWEEN 1 AND 60, coalesce(free_seconds_remaining::text, 'null')
+-- Since 20260101005500 accept adds a connect grace (default 30 s); the 60 s clock restarts once both connect.
+SELECT 'free call receives server-owned 60-second allowance plus connect grace',
+  free_seconds_remaining BETWEEN 61 AND 90, coalesce(free_seconds_remaining::text, 'null')
 FROM public.get_my_video_calls() WHERE id = (SELECT id FROM first_call);
 CALL public.expect_fail('decline after accept is invalid',
   $q$SELECT public.transition_video_call((SELECT id FROM first_call), 'decline')$q$);

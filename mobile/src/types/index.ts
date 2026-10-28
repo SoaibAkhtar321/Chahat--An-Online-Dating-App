@@ -147,18 +147,6 @@ export const INTERESTS = [
   "Art",
 ];
 
-export const CITIES = [
-  "Mumbai",
-  "Delhi",
-  "Bengaluru",
-  "Hyderabad",
-  "Chennai",
-  "Kolkata",
-  "Pune",
-  "Jaipur",
-  "Ahmedabad",
-];
-
 export const PROMPTS = [
   "My ideal Sunday",
   "Green flag",

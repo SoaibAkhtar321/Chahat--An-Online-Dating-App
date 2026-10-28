@@ -6,7 +6,8 @@ let mockConfigured = true;
 let mockHasConsent = true;
 
 jest.mock("expo-location", () => ({
-  Accuracy: { Balanced: 3 },
+  Accuracy: { Balanced: 3, High: 4 },
+  enableNetworkProviderAsync: jest.fn(),
   getForegroundPermissionsAsync: jest.fn(),
   requestForegroundPermissionsAsync: jest.fn(),
   hasServicesEnabledAsync: jest.fn(),
@@ -166,6 +167,7 @@ describe("enableLocationSharing", () => {
       { status: "services_disabled" },
       { status: "unsupported" },
       { status: "mock_location" },
+      { status: "timeout" },
       { status: "rejected", code: "rate_limited", message: "You've updated your location too often." },
       { status: "error", message: "Location request timed out." },
     ] as const;
@@ -213,13 +215,31 @@ describe("static privacy guarantees", () => {
     expect(onboarding).not.toMatch(/useState\(profile\?\.city \|\| "Mumbai"\)/);
   });
 
-  it("the Phase 5 selection service stores nothing on the device, logs nothing and uses no network geocoder", () => {
-    const src = read("mobile/src/services/locationSelection.ts");
-    expect(src).not.toMatch(/AsyncStorage|localStorage|SecureStore/);
-    expect(src).not.toMatch(/console\.(log|warn|error|info)/);
-    expect(src).not.toMatch(/nominatim|googleapis|mapbox|here\.com|fetch\(/i);
-    expect(src).not.toMatch(/requestBackgroundPermissionsAsync|watchPositionAsync/);
-    expect(src).toMatch(/reverseGeocodeAsync/);
+  it("the selection and GPS services store nothing on the device, log nothing and use no geocoder at all", () => {
+    for (const f of ["mobile/src/services/locationSelection.ts", "mobile/src/services/gpsFix.ts"]) {
+      const src = read(f);
+      expect(src).not.toMatch(/AsyncStorage|localStorage|SecureStore/);
+      expect(src).not.toMatch(/console\.(log|warn|error|info)/);
+      expect(src).not.toMatch(/nominatim|googleapis|mapbox|here\.com|fetch\(/i);
+      expect(src).not.toMatch(/requestBackgroundPermissionsAsync|watchPositionAsync/);
+      // The server resolves the place from the snapped position; the OS geocoder is never handed a position.
+      expect(src).not.toMatch(/reverseGeocodeAsync|geocodeAsync/);
+    }
+  });
+
+  it("there is no hardcoded supported-city list or default city in the app", () => {
+    expect(fs.existsSync(path.join(__dirname, "..", "mobile/src/constants/cities.ts"))).toBe(false);
+    for (const f of [
+      "mobile/src/services/locationSelectionPolicy.ts",
+      "mobile/src/services/locationSelection.ts",
+      "mobile/src/components/location/LocationPicker.tsx",
+      "mobile/app/onboarding/index.tsx",
+      "mobile/src/types/index.ts",
+    ]) {
+      const src = read(f);
+      expect(src).not.toMatch(/SUPPORTED_CITIES|POPULAR_CITIES|export const CITIES/);
+      expect(src).not.toMatch(/["']Pune["']/);
+    }
   });
 
   it("Expo config requests foreground-only location without a paid API key", () => {

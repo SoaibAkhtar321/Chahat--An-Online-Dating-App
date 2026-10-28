@@ -1,23 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Compass, MapPin, Search } from "lucide-react-native";
 import { Radii, Typography, ThemeColors, Spacing } from "../../constants/theme";
-import { POPULAR_CITIES } from "../../constants/cities";
 import { useTheme } from "../../context/ThemeContext";
 import { Input } from "../ui/Input";
-import { Chip } from "../ui/Chip";
 import { ensureConsent } from "../../services/consent";
 import {
   describeSelectionResult,
+  isRetryable,
   loadLocationSelection,
+  searchCities,
   selectCityManually,
   selectCurrentLocation,
   type SelectionResult,
 } from "../../services/locationSelection";
 import {
   describeMode,
+  describeSearchResult,
   describeSelection,
-  searchCities,
+  prepareSearchQuery,
+  type CitySearchResult,
   type LocationSelection,
 } from "../../services/locationSelectionPolicy";
 
@@ -26,10 +28,31 @@ interface Props {
   onSelectionChange?: (selection: LocationSelection | null) => void;
 }
 
+export const SEARCH_DEBOUNCE_MS = 300;
+
+type SearchState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "results"; results: CitySearchResult[] }
+  | { kind: "error"; message: string };
+
+async function openLocationSettings(): Promise<void> {
+  if (Platform.OS === "android") {
+    try {
+      await Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS");
+      return;
+    } catch {
+      // fall through to the app's settings page
+    }
+  }
+  await Linking.openSettings();
+}
+
 /**
- * The single "Your location" control used by onboarding and Settings. The server owns the state: this component
- * only renders it and asks for changes through selectCityManually / selectCurrentLocation, so the current-location
- * mode, a searched city and the popular-city shortcuts can never overwrite each other or leave a stale pair.
+ * The single "Your location" control used by onboarding and Settings. Exactly two ways to set a location:
+ * "Search City" (server-side search over every Indian city/town) and "Use My Current Location". The server owns
+ * the state: this component only renders it and asks for changes through selectCityManually / selectCurrentLocation,
+ * so the two modes can never overwrite each other or leave a stale pair. There is no default city.
  */
 export function LocationPicker({ onSelectionChange }: Props) {
   const { colors: Colors } = useTheme();
@@ -37,11 +60,12 @@ export function LocationPicker({ onSelectionChange }: Props) {
   const [selection, setSelection] = useState<LocationSelection | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
+  const [search, setSearch] = useState<SearchState>({ kind: "idle" });
   const [busy, setBusy] = useState<"current" | "manual" | null>(null);
-  const [message, setMessage] = useState("");
-  const [needsSettings, setNeedsSettings] = useState(false);
+  const [lastResult, setLastResult] = useState<SelectionResult | null>(null);
   const busyRef = useRef(false);
   const mounted = useRef(true);
+  const searchSeq = useRef(0);
   const onChange = useRef(onSelectionChange);
   onChange.current = onSelectionChange;
 
@@ -61,17 +85,40 @@ export function LocationPicker({ onSelectionChange }: Props) {
     };
   }, [refresh]);
 
+  // Debounced server search. Only the latest request may update the list (no out-of-order results).
+  const runSearch = useCallback((text: string) => {
+    const seq = ++searchSeq.current;
+    if (!prepareSearchQuery(text)) {
+      setSearch({ kind: "idle" });
+      return undefined;
+    }
+    setSearch({ kind: "loading" });
+    const timer = setTimeout(async () => {
+      const res = await searchCities(text);
+      if (!mounted.current || seq !== searchSeq.current) return;
+      if (res.status === "ok") setSearch({ kind: "results", results: res.results });
+      else if (res.status === "error") setSearch({ kind: "error", message: res.message });
+      else setSearch({ kind: "idle" });
+    }, SEARCH_DEBOUNCE_MS);
+    return timer;
+  }, []);
+
+  useEffect(() => {
+    const timer = runSearch(query);
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [query, runSearch]);
+
   const run = async (kind: "current" | "manual", action: () => Promise<SelectionResult>) => {
     if (busyRef.current) return; // one change at a time; ignores double taps
     busyRef.current = true;
     setBusy(kind);
-    setMessage("");
-    setNeedsSettings(false);
+    setLastResult(null);
     try {
       const result = await action();
       if (!mounted.current) return;
-      setMessage(describeSelectionResult(result));
-      setNeedsSettings(result.status === "permission_denied" && !result.canAskAgain);
+      setLastResult(result);
       if (result.status === "saved") {
         setQuery("");
         await refresh();
@@ -90,10 +137,14 @@ export function LocationPicker({ onSelectionChange }: Props) {
 
   const chooseCity = (name: string) => run("manual", () => selectCityManually(name));
 
-  const results = searchCities(query);
   const disabled = busy !== null;
   const current = selection?.city && selection.mode === "current";
   const manual = selection?.city && selection.mode === "manual";
+  const trimmed = query.trim();
+  const message = lastResult ? describeSelectionResult(lastResult) : "";
+  const needsAppSettings = lastResult?.status === "permission_denied" && !lastResult.canAskAgain;
+  const needsLocationSettings = lastResult?.status === "services_disabled";
+  const canRetry = lastResult !== null && lastResult.status !== "saved" && isRetryable(lastResult);
 
   return (
     <View>
@@ -111,74 +162,99 @@ export function LocationPicker({ onSelectionChange }: Props) {
         </TouchableOpacity>
       ) : null}
 
-      {/* Mode A: current location */}
+      {/* Option 1: Search City */}
+      <View style={[styles.card, manual ? styles.cardActive : null]}>
+        <View style={styles.cardHead}>
+          <Search size={22} color={Colors.primary} />
+          <Text style={styles.cardTitle}>Search City{manual ? " (active)" : ""}</Text>
+        </View>
+        <Input
+          placeholder="Type your city or town, e.g. Gorakhpur"
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+          autoCapitalize="words"
+          containerStyle={{ marginBottom: 8 }}
+          editable={!disabled}
+          accessibilityLabel="Search City"
+        />
+        {trimmed.length === 1 ? <Text style={styles.cardDesc}>Keep typing…</Text> : null}
+        {search.kind === "loading" ? <ActivityIndicator color={Colors.primary} style={{ marginVertical: 8 }} /> : null}
+        {search.kind === "error" ? (
+          <View>
+            <Text style={styles.cardDesc}>{search.message}</Text>
+            <TouchableOpacity onPress={() => runSearch(query)} style={styles.linkBtn} accessibilityRole="button">
+              <Text style={styles.linkText}>Retry search</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {search.kind === "results" && search.results.length === 0 ? (
+          <Text style={styles.cardDesc}>No city or town in India matches “{trimmed}”. Check the spelling.</Text>
+        ) : null}
+        {search.kind === "results"
+          ? search.results.map((c) => {
+              const sub = describeSearchResult(c);
+              return (
+                <TouchableOpacity
+                  key={c.name}
+                  style={styles.resultRow}
+                  onPress={() => void chooseCity(c.name)}
+                  disabled={disabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${c.name}${sub ? `, ${sub}` : ""}`}
+                >
+                  <MapPin size={16} color={Colors.mutedForeground} style={{ marginRight: 8 }} />
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={styles.resultText}>{c.name}</Text>
+                    {sub ? <Text style={styles.resultSub}>{sub}</Text> : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          : null}
+        {busy === "manual" ? <ActivityIndicator color={Colors.primary} style={{ marginTop: 8 }} /> : null}
+      </View>
+
+      {/* Option 2: Use My Current Location */}
       <View style={[styles.card, current ? styles.cardActive : null]}>
         <View style={styles.cardHead}>
           <Compass size={22} color={Colors.primary} />
-          <Text style={styles.cardTitle}>Use my current location{current ? " (active)" : ""}</Text>
+          <Text style={styles.cardTitle}>Use My Current Location{current ? " (active)" : ""}</Text>
         </View>
         <Text style={styles.cardDesc}>
-          We detect your approximate area and match it to a city. Your exact position is never shared.
+          We get a fresh location fix and match it to your town. Your exact position is never shared.
         </Text>
         <TouchableOpacity
           style={[styles.primaryBtn, disabled && styles.btnDisabled]}
           onPress={() => void useCurrent()}
           disabled={disabled}
           accessibilityRole="button"
-          accessibilityLabel="Use my current location"
+          accessibilityLabel="Use My Current Location"
         >
           {busy === "current" ? (
             <ActivityIndicator color={Colors.primaryForeground} />
           ) : (
-            <Text style={styles.primaryBtnText}>{current ? "Refresh my location" : "Use my current location"}</Text>
+            <Text style={styles.primaryBtnText}>{current ? "Refresh My Location" : "Use My Current Location"}</Text>
           )}
         </TouchableOpacity>
-      </View>
-
-      {/* Mode B: search / popular cities (both call chooseCity) */}
-      <View style={[styles.card, manual ? styles.cardActive : null]}>
-        <View style={styles.cardHead}>
-          <Search size={22} color={Colors.primary} />
-          <Text style={styles.cardTitle}>Search for your city{manual ? " (active)" : ""}</Text>
-        </View>
-        <Input
-          placeholder="Type a city, e.g. Pune"
-          value={query}
-          onChangeText={setQuery}
-          autoCorrect={false}
-          containerStyle={{ marginBottom: 8 }}
-          editable={!disabled}
-        />
-        {query.trim().length > 0 && results.length === 0 ? (
-          <Text style={styles.cardDesc}>No supported city matches “{query.trim()}”.</Text>
-        ) : null}
-        {results.map((c) => (
-          <TouchableOpacity
-            key={c.name}
-            style={styles.resultRow}
-            onPress={() => void chooseCity(c.name)}
-            disabled={disabled}
-            accessibilityRole="button"
-            accessibilityLabel={`Select ${c.name}`}
-          >
-            <MapPin size={16} color={Colors.mutedForeground} style={{ marginRight: 8 }} />
-            <Text style={styles.resultText}>{c.name}</Text>
-          </TouchableOpacity>
-        ))}
-        <Text style={styles.subheading}>Popular cities</Text>
-        <View style={styles.chipWrap}>
-          {POPULAR_CITIES.map((c) => (
-            <Chip key={c} label={c} active={Boolean(manual) && selection?.city === c} onPress={() => void chooseCity(c)} />
-          ))}
-        </View>
       </View>
 
       {message ? (
         <View style={styles.messageBox} accessibilityLiveRegion="polite">
           <Text style={styles.messageText}>{message}</Text>
-          {needsSettings ? (
+          {canRetry ? (
+            <TouchableOpacity onPress={() => void useCurrent()} style={styles.linkBtn} accessibilityRole="button" disabled={disabled}>
+              <Text style={styles.linkText}>Try again</Text>
+            </TouchableOpacity>
+          ) : null}
+          {needsAppSettings ? (
             <TouchableOpacity onPress={() => void Linking.openSettings()} style={styles.linkBtn} accessibilityRole="button">
-              <Text style={styles.linkText}>Open settings</Text>
+              <Text style={styles.linkText}>Open app settings</Text>
+            </TouchableOpacity>
+          ) : null}
+          {needsLocationSettings ? (
+            <TouchableOpacity onPress={() => void openLocationSettings()} style={styles.linkBtn} accessibilityRole="button">
+              <Text style={styles.linkText}>Open location settings</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -215,10 +291,9 @@ const createStyles = (Colors: ThemeColors) =>
     },
     primaryBtnText: { color: Colors.primaryForeground, fontWeight: Typography.weights.bold, fontSize: Typography.sizes.base },
     btnDisabled: { opacity: 0.6 },
-    resultRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
+    resultRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border, minHeight: 44 },
     resultText: { fontSize: Typography.sizes.base, color: Colors.foreground },
-    subheading: { fontSize: Typography.sizes.sm, fontWeight: Typography.weights.bold, color: Colors.mutedForeground, marginTop: 14, marginBottom: 8 },
-    chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    resultSub: { fontSize: Typography.sizes.sm, color: Colors.mutedForeground },
     messageBox: { backgroundColor: Colors.secondary, borderRadius: Radii.lg, padding: 12 },
     messageText: { fontSize: Typography.sizes.sm, color: Colors.foreground },
     linkBtn: { paddingVertical: 8 },

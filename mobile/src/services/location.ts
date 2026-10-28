@@ -1,18 +1,7 @@
-import * as Location from "expo-location";
-import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { hasConsent } from "./consent";
-import {
-  isValidCoordinates,
-  isFreshLocation,
-  classifyServerError,
-  describeServerError,
-  type ServerLocationError,
-} from "./locationPolicy";
-
-const PERMISSION_ATTEMPT_KEY = "milo_location_permission_attempted";
-const LOCATION_TIMEOUT_MS = 12_000;
+import { acquireFreshFix } from "./gpsFix";
+import { classifyServerError, describeServerError, type ServerLocationError } from "./locationPolicy";
 
 export type LocationEnableResult =
   | { status: "enabled" }
@@ -21,28 +10,16 @@ export type LocationEnableResult =
   | { status: "services_disabled" }
   | { status: "unsupported" }
   | { status: "mock_location" }
+  | { status: "timeout" }
   | { status: "rejected"; code: ServerLocationError; message: string }
   | { status: "error"; message: string };
 
-/** The OS-reported accuracy ceiling the server accepts (see set_my_discovery_location). */
-const MAX_ACCURACY_M = 5000;
-
-async function withinTimeout<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("Location request timed out.")), LOCATION_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
+/**
+ * Legacy coordinates-only update (the location UI uses locationSelection.selectCurrentLocation, which also sets
+ * the city atomically). Shares the same fresh-fix logic, so it can no longer reuse a days-old cached position or
+ * permanently stop asking for permission after the first dismissal.
+ */
 export async function enableLocationSharing(): Promise<LocationEnableResult> {
-  if (Platform.OS !== "ios" && Platform.OS !== "android") return { status: "unsupported" };
   if (!isSupabaseConfigured()) {
     return { status: "error", message: "Location discovery requires a configured backend." };
   }
@@ -51,49 +28,30 @@ export async function enableLocationSharing(): Promise<LocationEnableResult> {
   // the in-app notice (the server also refuses to store a location without it).
   if (!(await hasConsent("location_discovery"))) return { status: "consent_required" };
 
-  try {
-    let permission = await Location.getForegroundPermissionsAsync();
-    if (permission.status !== "granted") {
-      const attempted = await SecureStore.getItemAsync(PERMISSION_ATTEMPT_KEY);
-      if (permission.canAskAgain && attempted !== "1") {
-        await SecureStore.setItemAsync(PERMISSION_ATTEMPT_KEY, "1");
-        permission = await Location.requestForegroundPermissionsAsync();
-      }
-    }
-    if (permission.status !== "granted") return { status: "permission_denied" };
-    if (!(await Location.hasServicesEnabledAsync())) return { status: "services_disabled" };
-
-    let position: Location.LocationObject;
-    try {
-      position = await withinTimeout(
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      );
-    } catch (error) {
-      const cached = await Location.getLastKnownPositionAsync({
-        maxAge: 72 * 60 * 60 * 1000,
-        requiredAccuracy: MAX_ACCURACY_M,
-      });
-      if (!cached || !isFreshLocation(cached.timestamp)) throw error;
-      position = cached;
-    }
-
-    const coordinates = {
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-    };
-    if (!isValidCoordinates(coordinates)) {
+  const fix = await acquireFreshFix();
+  switch (fix.status) {
+    case "ok":
+      break;
+    case "permission_denied":
+      return { status: "permission_denied" };
+    case "unsupported":
+    case "services_disabled":
+    case "mock_location":
+    case "timeout":
+      return { status: fix.status };
+    case "too_imprecise":
+      return { status: "rejected", code: "location_too_imprecise", message: describeServerError("location_too_imprecise") };
+    case "invalid":
       return { status: "error", message: "The device returned invalid coordinates." };
-    }
+    default:
+      return { status: "error", message: fix.message };
+  }
 
-    // Android only: refuse fixes from a mock-location provider (the server also guards against crude spoofing).
-    if ((position as { mocked?: boolean }).mocked === true) return { status: "mock_location" };
-
-    const accuracy = position.coords.accuracy;
+  try {
     const { error } = await supabase.rpc("set_my_discovery_location", {
-      _latitude: coordinates.latitude,
-      _longitude: coordinates.longitude,
-      _accuracy_m:
-        typeof accuracy === "number" && Number.isFinite(accuracy) ? Math.max(0, Math.round(accuracy)) : null,
+      _latitude: fix.fix.latitude,
+      _longitude: fix.fix.longitude,
+      _accuracy_m: fix.fix.accuracyM,
     });
     if (error) {
       const code = classifyServerError(error.message);
@@ -101,11 +59,8 @@ export async function enableLocationSharing(): Promise<LocationEnableResult> {
       return { status: "rejected", code, message: describeServerError(code) };
     }
     return { status: "enabled" };
-  } catch (error) {
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : "Could not determine your location.",
-    };
+  } catch {
+    return { status: "error", message: "Could not determine your location." };
   }
 }
 
@@ -170,6 +125,8 @@ export function describeLocationResult(result: LocationEnableResult): string {
       return "Nearby discovery is only available in the mobile app.";
     case "mock_location":
       return "Mock locations are not allowed. Turn off any location-spoofing app and try again.";
+    case "timeout":
+      return "We couldn't get a fresh location fix. Move near a window or outdoors and try again.";
     case "rejected":
       return result.message;
     default:

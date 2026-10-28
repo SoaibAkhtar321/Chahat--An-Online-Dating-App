@@ -198,7 +198,7 @@ export default function ProfileDetailScreen() {
           <View style={styles.metaRow}>
             <MapPin size={16} color={Colors.mutedForeground} />
             <Text style={styles.metaText}>
-              {[targetProfile.city, formatDistanceLabel(targetProfile.distanceKm)].filter(Boolean).join(" · ") ||
+              {[targetProfile.city, formatDistanceLabel(targetProfile.distanceKm, "device")].filter(Boolean).join(" · ") ||
                 "Location not shared"}
             </Text>
           </View>
