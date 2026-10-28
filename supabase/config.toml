@@ -54,3 +54,9 @@ additional_redirect_urls = ["chahat://", "chahat://callback"]
 enable_signup = true
 enable_confirmations = true
 double_confirm_changes = true
+
+[functions.request-account-deletion]
+verify_jwt = true
+
+[functions.process-deletion-requests]
+verify_jwt = false
