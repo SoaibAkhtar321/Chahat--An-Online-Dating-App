@@ -1,0 +1,85 @@
+name: Android APK (cloud build, no EAS credits)
+
+# Builds the same APK as `eas build -p android --profile preview` on a GitHub machine (7+ GB RAM) using EAS
+# "local build" mode, which does not use Expo build credits. Signed with the project's EAS keystore, so it installs over
+# APKs built by EAS. Start it from GitHub → Actions → "Android APK" → Run workflow. Download the APK from the run's
+# "Artifacts" section when it finishes (about 20–30 minutes).
+#
+# Needs two repository secrets (GitHub → Settings → Secrets and variables → Actions):
+#   EXPO_TOKEN                  an Expo access token (expo.dev → Account settings → Access tokens)
+#   GOOGLE_SERVICES_JSON_BASE64 the base64 of mobile/google-services.json (push notifications)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile (preview = installable APK, production = Play Store AAB)"
+        required: true
+        default: preview
+        type: choice
+        options: [preview, production]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Check secrets are set
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          test -n "$EXPO_TOKEN" || { echo "::error::Add the EXPO_TOKEN repository secret"; exit 1; }
+          test -n "$GSJ" || { echo "::error::Add the GOOGLE_SERVICES_JSON_BASE64 repository secret"; exit 1; }
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Write google-services.json (push notifications)
+        working-directory: mobile
+        env:
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          echo "$GSJ" | base64 -d > google-services.json
+          node -e "JSON.parse(require('fs').readFileSync('google-services.json','utf8')); console.log('google-services.json OK')"
+
+      - name: Build with EAS (local mode on this machine)
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GOOGLE_SERVICES_JSON: ${{ github.workspace }}/mobile/google-services.json
+          EAS_SKIP_AUTO_FINGERPRINT: "1"
+        run: |
+          EXT=apk; [ "${{ inputs.profile }}" = "production" ] && EXT=aab
+          npx --yes eas-cli@latest build -p android --profile "${{ inputs.profile }}" --local --non-interactive --output "chahat-${{ inputs.profile }}.$EXT"
+
+      - name: Remove google-services.json
+        if: always()
+        working-directory: mobile
+        run: rm -f google-services.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chahat-${{ inputs.profile }}
+          path: |
+            mobile/chahat-${{ inputs.profile }}.apk
+            mobile/chahat-${{ inputs.profile }}.aab
+          if-no-files-found: error
+          retention-days: 14
