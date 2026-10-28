@@ -239,7 +239,7 @@ export default function PremiumScreen() {
             Chahat · Online Friendship & Meaningful Connections
           </Text>
           <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]}>
-            Unlock unlimited likes, see who liked you, rewind passes, and priority recommendations.
+            Unlock unlimited likes, 5 minutes of video calling a day, see who liked you, and rewind passes.
           </Text>
 
           {currentSub && currentSub.tier !== "free" && (
@@ -422,7 +422,7 @@ export default function PremiumScreen() {
                   >
                     {dur.popular && (
                       <View style={[styles.durationBadge, { backgroundColor: colors.accent }]}>
-                        <Text style={styles.durationBadgeText}>BEST VALUE</Text>
+                        <Text style={styles.durationBadgeText}>POPULAR</Text>
                       </View>
                     )}
                     <Text
@@ -496,7 +496,7 @@ export default function PremiumScreen() {
             accessibilityRole="link"
           >
             <Text style={[styles.restoreBtnText, { color: colors.mutedForeground }]}>
-              Manage or cancel subscription
+              View purchases in Google Play
             </Text>
           </TouchableOpacity>
         </View>

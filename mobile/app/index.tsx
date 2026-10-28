@@ -6,6 +6,7 @@ import { Layout, Spacing, ThemeColors, Typography } from "../src/constants/theme
 import { Button } from "../src/components/ui/Button";
 import { useTheme } from "../src/context/ThemeContext";
 import { Alert } from "../src/utils/alert";
+import { takePendingSharedProfile } from "../src/services/profileShare";
 
 export default function Index() {
   const { colors: Colors } = useTheme();
@@ -38,6 +39,9 @@ export default function Index() {
       router.replace("/onboarding");
     } else {
       router.replace("/(tabs)/discover");
+      // A shared profile link opened before sign-in / onboarding opens now, on top of the main app.
+      const sharedProfileId = takePendingSharedProfile();
+      if (sharedProfileId) router.push({ pathname: "/profile/[id]", params: { id: sharedProfileId } });
     }
   }, [loading, isLoggedIn, isOnboarded, profile, legalStatus, router]);
 

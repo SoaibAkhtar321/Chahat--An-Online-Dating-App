@@ -18,6 +18,7 @@ import {
   BadgeCheck,
   Sparkles,
   HeartHandshake,
+  Share2,
 } from "lucide-react-native";
 import { VoiceIntroPlayer } from "../../src/components/profile/VoiceIntroPlayer";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
@@ -30,6 +31,7 @@ import { supabase, isSupabaseConfigured } from "../../src/services/supabase";
 import { getSignedUrls } from "../../src/services/storage";
 import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 import { Dialog } from "../../src/components/ui/Dialog";
+import { ShareProfileSheet } from "../../src/components/profile/ShareProfileSheet";
 import { Alert } from "../../src/utils/alert";
 import type { Profile } from "../../src/types";
 
@@ -46,6 +48,7 @@ export default function ProfileDetailScreen() {
   const [dialogAction, setDialogAction] = useState<"block" | "report" | null>(null);
   const [fetchedProfile, setFetchedProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   // Search profile in deck first
   const deckMatch = deck.find((p) => p.id === id);
@@ -181,6 +184,16 @@ export default function ProfileDetailScreen() {
             accessibilityLabel="Go back"
           >
             <ArrowLeft size={20} color={Colors.foreground} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => setShareVisible(true)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Share profile"
+          >
+            <Share2 size={20} color={Colors.foreground} />
           </TouchableOpacity>
 
           {targetProfile.photos && targetProfile.photos.length > 0 && (
@@ -343,6 +356,13 @@ export default function ProfileDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      <ShareProfileSheet
+        visible={shareVisible}
+        profileId={targetProfile.id}
+        isOwnProfile={targetProfile.id === myProfile?.id}
+        onClose={() => setShareVisible(false)}
+      />
+
       {/* Safety Dialog */}
       <Dialog
         visible={dialogAction !== null}
@@ -404,6 +424,18 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     position: "absolute",
     top: 16,
     left: 16,
+    width: Layout.minTap,
+    height: Layout.minTap,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Shadows.card,
+  },
+  shareButton: {
+    position: "absolute",
+    top: 16,
+    right: 16,
     width: Layout.minTap,
     height: Layout.minTap,
     borderRadius: Radii.full,

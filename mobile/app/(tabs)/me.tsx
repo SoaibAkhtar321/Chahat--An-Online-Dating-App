@@ -10,6 +10,7 @@ import {
   Bell,
   Video,
   Settings,
+  Share2,
   ShieldCheck,
   LogOut,
   ChevronRight,
@@ -24,6 +25,7 @@ import { calculateAge } from "../../src/services/profile";
 import { calculateProfileCompleteness } from "../../src/services/profilePolicy";
 import { Dialog } from "../../src/components/ui/Dialog";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
+import { ShareProfileSheet } from "../../src/components/profile/ShareProfileSheet";
 import { Alert } from "../../src/utils/alert";
 
 export default function MeScreen() {
@@ -33,6 +35,7 @@ export default function MeScreen() {
   const { profile, signOut } = useAuth();
   const { subscription, likesRemaining, dailyLikeLimit } = useMilo();
   const [logoutVisible, setLogoutVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   const mainPhotoUri =
     profile?.photos && profile.photos.length > 0 ? profile.photos[0]!.uri : undefined;
@@ -53,13 +56,18 @@ export default function MeScreen() {
       badge: pct < 100 ? `${pct}%` : "100%",
     },
     {
+      icon: Share2,
+      label: "Share my profile",
+      onPress: () => setShareVisible(true),
+    },
+    {
       icon: Crown,
       label:
         planTier === "free"
           ? "Upgrade to CHAHAT Premium"
           : `CHAHAT ${subscription?.tier ? subscription.tier.toUpperCase() : ""}`,
       onPress: () => router.push("/premium"),
-      badge: planTier === "free" ? "From ₹99" : "Active",
+      badge: planTier === "free" ? "See plans" : "Active",
     },
     {
       icon: BadgeCheck,
@@ -259,6 +267,14 @@ export default function MeScreen() {
         }}
         onCancel={() => setLogoutVisible(false)}
       />
+      {profile?.id ? (
+        <ShareProfileSheet
+          visible={shareVisible}
+          profileId={profile.id}
+          isOwnProfile
+          onClose={() => setShareVisible(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

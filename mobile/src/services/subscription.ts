@@ -268,22 +268,11 @@ export async function getUserSubscription(): Promise<UserSubscription> {
  */
 export function hasEntitlement(
   tier: PlanTier,
-  feature:
-    | "seeWhoLikedYou"
-    | "undoPass"
-    | "readReceipts"
-    | "advancedFilters"
-    | "priorityVisibility"
-    | "incognito",
+  // Only features that exist and that the server enforces (no filters / visibility boost / incognito are built).
+  feature: "seeWhoLikedYou" | "undoPass" | "readReceipts",
 ): boolean {
-  if (tier === "vip") return true;
-  if (tier === "plus") {
-    return feature !== "incognito";
-  }
-  if (tier === "premium") {
-    return feature === "seeWhoLikedYou" || feature === "undoPass";
-  }
-  // Free tier
+  if (tier === "plus" || tier === "vip") return true;
+  if (tier === "premium") return feature !== "readReceipts";
   return false;
 }
 
