@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 import { DEFAULT_FILTERS, MAX_DISCOVERY_RADIUS_KM, type Profile, type SwipeResponse } from "../types";
 import { getSignedUrls } from "./storage";
 import { fetchVoiceIntros } from "./voiceIntro";
+import { fetchVerifiedIds } from "./verificationBadges";
 import { pushNotificationToInbox } from "./notifications";
 
 // Bundled demo profiles for offline/testing mode matching prototype exactly
@@ -167,8 +168,16 @@ export async function fetchDiscoveryPage(
     );
     const profiles = data.map((row: any) => formatProfileRow(row, signed));
     // One batched lookup for voice intros; failure just means no badges, never an empty deck.
-    const intros = await fetchVoiceIntros(profiles.map((p: Profile) => p.id));
-    for (const profile of profiles) profile.voiceIntro = intros[profile.id] ?? null;
+    const [intros, verified] = await Promise.all([
+      fetchVoiceIntros(profiles.map((p: Profile) => p.id)),
+      fetchVerifiedIds(profiles.map((p: Profile) => p.id)),
+    ]);
+    for (const profile of profiles) {
+      profile.voiceIntro = intros[profile.id] ?? null;
+      // The badge comes only from the server's approved list, never from the feed row.
+      profile.isVerified = verified.has(profile.id);
+      profile.verificationStatus = verified.has(profile.id) ? "approved" : "none";
+    }
     const last = data[data.length - 1];
     return {
       profiles,

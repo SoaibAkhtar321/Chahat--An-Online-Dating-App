@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { safeBack } from "../../src/utils/navigation";
 import { getDistanceTo } from "../../src/services/location";
+import { fetchVerifiedIds } from "../../src/services/verificationBadges";
 import { formatDistanceLabel } from "../../src/services/locationPolicy";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -73,7 +74,10 @@ export default function ProfileDetailScreen() {
           : [];
 
         // Bucketed distance from the server; null when unknown, hidden by the other member, or blocked.
-        const distanceKm = await getDistanceTo(prof.id).catch(() => null);
+        const [distanceKm, verified] = await Promise.all([
+          getDistanceTo(prof.id).catch(() => null),
+          fetchVerifiedIds([prof.id]),
+        ]);
 
         if (!cancelled) {
           setFetchedProfile({
@@ -92,6 +96,8 @@ export default function ProfileDetailScreen() {
             prompt: prof.prompt,
             lifestyle: prof.lifestyle,
             languages: prof.languages || [],
+            isVerified: verified.has(prof.id),
+            verificationStatus: verified.has(prof.id) ? "approved" : "none",
           });
           setLoading(false);
         }
