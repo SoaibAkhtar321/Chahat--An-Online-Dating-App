@@ -240,12 +240,12 @@ export default function LegalAndPrivacyScreen() {
 
         <Section title="Subscriptions, cancellation and refunds" expanded={open === "subscriptions"} onToggle={() => toggle("subscriptions")}>
           <P>
-            Paid plans, where available, are bought and renewed through Google Play. To cancel, open your subscriptions in
-            the Google Play app and cancel Chahat there. Cancelling stops future charges and you keep access until the end
-            of the period you have already paid for. Cancelling does not by itself refund a payment.
+            Paid plans are prepaid and bought through Google Play for a fixed period (1 week, 1 month or 2 months). They do
+            not renew automatically and you are never charged again unless you buy another plan. Your plan ends on the date
+            shown in the app. Buying the same plan again before it ends adds to it.
           </P>
           <P>
-            Deleting your Chahat account does not cancel a Google Play subscription, so cancel it in Google Play first.
+            Deleting your Chahat account ends any active plan. Refunds follow Google Play's rules and the refund policy below.
           </P>
           <Detail label="Refunds" value={OPERATOR_DETAILS.refundPolicy} />
         </Section>

@@ -168,8 +168,9 @@ describe("Legal & Privacy screen", () => {
     const tree = await render();
     await open(tree, 4);
     const out = text(tree);
-    expect(out).toContain("Cancelling does not by itself refund a payment");
-    expect(out).toContain("does not cancel a Google Play subscription");
+    // Prepaid plans (2026-10-29): no renewals, nothing to cancel.
+    expect(out).toContain("They do not renew automatically");
+    expect(out).toContain("Refunds follow Google Play's rules");
     expect(out).toContain(OPERATOR_DETAILS.refundPolicy);
   });
 });

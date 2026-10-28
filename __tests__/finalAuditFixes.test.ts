@@ -58,3 +58,32 @@ describe("honest copy", () => {
     expect(read("mobile/app/premium/index.tsx")).toMatch(/until \$\{new Date\(currentSub\.expiresAt\)/);
   });
 });
+
+describe("pre-APK re-audit (2026-10-29)", () => {
+  it("a paid member whose 5 minutes end mid-call is not offered Premium", () => {
+    const screen = read("mobile/app/call/[id].tsx");
+    expect(screen).not.toMatch(/It renews tomorrow/);
+    expect(screen).toMatch(/if \(isFreePlan\) setPremiumPrompt\(PREMIUM_CALL_MESSAGE\);\s*else setError\(PAID_ALLOWANCE_USED_MESSAGE\);/);
+  });
+
+  it("legal text describes prepaid plans (no renewals, nothing to cancel)", () => {
+    const legal = read("mobile/app/legal/index.tsx");
+    expect(legal).not.toMatch(/bought and renewed/);
+    expect(legal).not.toMatch(/Cancelling stops future charges/);
+    expect(legal).toMatch(/do\s+not renew automatically/);
+  });
+
+  it("production (AAB) build has the public Supabase config like preview", () => {
+    const eas = JSON.parse(read("mobile/eas.json"));
+    for (const k of ["EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]) {
+      expect(eas.build.production.env[k]).toBe(eas.build.preview.env[k]);
+    }
+    expect(eas.build.production.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY).toMatch(/^sb_publishable_/);
+    expect(JSON.stringify(eas)).not.toMatch(/service_role|sb_secret_/);
+  });
+
+  it("unneeded storage write permission is blocked", () => {
+    const app = JSON.parse(read("mobile/app.json"));
+    expect(app.expo.android.blockedPermissions).toContain("android.permission.WRITE_EXTERNAL_STORAGE");
+  });
+});

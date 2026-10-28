@@ -241,11 +241,9 @@ export default function CallScreen() {
       if (callId) await transitionVideoCall(callId, "end").then(setStatus).catch(() => undefined);
       const amRecipient = Boolean(user?.id && recipientId && user.id === recipientId);
       if (!amRecipient) {
-        setPremiumPrompt(
-          isFreePlan
-            ? PREMIUM_CALL_MESSAGE
-            : "You've used today's video-call time. It renews tomorrow.",
-        );
+        // Free members are offered Premium; paid members are told when their 5 minutes renew (no upgrade pitch).
+        if (isFreePlan) setPremiumPrompt(PREMIUM_CALL_MESSAGE);
+        else setError(PAID_ALLOWANCE_USED_MESSAGE);
       }
     })();
   }, [secondsLeft, status, media.phase, controller, callId, isFreePlan, user?.id, recipientId]);
