@@ -63,28 +63,29 @@ beforeEach(() => {
 });
 
 describe("Phase 3B: unread counts and chat-list previews", () => {
-  it("excludes messages deleted for everyone from the unread count", async () => {
-    const unread = query({ count: 2, error: null });
-    setupMatchList({ lastRow: null, unreadQueries: [unread] });
+  it("takes unread counts from the server (get_chat_list_state), never from read_at on the table", async () => {
+    setupMatchList({ lastRow: null, unreadQueries: [] });
+    const base = mockRpc.getMockImplementation()!;
+    mockRpc.mockImplementation(async (name: string, args: unknown) =>
+      name === "get_chat_list_state"
+        ? { data: [{ match_id: MATCH, unread_count: 2, last_message_id: null, last_message_read: null }], error: null }
+        : base(name, args),
+    );
 
     const items = await fetchUserMatches(ME);
 
     expect(items[0]!.unreadCount).toBe(2);
-    expect(unread.is).toHaveBeenCalledWith("read_at", null);
-    expect(unread.is).toHaveBeenCalledWith("deleted_at", null);
-    expect(unread.neq).toHaveBeenCalledWith("sender", ME);
+    expect(mockRpc).toHaveBeenCalledWith("get_chat_list_state", { _match_ids: [MATCH] });
+    // Only the last-message preview reads the table, with explicit columns (no read_at, no *).
+    expect(mockFrom.mock.calls.filter(([t]) => t === "messages")).toHaveLength(1);
   });
 
-  it("falls back to the old count when deleted_at does not exist yet (migration not applied)", async () => {
-    const failing = query({ count: null, error: { message: "column messages.deleted_at does not exist" } });
-    const legacy = query({ count: 3, error: null });
-    setupMatchList({ lastRow: null, unreadQueries: [failing, legacy] });
+  it("shows no unread badge (0) when the server state cannot be read", async () => {
+    setupMatchList({ lastRow: null, unreadQueries: [] });
 
     const items = await fetchUserMatches(ME);
 
-    expect(items[0]!.unreadCount).toBe(3);
-    expect(legacy.is).toHaveBeenCalledWith("read_at", null);
-    expect(legacy.is).not.toHaveBeenCalledWith("deleted_at", null);
+    expect(items[0]!.unreadCount).toBe(0);
   });
 
   it("previews a deleted last message as a content-free tombstone and never signs media for it", async () => {
@@ -173,16 +174,14 @@ describe("Phase 3B: fetching a thread", () => {
     expect(msgs[1]!.image).toBeUndefined();
   });
 
-  it("table fallback path treats rows with deleted_at as tombstones too", async () => {
+  it("has no direct-table fallback: an RPC failure returns nothing and never reads the table", async () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: "function not found" } });
-    mockFrom.mockReturnValue(query({ data: [tomb], error: null }));
 
     const msgs = await fetchMessagesForMatch(MATCH, ME);
 
-    expect(msgs).toHaveLength(1);
-    expect(msgs[0]).toMatchObject({ text: "", deletedAt: "2026-10-20T00:05:00Z" });
-    expect(msgs[0]!.image).toBeUndefined();
-    expect(mockGetSignedUrls).toHaveBeenCalledWith("chat", []);
+    expect(msgs).toEqual([]);
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockGetSignedUrls).not.toHaveBeenCalled();
   });
 });
 

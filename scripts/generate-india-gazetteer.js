@@ -2,7 +2,6 @@
 // Generates the VALUES block of supabase/migrations/20260101005700_dynamic_city_search.sql from the
 // dr5hn countries-states-cities-database (ODbL-1.0). See docs/LOCATION_SELECTION.md. Not run in CI or at build time.
 // Usage: node scripts/generate-india-gazetteer.js <IN.json> <states.json> <004300 migration> <out.sql>
-/* eslint-disable */
 const fs=require("fs");
 const [,,citiesPath,statesPath,curatedSql,out]=process.argv;
 const cities=JSON.parse(fs.readFileSync(citiesPath,"utf8"));

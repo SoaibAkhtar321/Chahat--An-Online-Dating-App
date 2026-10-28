@@ -292,18 +292,14 @@ describe("loading a chat with replies", () => {
   });
 
   it("falls back to quoting from the same page when only reply_to_id is available", async () => {
-    mockRpc.mockResolvedValue({ error: { message: "missing" }, data: null });
-    mockFrom.mockImplementation(() => ({
-      select: () => ({
-        eq: () => ({
-          order: async () => ({
-            error: null,
-            data: [row({ id: ORIG, sender: THEM, body: "original text" }), row({ reply_to_id: ORIG })],
-          }),
-        }),
-      }),
-    }));
+    // Rows without server-built reply previews (e.g. an older get_match_messages). There is no direct-table
+    // fallback any more (it cannot apply the read-receipt rule, 20260101005900).
+    mockRpc.mockResolvedValue({
+      error: null,
+      data: [row({ id: ORIG, sender: THEM, body: "original text" }), row({ reply_to_id: ORIG })],
+    });
     const list = await fetchMessagesForMatch(MATCH, ME);
+    expect(mockFrom).not.toHaveBeenCalled();
     expect(list[1]!.replyTo).toMatchObject({ id: ORIG, text: "original text", from: "them" });
   });
 });

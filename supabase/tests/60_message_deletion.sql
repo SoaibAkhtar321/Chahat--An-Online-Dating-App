@@ -168,7 +168,10 @@ SELECT public.t60_check('md: even a privileged UPDATE outside delete_message_for
 
 -- ===== D. Visibility after delete for everyone ===================================================================
 SET ROLE authenticated; SET request.jwt.claim.sub = 'f6000000-0000-0000-0000-000000000002'; SET request.jwt.claim.role = 'authenticated';
-INSERT INTO public.t60 SELECT 'b_direct_tomb', to_jsonb(m) FROM public.messages m WHERE m.id='f6e50000-0000-4000-8000-000000000002';
+-- Members can no longer SELECT messages.read_at (20260101005900), so a whole-row read is refused; select the
+-- content columns the app actually reads.
+INSERT INTO public.t60 SELECT 'b_direct_tomb', jsonb_build_object('body', m.body, 'image_path', m.image_path,
+  'audio_path', m.audio_path, 'deleted_at', m.deleted_at) FROM public.messages m WHERE m.id='f6e50000-0000-4000-8000-000000000002';
 INSERT INTO public.t60 SELECT 'b_rpc_all', coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.created_at), '[]') FROM public.get_match_messages('f6c60000-0000-4000-8000-000000000001', 100) r;
 RESET ROLE;
 SELECT public.t60_check('md: recipient direct query sees the tombstone row with no content',
@@ -216,7 +219,8 @@ INSERT INTO public.t60 VALUES ('b_me_10',   to_jsonb(public.delete_message_for_m
 INSERT INTO public.t60 VALUES ('b_me_14',   to_jsonb(public.delete_message_for_me('f6e50000-0000-4000-8000-000000000014')));
 INSERT INTO public.t60 VALUES ('b_me_tomb', to_jsonb(public.delete_message_for_me('f6e50000-0000-4000-8000-000000000001')));
 INSERT INTO public.t60 VALUES ('b_direct_hidden', to_jsonb((SELECT count(*) FROM public.messages WHERE id IN ('f6e50000-0000-4000-8000-000000000005','f6e50000-0000-4000-8000-000000000006','f6e50000-0000-4000-8000-000000000001'))));
-INSERT INTO public.t60 VALUES ('b_direct_unread', to_jsonb((SELECT count(*) FROM public.messages WHERE match_id='f6c60000-0000-4000-8000-000000000001' AND sender <> 'f6000000-0000-0000-0000-000000000002' AND read_at IS NULL AND id IN ('f6e50000-0000-4000-8000-000000000005','f6e50000-0000-4000-8000-000000000006'))));
+-- Unread counts come from get_chat_list_state (members cannot read read_at directly since 20260101005900).
+INSERT INTO public.t60 SELECT 'b_rpc_unread', to_jsonb(s.unread_count) FROM public.get_chat_list_state(ARRAY['f6c60000-0000-4000-8000-000000000001'::uuid]) s;
 INSERT INTO public.t60 SELECT 'b_rpc_after_hide', coalesce(jsonb_agg(r.id::text ORDER BY r.created_at), '[]') FROM public.get_match_messages('f6c60000-0000-4000-8000-000000000001', 100) r;
 INSERT INTO public.t60 SELECT 'b_rpc_limit2', coalesce(jsonb_agg(r.id::text ORDER BY r.created_at), '[]') FROM public.get_match_messages('f6c60000-0000-4000-8000-000000000001', 2) r;
 RESET ROLE;
@@ -233,7 +237,16 @@ SELECT public.t60_check('md: delete for me succeeds, and a retry reports already
   AND (SELECT count(*) FROM public.message_user_deletions WHERE message_id='f6e50000-0000-4000-8000-000000000005') = 1);
 SELECT public.t60_check('md: hidden rows vanish from the caller''s direct queries (this is also what Realtime evaluates)',
   (SELECT v FROM public.t60 WHERE k='b_direct_hidden') = '0');
-SELECT public.t60_check('md: hidden rows do not count as unread for the caller', (SELECT v FROM public.t60 WHERE k='b_direct_unread') = '0');
+SELECT public.t60_check('md: hidden rows do not count as unread for the caller',
+  (SELECT (v#>>'{}')::int FROM public.t60 WHERE k='b_rpc_unread') = (
+    SELECT count(*)::int FROM public.messages m
+    WHERE m.match_id='f6c60000-0000-4000-8000-000000000001' AND m.sender <> 'f6000000-0000-0000-0000-000000000002'
+      AND m.read_at IS NULL AND m.deleted_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM public.message_user_deletions d WHERE d.message_id = m.id
+                      AND d.user_id = 'f6000000-0000-0000-0000-000000000002'))
+  AND NOT EXISTS (SELECT 1 FROM public.message_user_deletions d
+                  WHERE d.user_id = 'f6000000-0000-0000-0000-000000000002'
+                    AND d.message_id IN ('f6e50000-0000-4000-8000-000000000005','f6e50000-0000-4000-8000-000000000006')) = false);
 SELECT public.t60_check('md: hidden rows vanish from get_match_messages for the caller',
   NOT (SELECT v FROM public.t60 WHERE k='b_rpc_after_hide') ?| ARRAY['f6e50000-0000-4000-8000-000000000005','f6e50000-0000-4000-8000-000000000006','f6e50000-0000-4000-8000-000000000001']);
 SELECT public.t60_check('md: the limit applies after hiding (newest N VISIBLE rows; hidden 14 is skipped)',

@@ -20,24 +20,40 @@ function isReplyTargetError(message: string | undefined): boolean {
 }
 
 /**
- * Unread = messages from the other person that are not read and not deleted for everyone.
- * Rows the user deleted for themselves are already excluded by the `members read messages` policy.
+ * Message columns the app may read directly. `read_at` is deliberately absent: members cannot SELECT it
+ * (20260101005900); read state comes only from get_match_messages / get_chat_list_state, which apply the
+ * Plus/VIP read-receipt rule on the server.
  */
-async function countUnreadMessages(matchId: string, currentUserId: string): Promise<number> {
-  const base = () =>
-    supabase
-      .from("messages")
-      .select("*", { count: "exact", head: true })
-      .eq("match_id", matchId)
-      .neq("sender", currentUserId)
-      .is("read_at", null);
+export const MESSAGE_COLUMNS =
+  "id, match_id, sender, body, image_path, audio_path, audio_duration_sec, message_type, is_view_once, viewed_at, created_at, deleted_at, delivered_at, reply_to_id";
 
-  const filtered = await base().is("deleted_at", null);
-  if (!filtered.error) return filtered.count || 0;
+export interface ChatListState {
+  unreadCount: number;
+  lastMessageId: string | null;
+  /** true/false only when the server says this user may know it; null = unknown / not entitled. */
+  lastMessageRead: boolean | null;
+}
 
-  // `deleted_at` does not exist until the Phase 3A migration is applied; keep the old count rather than showing 0.
-  const legacy = await base();
-  return legacy.count || 0;
+/** Unread counts (messages from the other person I have not read) and the masked last-message receipt per chat. */
+export async function fetchChatListState(matchIds: string[]): Promise<Record<string, ChatListState>> {
+  const out: Record<string, ChatListState> = {};
+  const ids = matchIds.filter(isValidUUID);
+  if (ids.length === 0) return out;
+  try {
+    const { data, error } = await supabase.rpc("get_chat_list_state", { _match_ids: ids });
+    if (error || !Array.isArray(data)) return out;
+    for (const row of data as any[]) {
+      if (!row?.match_id) continue;
+      out[row.match_id] = {
+        unreadCount: Number.isFinite(Number(row.unread_count)) ? Math.max(0, Number(row.unread_count)) : 0,
+        lastMessageId: row.last_message_id ?? null,
+        lastMessageRead: typeof row.last_message_read === "boolean" ? row.last_message_read : null,
+      };
+    }
+  } catch {
+    // Badges are best effort.
+  }
+  return out;
 }
 
 export async function fetchUserMatches(currentUserId: string): Promise<MatchItem[]> {
@@ -69,6 +85,7 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
     void markMessagesDelivered();
 
     const items: MatchItem[] = [];
+    const listState = await fetchChatListState(matches.map((m) => m.id));
 
     for (const m of matches) {
       const otherId = m.user_a === currentUserId ? m.user_b : m.user_a;
@@ -104,7 +121,7 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
         // Fetch last message
         const { data: lastMsgs } = await supabase
           .from("messages")
-          .select("*")
+          .select(MESSAGE_COLUMNS)
           .eq("match_id", m.id)
           .order("created_at", { ascending: false })
           .limit(1);
@@ -128,7 +145,13 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
                   ? previewForSystemBody(last.body, last.sender === currentUserId)
                   : last.body,
             at: new Date(last.created_at).getTime(),
-            status: last.read_at ? "read" : "sent",
+            // "read" only when the server confirms it for this user (Plus/VIP for my own messages).
+            status:
+              listState[m.id]?.lastMessageId === last.id && listState[m.id]?.lastMessageRead === true
+                ? "read"
+                : last.delivered_at
+                  ? "delivered"
+                  : "sent",
             image: last.image_path ? await getSignedUrl("chat", last.image_path) : undefined,
             audio: last.audio_path ? await getSignedUrl("chat", last.audio_path) : undefined,
             audioDurationSec: last.audio_duration_sec,
@@ -137,7 +160,7 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
           };
         }
 
-        const unreadCount = await countUnreadMessages(m.id, currentUserId);
+        const unreadCount = listState[m.id]?.unreadCount ?? 0;
 
         items.push({
           id: m.id,
@@ -170,18 +193,9 @@ export async function fetchMessagesForMatch(
       _match_id: matchId,
     });
 
-    if (!rpcErr && Array.isArray(rpcData)) {
-      rows = rpcData;
-    } else {
-      // Fallback to table select if RPC is not yet applied
-      const { data: tableData, error: tableErr } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("match_id", matchId)
-        .order("created_at", { ascending: true });
-      if (tableErr || !tableData) return [];
-      rows = tableData;
-    }
+    // No table fallback: a direct read cannot apply the read-receipt rule (and read_at is not selectable).
+    if (rpcErr || !Array.isArray(rpcData)) return [];
+    rows = rpcData;
 
     if (rows.length === 0) return [];
 
@@ -506,15 +520,11 @@ export async function setMessageReaction(messageId: string, emoji: string | null
   }
 }
 
-export async function markChatRead(matchId: string, currentUserId: string): Promise<void> {
+export async function markChatRead(matchId: string, _currentUserId?: string): Promise<void> {
   try {
     if (!matchId || !isValidUUID(matchId)) return;
-    await supabase
-      .from("messages")
-      .update({ read_at: new Date().toISOString() })
-      .eq("match_id", matchId)
-      .neq("sender", currentUserId)
-      .is("read_at", null);
+    // Server-timed and member-checked; marks only the other person's messages.
+    await supabase.rpc("mark_chat_read", { _match_id: matchId });
   } catch {
     // Ignore mark read errors
   }
@@ -530,7 +540,7 @@ export interface MatchMessageHandlers {
   onResync?: () => void;
   /**
    * One of MY messages got a delivered/read timestamp (Realtime UPDATE). The payload is deliberately not used for the
-   * tick itself: read_at in Realtime is not masked for non-Plus users, so the caller refetches through the RPC.
+   * tick itself: Realtime never carries read_at (members cannot SELECT it), so the caller refetches through the RPC.
    */
   onReceiptChanged?: () => void;
   /** Someone in this chat set or removed a reaction (Realtime INSERT/UPDATE on message_reactions). */

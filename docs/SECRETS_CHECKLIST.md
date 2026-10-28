@@ -15,6 +15,7 @@ A production build is blocked by `mobile/scripts/check-release-env.js` if the fi
 | `EXPO_PUBLIC_FEATURE_BILLING` | `true` shows Google Play purchase flow | Subscriptions |
 | `EXPO_PUBLIC_FEATURE_PUSH` | `true` registers devices for push | Push notifications |
 | `EXPO_PUBLIC_FEATURE_CALLS` | `true` shows call actions | Video calls |
+| `EXPO_PUBLIC_AGORA_APP_ID` | Agora App ID (an identifier, not a secret). The production build is blocked if calls are on and this is not 32 hex characters (`mobile/scripts/check-release-env.js`) | Video calls |
 | `EXPO_PUBLIC_FEATURE_VOICE_MESSAGES` | `true` shows voice notes | Voice messages |
 | `EXPO_PUBLIC_FEATURE_COIN_TOPUP` | `true` shows coin top-up. **Keep `false`**: no purchase adapter or coin pack exists yet (`docs/BILLING.md`) | Coin purchases |
 
@@ -33,7 +34,10 @@ Set with `supabase secrets set NAME=value` against the target project. `SUPABASE
 | `PUSH_DISPATCH_SECRET` | dispatch-push | Shared secret the scheduler sends to authorize dispatch |
 | `MEDIA_CLEANUP_SECRET` | cleanup-chat-media | Shared secret (`x-cleanup-secret` header) the scheduler sends to authorize chat-media cleanup |
 | `GOOGLE_VISION_API_KEY` | moderate-photo | Image moderation |
-| `CALL_PROVIDER` | issue-call-token | Name of the registered call adapter to use. Unset means calling is reported as not configured. No adapter ships yet |
+| `CALL_PROVIDER` | issue-call-token | `agora`. Unset means calling is reported as not configured (503) |
+| `AGORA_APP_ID` | issue-call-token | Same App ID as `EXPO_PUBLIC_AGORA_APP_ID` (same Agora project) |
+| `AGORA_APP_CERTIFICATE` | issue-call-token | Agora App Certificate. Server only; signs the short-lived per-call tokens. The Agora project must have the certificate (token authentication) ENABLED, otherwise channels can be joined without tokens and the call-time limits do not bind |
+| `AGORA_NCS_SECRET` | agora-ncs | Signing Secret of the Agora RTC webhook (Agora Console → Webhooks). Optional: only needed to reconcile the call allowance with Agora join/leave events (`app_settings.call_agora_reconcile_enabled`) |
 | `COIN_PURCHASE_ADAPTER` | (future coin purchase function) | Name of the registered coin purchase adapter. Unset means coin purchases are not configured. No adapter ships yet; nothing reads it in production today |
 
 Added with a real call adapter (not yet read by any code): that provider's credentials, for
