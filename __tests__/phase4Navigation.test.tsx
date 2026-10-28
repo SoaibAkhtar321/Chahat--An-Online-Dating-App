@@ -38,6 +38,20 @@ const { PhotoPreviewModal } = require("../mobile/src/components/profile/PhotoPre
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { DEFAULT_FILTERS } = require("../mobile/src/types");
 
+// Unmount every renderer after each test: a mounted TouchableOpacity keeps animating after the suite ends,
+// which logged "Cannot log after tests are done" and made the whole Jest run exit 1 although all tests passed.
+const mounted: TestRenderer.ReactTestRenderer[] = [];
+function create(element: React.ReactElement): TestRenderer.ReactTestRenderer {
+  const renderer = TestRenderer.create(element);
+  mounted.push(renderer);
+  return renderer;
+}
+afterEach(() => {
+  act(() => {
+    mounted.splice(0).forEach((renderer) => renderer.unmount());
+  });
+});
+
 describe("safeBack", () => {
   test("goes back when history exists, otherwise replaces with the fallback", () => {
     const router = { canGoBack: jest.fn(() => true), back: jest.fn(), replace: jest.fn() };
@@ -77,7 +91,7 @@ describe("FilterModal Android back", () => {
   const mount = (onClose = jest.fn()) => {
     let r!: TestRenderer.ReactTestRenderer;
     act(() => {
-      r = TestRenderer.create(
+      r = create(
         <FilterModal visible filters={DEFAULT_FILTERS} onClose={onClose} onApply={jest.fn()} />,
       );
     });
@@ -112,7 +126,7 @@ describe("PhotoPreviewModal", () => {
   test("Done confirms the original photo without cropping", async () => {
     const onDone = jest.fn();
     let r!: TestRenderer.ReactTestRenderer;
-    act(() => { r = TestRenderer.create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
+    act(() => { r = create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
     await act(async () => { await byId(r, "photo-done")!.props.onPress(); });
     expect(onDone).toHaveBeenCalledWith(PHOTO);
     expect(mockManipulate).not.toHaveBeenCalled();
@@ -122,7 +136,7 @@ describe("PhotoPreviewModal", () => {
     mockManipulate.mockResolvedValue({ uri: "file:///c.jpg", width: 2250, height: 3000 });
     const onDone = jest.fn();
     let r!: TestRenderer.ReactTestRenderer;
-    act(() => { r = TestRenderer.create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
+    act(() => { r = create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
     await act(async () => { await byId(r, "photo-crop")!.props.onPress(); });
     expect(mockManipulate).toHaveBeenCalledWith(PHOTO.uri, [{ crop: { originX: 875, originY: 0, width: 2250, height: 3000 } }], expect.anything());
     expect(byId(r, "photo-undo-crop")).not.toBeNull();
@@ -137,7 +151,7 @@ describe("PhotoPreviewModal", () => {
     mockManipulate.mockRejectedValue(new Error("boom"));
     const onDone = jest.fn();
     let r!: TestRenderer.ReactTestRenderer;
-    act(() => { r = TestRenderer.create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
+    act(() => { r = create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
     await act(async () => { await byId(r, "photo-crop")!.props.onPress(); });
     expect(mockAlert).toHaveBeenCalled();
     await act(async () => { await byId(r, "photo-done")!.props.onPress(); });
@@ -148,7 +162,7 @@ describe("PhotoPreviewModal", () => {
     let finish!: () => void;
     const onDone = jest.fn(() => new Promise<void>((res) => (finish = res)));
     let r!: TestRenderer.ReactTestRenderer;
-    act(() => { r = TestRenderer.create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
+    act(() => { r = create(<PhotoPreviewModal photo={PHOTO} onDone={onDone} onCancel={jest.fn()} />); });
     await act(async () => { byId(r, "photo-done")!.props.onPress(); byId(r, "photo-done")!.props.onPress(); });
     expect(onDone).toHaveBeenCalledTimes(1);
     await act(async () => { finish(); });
@@ -158,10 +172,10 @@ describe("PhotoPreviewModal", () => {
   test("hardware back cancels; renders nothing without a photo", () => {
     const onCancel = jest.fn();
     let r!: TestRenderer.ReactTestRenderer;
-    act(() => { r = TestRenderer.create(<PhotoPreviewModal photo={PHOTO} onDone={jest.fn()} onCancel={onCancel} />); });
+    act(() => { r = create(<PhotoPreviewModal photo={PHOTO} onDone={jest.fn()} onCancel={onCancel} />); });
     act(() => r.root.findByType(Modal).props.onRequestClose());
     expect(onCancel).toHaveBeenCalledTimes(1);
-    act(() => { r = TestRenderer.create(<PhotoPreviewModal photo={null} onDone={jest.fn()} onCancel={onCancel} />); });
+    act(() => { r = create(<PhotoPreviewModal photo={null} onDone={jest.fn()} onCancel={onCancel} />); });
     expect(r.toJSON()).toBeNull();
   });
 });

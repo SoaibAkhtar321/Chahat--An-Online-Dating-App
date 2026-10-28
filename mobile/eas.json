@@ -55,6 +55,8 @@
         "buildType": "app-bundle"
       },
       "env": {
+        "EXPO_PUBLIC_FEATURE_CALLS": "true",
+        "EXPO_PUBLIC_AGORA_APP_ID": "cca3243cc46c465a9081506d0cfbe08f",
         "EXPO_PUBLIC_FEATURE_VOICE_MESSAGES": "true",
         "EXPO_PUBLIC_FEATURE_BILLING": "true"
       }

@@ -26,6 +26,18 @@ SET name = 'Phase 789',
     onboarded = true
 WHERE id = '00000000-0000-0000-0000-0000000000c1';
 
+-- The rewind target must be a real, discoverable profile: undo_swipe_pass (20260101005800) refuses to restore
+-- deactivated, incomplete, demo or blocked profiles.
+INSERT INTO storage.objects (bucket_id, name, owner)
+VALUES ('photos', '00000000-0000-0000-0000-0000000000c2/phase789.jpg', '00000000-0000-0000-0000-0000000000c2');
+UPDATE public.profiles
+SET name = 'Phase 789 B', dob = '1996-01-01', gender = 'woman', seeking = 'man', city = 'Pune',
+    bio = 'A complete profile for lifecycle regression tests.',
+    intents = ARRAY['Friendship'], interests = ARRAY['Books', 'Coffee', 'Music'], languages = ARRAY['English'],
+    photos = '[{"id":"phase789b","path":"00000000-0000-0000-0000-0000000000c2/phase789.jpg","thumbPath":"00000000-0000-0000-0000-0000000000c2/phase789.jpg"}]'::jsonb,
+    onboarded = true
+WHERE id = '00000000-0000-0000-0000-0000000000c2';
+
 -- Earlier suites change this shared setting (10_functional_rls sets 8); pin the precondition.
 INSERT INTO public.app_settings (key, value) VALUES ('daily_like_limit', '20'::jsonb)
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

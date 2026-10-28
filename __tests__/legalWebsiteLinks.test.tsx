@@ -94,6 +94,9 @@ describe("legal website URL configuration", () => {
 });
 
 describe("Legal & Privacy screen: official website links", () => {
+  // The first full render of the legal screen can take > 5 s on a cold Windows Jest run (seen locally:
+  // 23 s suite, first case timed out). Only the time budget changes; every assertion is unchanged.
+  jest.setTimeout(30_000);
   const cases: Array<[string, string]> = [
     ["Privacy Policy (website)", "https://chahatlegal.netlify.app/privacy-policy"],
     ["Terms of Service (website)", "https://chahatlegal.netlify.app/terms"],

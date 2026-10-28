@@ -54,7 +54,7 @@ Hosting/database, object storage + CDN bandwidth, video minutes, SMS OTP per mes
 
 The current server-configured daily Like limit is 50 per IST day for the free plan (premium is unlimited); the client reads it from the backend rather than hard-coding it. Boost and provider-backed push registration require integration before launch. Product/provider catalog localization, call rates, and legally required account-retention periods still need confirmation.
 
-Video-call allowance (migration `20260101003200`): a daily allowance that resets at midnight IST. Free callers get `call_free_daily_seconds` (15 s); premium callers get `call_premium_daily_seconds` (300 s) and are never charged coins. A free caller who has used their 15 s can still continue by paying coins from minute 1; a premium caller who has used their 300 s is refused with `daily_call_allowance_used`. `call_daily_allowance_enabled = 0` restores the legacy per-call rules.
+Video-call allowance (migration `20260101003200`): a daily allowance that resets at midnight IST. Free callers get `call_free_daily_seconds` (30 s since `20260101005800`; was 15 s); premium callers get `call_premium_daily_seconds` (300 s) and are never charged coins. A free caller who has used their free seconds can still continue by paying coins from minute 1; a premium caller who has used their 300 s is refused with `daily_call_allowance_used`. `call_daily_allowance_enabled = 0` restores the legacy per-call rules.
 
 ## Received likes (Phase 2)
 
