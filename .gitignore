@@ -43,6 +43,11 @@ dist-ssr
 google-services.json
 GoogleService-Info.plist
 service-account*.json
+# Play Console upload key used by `eas submit` (mobile/eas.json → ./google-play-service-account.json) and any other
+# Google service-account key: these are private keys with admin access to the Play listing / Cloud project.
+*service-account*.json
+*-service-account.json
+GoogleService-Info.plist
 .supabase/
 supabase/.temp/
 supabase/.branches/
