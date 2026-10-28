@@ -1,4 +1,5 @@
 import React, { useRef, useState, useMemo } from "react";
+import { VERIFICATION_ENABLED } from "../../src/constants/features";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -500,7 +501,7 @@ export default function SettingsScreen() {
 
         {/* Safety & Verification */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeader}>SAFETY & VERIFICATION</Text>
+          <Text style={styles.sectionHeader}>{VERIFICATION_ENABLED ? "SAFETY & VERIFICATION" : "SAFETY"}</Text>
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.navRow}
@@ -511,14 +512,16 @@ export default function SettingsScreen() {
               <ChevronRight size={18} color={Colors.mutedForeground} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.navRow}
-              onPress={() => router.push("/verification")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.rowLabel}>Photo Verification Status</Text>
-              <ChevronRight size={18} color={Colors.mutedForeground} />
-            </TouchableOpacity>
+            {VERIFICATION_ENABLED ? (
+              <TouchableOpacity
+                style={styles.navRow}
+                onPress={() => router.push("/verification")}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.rowLabel}>Photo Verification Status</Text>
+                <ChevronRight size={18} color={Colors.mutedForeground} />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
 

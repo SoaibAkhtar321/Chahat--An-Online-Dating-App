@@ -15,8 +15,15 @@ import { saveProfile, uploadVerificationSelfie } from "../../src/services/profil
 import { pushNotificationToInbox } from "../../src/services/notifications";
 import { useHardwareBack } from "../../src/hooks/useHardwareBack";
 import { safeBack } from "../../src/utils/navigation";
+import { Redirect } from "expo-router";
+import { VERIFICATION_ENABLED } from "../../src/constants/features";
 
-export default function VerificationScreen() {
+// Selfie verification is switched off until there is a reviewer (see src/constants/features.ts); old links land on Me.
+export default function VerificationRoute() {
+  return VERIFICATION_ENABLED ? <VerificationScreen /> : <Redirect href="/(tabs)/me" />;
+}
+
+function VerificationScreen() {
   const { colors: Colors } = useTheme();
   const styles = useMemo(() => createStyles(Colors), [Colors]);
   const { user, profile, refreshProfile } = useAuth();

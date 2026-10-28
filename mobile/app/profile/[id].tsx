@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { VERIFICATION_ENABLED } from "../../src/constants/features";
 import { safeBack } from "../../src/utils/navigation";
 import { getDistanceTo } from "../../src/services/location";
 import { fetchVerifiedIds } from "../../src/services/verificationBadges";
@@ -209,7 +210,7 @@ export default function ProfileDetailScreen() {
             <Text style={styles.name}>
               {targetProfile.name}, {targetProfile.age}
             </Text>
-            {(targetProfile.isVerified || targetProfile.verificationStatus === "approved") && (
+            {VERIFICATION_ENABLED && (targetProfile.isVerified || targetProfile.verificationStatus === "approved") && (
               <BadgeCheck size={22} color={Colors.accent} fill={Colors.accent} />
             )}
           </View>

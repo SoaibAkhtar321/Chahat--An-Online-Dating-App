@@ -7,6 +7,7 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 import { Platform } from "react-native";
 import * as Crypto from "expo-crypto";
 import type { Purchase, PurchaseError, Subscription } from "react-native-iap";
+import { VERIFICATION_ENABLED } from "../constants/features";
 
 export const BILLING_ENABLED = process.env.EXPO_PUBLIC_FEATURE_BILLING === "true";
 
@@ -45,7 +46,7 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
       "50 likes per day (server-configured daily limit, resets daily in IST)",
       "30 seconds of free video calling per day (resets at midnight IST)",
       "Discover, match and chat",
-      "Selfie verification badge",
+      ...(VERIFICATION_ENABLED ? ["Selfie verification badge"] : []),
       "Safety Centre & Block/Report",
     ],
   },

@@ -27,6 +27,7 @@ import { Dialog } from "../../src/components/ui/Dialog";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { ShareProfileSheet } from "../../src/components/profile/ShareProfileSheet";
 import { Alert } from "../../src/utils/alert";
+import { VERIFICATION_ENABLED } from "../../src/constants/features";
 
 export default function MeScreen() {
   const { colors: Colors } = useTheme();
@@ -41,7 +42,7 @@ export default function MeScreen() {
     profile?.photos && profile.photos.length > 0 ? profile.photos[0]!.uri : undefined;
 
   const age = profile?.dob ? calculateAge(profile.dob) : 25;
-  const isVerified = profile?.verificationStatus === "approved";
+  const isVerified = VERIFICATION_ENABLED && profile?.verificationStatus === "approved";
   const planTier = subscription?.tier || "free";
 
   // Authoritative completeness computation
@@ -69,12 +70,16 @@ export default function MeScreen() {
       onPress: () => router.push("/premium"),
       badge: planTier === "free" ? "See plans" : "Active",
     },
-    {
-      icon: BadgeCheck,
-      label: isVerified ? "Verified profile" : "Verify your profile (Selfie badge)",
-      onPress: () => router.push("/verification"),
-      badge: isVerified ? "Approved" : "Free",
-    },
+    ...(VERIFICATION_ENABLED
+      ? [
+          {
+            icon: BadgeCheck,
+            label: isVerified ? "Verified profile" : "Verify your profile (Selfie badge)",
+            onPress: () => router.push("/verification"),
+            badge: isVerified ? "Approved" : "Free",
+          },
+        ]
+      : []),
     {
       icon: Sparkles,
       label: "Explore vibes & daily pick",
@@ -135,7 +140,7 @@ export default function MeScreen() {
                 <BadgeCheck size={14} color={Colors.highlightForeground} />
                 <Text style={styles.verifiedTagText}>Verified</Text>
               </View>
-            ) : (
+            ) : VERIFICATION_ENABLED ? (
               <TouchableOpacity
                 style={styles.unverifiedButton}
                 onPress={() => router.push("/verification")}
@@ -143,7 +148,7 @@ export default function MeScreen() {
               >
                 <Text style={styles.unverifiedText}>Get Free Verified Badge ✨</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
 
           {profile?.intents && profile.intents.length > 0 ? (

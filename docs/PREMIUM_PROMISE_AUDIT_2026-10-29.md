@@ -31,5 +31,5 @@ All 28 checks pass. Expiry and refund removing the benefits is covered by test 7
 * **VIP gives nothing beyond Plus.** The card honestly says "All Plus features", but a buyer paying more gets nothing
   more. Give VIP a real benefit, price it the same as Plus, or stop selling it.
 * **Plus ₹199 / VIP ₹399 are cheaper than Premium ₹499** while including more. Set prices in Play Console accordingly.
-* **"Selfie verification badge" (Free card)** needs someone reviewing selfies (admin process) to be real.
+* **Selfie verification** is switched off for launch (EXPO_PUBLIC_FEATURE_VERIFICATION=false): no screen, badge or promise shows until selfies are reviewed.
 * Priority likes are 3/day for everyone; not advertised as paid, so fine.

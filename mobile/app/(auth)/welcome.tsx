@@ -24,7 +24,7 @@ const SLIDES = [
   },
   {
     title: "Safety, built right in",
-    desc: "Strictly 18+, verified members, and full control over your privacy and chats.",
+    desc: "Strictly 18+ members, and full control over your privacy and chats.",
   },
 ];
 

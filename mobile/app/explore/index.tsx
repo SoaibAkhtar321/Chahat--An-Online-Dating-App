@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { VERIFICATION_ENABLED } from "../../src/constants/features";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -140,7 +141,7 @@ export default function ExploreScreen() {
                   <Text style={styles.dailyName}>
                     {dailyPick.name}, {dailyPick.age}
                   </Text>
-                  {(dailyPick.isVerified || dailyPick.verificationStatus === "approved") && (
+                  {VERIFICATION_ENABLED && (dailyPick.isVerified || dailyPick.verificationStatus === "approved") && (
                     <BadgeCheck size={18} color={Colors.accent} fill={Colors.accent} />
                   )}
                 </View>

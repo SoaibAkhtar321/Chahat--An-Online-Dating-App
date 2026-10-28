@@ -143,7 +143,7 @@ export default function PremiumScreen() {
     if (selectedTier === "free") {
       Alert.alert(
         "Free Plan Active",
-        `Your server-configured limit is ${dailyLikeLimit ?? "currently unavailable"} likes per IST day, with basic chat and free identity verification.`,
+        `Your server-configured limit is ${dailyLikeLimit ?? "currently unavailable"} likes per IST day, with basic chat.`,
       );
       return;
     }
@@ -275,7 +275,7 @@ export default function PremiumScreen() {
               Safety is Always Free
             </Text>
             <Text style={[styles.safetyGuaranteeText, { color: colors.mutedForeground }]}>
-              Selfie verification, privacy controls, blocking, and reporting are 100% free for all
+              Privacy controls, blocking, and reporting are 100% free for all
               users on Chahat.
             </Text>
           </View>

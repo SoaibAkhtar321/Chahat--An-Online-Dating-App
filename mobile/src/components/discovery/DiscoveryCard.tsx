@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { VERIFICATION_ENABLED } from "../../constants/features";
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Pressable } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MapPin, ChevronUp, BadgeCheck, Sparkles, Volume2 } from "lucide-react-native";
@@ -110,7 +111,7 @@ export const DiscoveryCard: React.FC<DiscoveryCardProps> = ({ profile, onPressDe
               <Text style={styles.name}>
                 {profile.name}, {profile.age}
               </Text>
-              {(profile.isVerified || profile.verificationStatus === "approved") && (
+              {VERIFICATION_ENABLED && (profile.isVerified || profile.verificationStatus === "approved") && (
                 <View style={styles.verifiedTag}>
                   <BadgeCheck size={18} color={Colors.accent} fill={Colors.accent} />
                 </View>

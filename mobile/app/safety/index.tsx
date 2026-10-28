@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { VERIFICATION_ENABLED } from "../../src/constants/features";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -44,7 +45,7 @@ export default function SafetyScreen() {
             <Text style={styles.guaranteeTitle}>Safety is Never Behind a Paywall</Text>
           </View>
           <Text style={styles.guaranteeText}>
-            Profile Verification, Block, Report, Privacy Controls, and Safety Centre access are
+            {VERIFICATION_ENABLED ? "Profile Verification, " : ""}Block, Report, Privacy Controls, and Safety Centre access are
             100% free for all users on Chahat.
           </Text>
         </View>
@@ -72,8 +73,8 @@ export default function SafetyScreen() {
             <View style={styles.tipContent}>
               <Text style={styles.tipHeader}>Unverified Photos & Stolen Pictures</Text>
               <Text style={styles.tipBody}>
-                Look for the blue Verified badge. If someone refuses a 15-second voice intro or a
-                quick video call, proceed with caution.
+                {VERIFICATION_ENABLED ? "Look for the blue Verified badge. " : ""}If someone refuses a 15-second voice
+                intro or a quick video call, proceed with caution.
               </Text>
             </View>
           </View>
@@ -118,6 +119,7 @@ export default function SafetyScreen() {
         </View>
 
         {/* Verification Link */}
+        {VERIFICATION_ENABLED ? (
         <TouchableOpacity
           style={styles.verifyCtaCard}
           onPress={() => router.push("/verification")}
@@ -131,6 +133,7 @@ export default function SafetyScreen() {
             </Text>
           </View>
         </TouchableOpacity>
+        ) : null}
 
         {/* Helplines India */}
         <View style={styles.card}>

@@ -1,6 +1,8 @@
 import React from "react";
 import { BackHandler } from "react-native";
 import TestRenderer, { act } from "react-test-renderer";
+// The screen is behind the verification switch (off for launch); this suite tests the screen itself.
+jest.mock("../mobile/src/constants/features", () => ({ VERIFICATION_ENABLED: true }));
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
