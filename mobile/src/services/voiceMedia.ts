@@ -113,7 +113,7 @@ export async function cleanupAbandonedVoiceFile(uri: string): Promise<void> {
   if (!uri || !uri.startsWith("file://")) return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const FileSystem = require("expo-file-system");
+    const FileSystem = require("expo-file-system/legacy");
     if (FileSystem?.deleteAsync) {
       await FileSystem.deleteAsync(uri, { idempotent: true });
     }
@@ -223,7 +223,7 @@ class ExpoAvAudioRecorderAdapter implements AudioRecorderAdapter {
       if (!uri) return { success: false, error: "The recording could not be saved." };
 
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const FileSystem = require("expo-file-system");
+      const FileSystem = require("expo-file-system/legacy");
       const info = await FileSystem.getInfoAsync(uri);
       const fileSizeBytes = info?.exists && typeof info.size === "number" ? info.size : 0;
 

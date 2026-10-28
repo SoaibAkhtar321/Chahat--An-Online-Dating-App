@@ -19,6 +19,7 @@ import {
   PREMIUM_CALL_MESSAGE,
 } from "../../src/services/callMedia";
 import { getUserVideoCallAllowance } from "../../src/services/subscription";
+import { callingUnavailableReason } from "../../src/services/registerCallProvider";
 import { formatCallDuration } from "../../src/utils/callEvents";
 import {
   createVideoCall,
@@ -58,6 +59,7 @@ export default function CallScreen() {
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
   const reportedConnected = useRef(false);
   const callingAvailable = isCallingAvailable();
+  const unavailableReason = callingAvailable ? null : callingUnavailableReason();
   const { controller, state: media } = useCallController();
   const partner = matches.find((match) => match.id === id)?.otherUser;
   const partnerPhoto = partner?.photos?.[0];
@@ -384,8 +386,8 @@ export default function CallScreen() {
         ) : null}
         {callingAvailable ? null : (
           <Text style={styles.providerNotice}>
-            Calling isn't available in this build yet. It needs a development build with the call provider
-            set up.
+            Calling isn't available in this build.
+            {unavailableReason ? `\n\nDetails: ${unavailableReason}` : ""}
           </Text>
         )}
         {error && !premiumPrompt ? <Text style={styles.error}>{error}</Text> : null}

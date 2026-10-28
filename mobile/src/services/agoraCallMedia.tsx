@@ -60,11 +60,18 @@ async function waitForInAppRingToStop(): Promise<void> {
   }
 }
 
+/** Why the Agora SDK could not be loaded on this phone (shown on the call screen to diagnose a build). */
+export let agoraLoadError: string | null = null;
+
 function defaultLoadSdk(): any | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("react-native-agora");
-  } catch {
+    const sdk = require("react-native-agora");
+    agoraLoadError = null;
+    return sdk;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    agoraLoadError = message.split("\n")[0].slice(0, 120);
     return null;
   }
 }

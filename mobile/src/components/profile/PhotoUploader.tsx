@@ -98,7 +98,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         // No system editor: its top-right "Crop" acted as Done. Review happens in PhotoPreviewModal.
         allowsEditing: false,
         quality: 1,

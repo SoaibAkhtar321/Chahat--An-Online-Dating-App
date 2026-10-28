@@ -72,7 +72,7 @@ const mockFs = {
   deleteAsync: jest.fn(async () => undefined),
   getInfoAsync: jest.fn(async () => ({ exists: true, size: 16384 })),
 };
-jest.mock("expo-file-system", () => mockFs, { virtual: true });
+jest.mock("expo-file-system/legacy", () => mockFs, { virtual: true });
 
 jest.mock(
   "expo-av",

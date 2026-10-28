@@ -157,6 +157,10 @@ export function detectImageMimeType(bytes: Uint8Array): string | undefined {
   ) {
     return "image/webp";
   }
+  // GIF87a / GIF89a ("GIF8"): animated GIFs from the keyboard or gallery (chat only, see allowGif).
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return "image/gif";
+  }
   return undefined;
 }
 
@@ -168,6 +172,8 @@ export function imageFileExtension(mimeType: string): string {
       return "png";
     case "image/webp":
       return "webp";
+    case "image/gif":
+      return "gif";
     default:
       throw new Error(`Unsupported image type (${mimeType}).`);
   }
@@ -181,6 +187,7 @@ export function imageFileExtension(mimeType: string): string {
  */
 export async function sanitizeAndPrepareImageUpload(
   uri: string,
+  options: { allowGif?: boolean } = {},
 ): Promise<{ blob: Blob | ArrayBuffer; mimeType: string }> {
   const rateLimitCheck = checkUploadRateLimit();
   if (!rateLimitCheck.allowed) {
@@ -199,7 +206,7 @@ export async function sanitizeAndPrepareImageUpload(
     mimeType = rawBlob.type;
   } else {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const FileSystem = require("expo-file-system");
+    const FileSystem = require("expo-file-system/legacy");
     const base64: string = await FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -217,7 +224,8 @@ export async function sanitizeAndPrepareImageUpload(
   }
 
   const detectedMimeType = detectImageMimeType(rawBytes);
-  if (!detectedMimeType || !STORAGE_LIMITS.allowedMimeTypes.includes(detectedMimeType as any)) {
+  const gifAllowed = options.allowGif === true && detectedMimeType === "image/gif";
+  if (!detectedMimeType || (!gifAllowed && !STORAGE_LIMITS.allowedMimeTypes.includes(detectedMimeType as any))) {
     throw new Error(
       `Unsupported image type (${mimeType || "unknown"}). Please use JPEG, PNG, or WEBP.`,
     );
@@ -304,7 +312,7 @@ export async function prepareVoiceUpload(
     }
   } else {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const FileSystem = require("expo-file-system");
+    const FileSystem = require("expo-file-system/legacy");
     let base64 = "";
     try {
       base64 = (await FileSystem?.readAsStringAsync?.(uri, {

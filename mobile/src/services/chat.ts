@@ -259,7 +259,8 @@ export async function sendChatMessage(
     let imagePath: string | null = null;
 
     if (imageUri) {
-      const { blob, mimeType } = await sanitizeAndPrepareImageUpload(imageUri);
+      // Chat accepts animated GIFs (keyboard / gallery); profile photos never do.
+      const { blob, mimeType } = await sanitizeAndPrepareImageUpload(imageUri, { allowGif: true });
       imagePath = `${matchId}/${messageId}.${imageFileExtension(mimeType)}`;
 
       const { error: uploadErr } = await supabase.storage.from("chat").upload(imagePath, blob, {

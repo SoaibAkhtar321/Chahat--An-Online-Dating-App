@@ -82,7 +82,7 @@ function VerificationScreen() {
               const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (libPerm.status !== "granted") return;
               const pickRes = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: ["images"],
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.8,

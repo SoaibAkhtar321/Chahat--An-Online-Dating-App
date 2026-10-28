@@ -16,6 +16,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
 import { useScreenProtection } from "../../src/hooks/useScreenProtection";
 import { buildNewCallRoute } from "../../src/services/calls";
+import { ChatTextInput } from "../../src/components/chat/ChatTextInput";
 import { isServiceConfigured } from "../../src/config/appConfig";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -467,7 +468,7 @@ export default function ChatDetailScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsEditing: false,
       quality: 0.7,
     });
@@ -978,8 +979,10 @@ export default function ChatDetailScreen() {
             <Trophy size={19} color={Colors.primary} />
           </TouchableOpacity>
 
-          <TextInput
+          <ChatTextInput
             ref={inputRef}
+            onKeyboardMedia={(media) => setSelectedImageUri(media.uri)}
+            onKeyboardMediaError={(message) => Alert.alert("GIF", message)}
             style={styles.textInput}
             placeholder="Type a message or use icebreaker…"
             placeholderTextColor={Colors.mutedForeground}

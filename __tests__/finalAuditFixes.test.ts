@@ -87,3 +87,21 @@ describe("pre-APK re-audit (2026-10-29)", () => {
     expect(app.expo.android.blockedPermissions).toContain("android.permission.WRITE_EXTERNAL_STORAGE");
   });
 });
+
+describe("Expo SDK 54 runtime breaks (found 2026-10-29)", () => {
+  it("file reads/deletes use expo-file-system/legacy (the old names now throw at runtime in SDK 54)", () => {
+    const files = ["mobile/src/services/storage.ts", "mobile/src/services/voiceMedia.ts"];
+    for (const f of files) {
+      const src = read(f);
+      expect(src).not.toMatch(/require\("expo-file-system"\)/);
+      expect(src).not.toMatch(/from "expo-file-system"/);
+    }
+    expect(read("mobile/src/services/storage.ts")).toMatch(/require\("expo-file-system\/legacy"\)/);
+  });
+
+  it("image picker uses the current mediaTypes value", () => {
+    for (const f of ["mobile/src/components/profile/PhotoUploader.tsx", "mobile/app/chat/[id].tsx"]) {
+      expect(read(f)).not.toMatch(/MediaTypeOptions/);
+    }
+  });
+});
