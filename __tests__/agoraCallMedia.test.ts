@@ -54,6 +54,9 @@ const deps = (sdk: any, extra: any = {}) => ({
   ...extra,
 });
 
+// The first test loads expo-notifications cold, which can take >5 s on a slower PC while other suites run.
+jest.setTimeout(30000);
+
 describe("Agora call media adapter", () => {
   test("is not configured without the SDK or the public App ID", () => {
     expect(createAgoraCallProvider(deps(null)).configured).toBe(false);
