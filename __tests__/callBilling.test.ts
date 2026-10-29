@@ -111,14 +111,20 @@ describe("issue-call-token billing flow", () => {
     expect(d.provider.issueJoinToken).toHaveBeenCalledWith(expect.objectContaining({ ttlSeconds: 85 }));
   });
 
-  it("answers 402 and issues no token when the caller has no coins", async () => {
+  it("no coins: no extension is bought, but the token still covers the time already authorised (never more)", async () => {
     const d = deps({
       getJoinContext: jest.fn(async () => ctx({ free_seconds_remaining: 10 })),
       extendCoverage: jest.fn(async () => ({ ok: false, code: "insufficient_coins", covered_seconds_remaining: 10 })),
     });
     const r = await run(d);
-    expect(r.status).toBe(402);
-    expect(r.body).toMatchObject({ success: false, code: "insufficient_coins" });
+    expect(r.status).toBe(200);
+    expect(d.provider.issueJoinToken).toHaveBeenCalledWith(expect.objectContaining({ ttlSeconds: 10 }));
+  });
+
+  it("no time left at all: 410, no token", async () => {
+    const d = deps({ getJoinContext: jest.fn(async () => ctx({ free_seconds_remaining: 0 })) });
+    const r = await run(d);
+    expect(r.status).toBe(410);
     expect(d.provider.issueJoinToken).not.toHaveBeenCalled();
   });
 

@@ -31,12 +31,14 @@ describe("call entry points pass the right ids", () => {
     const calls = read("mobile/app/calls/index.tsx");
     expect(chat).not.toContain('"audio"');
     expect(chat).not.toMatch(/audio call/i);
-    expect(chat).toContain('buildNewCallRoute(matchId, "video")');
+    // New calls go through the daily-allowance gate, which builds the route with buildNewCallRoute(…, "video").
+    expect(chat).toContain("startVideoCallIfAllowed(router, matchId)");
     expect(chat).not.toMatch(/pathname:\s*"\/call\/\[id\]"/);
     expect(calls).toContain("buildExistingCallRoute(call)");
     expect(calls).not.toContain('"audio"');
     expect(calls).not.toMatch(/voice call|audio call|audio and video|voice or video/i);
-    expect(calls).toContain('buildNewCallRoute(m.id, "video")');
+    expect(calls).toContain("startVideoCallIfAllowed(router, m.id)");
+    expect(read("mobile/src/services/callAllowanceGate.ts")).toContain('buildNewCallRoute(matchId, "video")');
     expect(calls).not.toMatch(/pathname:\s*"\/call\/\[id\]"/);
   });
 });

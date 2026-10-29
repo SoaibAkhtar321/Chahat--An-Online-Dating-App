@@ -181,9 +181,19 @@ INSERT INTO public.t_results SELECT 'boundary: total free usage is capped at exa
   public.t72_used('72000000-0000-0000-0000-00000000000a') = 30,
   public.t72_used('72000000-0000-0000-0000-00000000000a')::text;
 
--- Exhausted + no coins: the accept is refused by the server with a clear reason.
+-- Exhausted + no coins: create_video_call now refuses up front (20260101006600, see 82). The accept check is
+-- still the last line of defence for a call that was already ringing when the time ran out: simulate that row.
 SET ROLE authenticated; SET request.jwt.claim.sub = '72000000-0000-0000-0000-00000000000a';
-INSERT INTO public.t_calls SELECT 'j3', (public.create_video_call('72aaaaaa-0000-0000-0000-0000000000a1', 'video')->>'call_id')::uuid;
+INSERT INTO public.t_json SELECT 'j3_create', public.create_video_call('72aaaaaa-0000-0000-0000-0000000000a1', 'video');
+RESET ROLE;
+INSERT INTO public.t_results SELECT 'exhausted free caller: a new call is refused before ringing',
+  result->>'error' = 'daily_call_allowance_used', result::text FROM public.t_json WHERE label = 'j3_create';
+INSERT INTO public.video_calls (match_id, caller_id, recipient_id, call_type, expires_at)
+  VALUES ('72aaaaaa-0000-0000-0000-0000000000a1', '72000000-0000-0000-0000-00000000000a',
+          '72000000-0000-0000-0000-00000000000b', 'video', now() + interval '60 seconds');
+INSERT INTO public.t_calls SELECT 'j3', id FROM public.video_calls
+  WHERE caller_id = '72000000-0000-0000-0000-00000000000a' AND status = 'pending' ORDER BY created_at DESC LIMIT 1;
+SET ROLE authenticated;
 SET request.jwt.claim.sub = '72000000-0000-0000-0000-00000000000b';
 INSERT INTO public.t_json SELECT 'j3_acc', public.transition_video_call(public.t72_id('j3'), 'accept');
 INSERT INTO public.t_json SELECT 'j3_acc2', public.transition_video_call(public.t72_id('j3'), 'accept');
@@ -230,13 +240,9 @@ SELECT public.t72_end('p1', '72000000-0000-0000-0000-00000000000c');
 INSERT INTO public.t_results SELECT 'premium: usage is capped at exactly 300 s even if the call ran long',
   public.t72_used('72000000-0000-0000-0000-00000000000c') = 300, public.t72_used('72000000-0000-0000-0000-00000000000c')::text;
 SET ROLE authenticated; SET request.jwt.claim.sub = '72000000-0000-0000-0000-00000000000c';
-INSERT INTO public.t_calls SELECT 'p2', (public.create_video_call('72aaaaaa-0000-0000-0000-0000000000a2', 'video')->>'call_id')::uuid;
-SET request.jwt.claim.sub = '72000000-0000-0000-0000-00000000000d';
-INSERT INTO public.t_json SELECT 'p2_acc', public.transition_video_call(public.t72_id('p2'), 'accept');
-SET request.jwt.claim.sub = '72000000-0000-0000-0000-00000000000c';
-SELECT public.transition_video_call(public.t72_id('p2'), 'cancel');
+INSERT INTO public.t_json SELECT 'p2_acc', public.create_video_call('72aaaaaa-0000-0000-0000-0000000000a2', 'video');
 RESET ROLE;
-INSERT INTO public.t_results SELECT 'premium exhausted: accept refused with daily_call_allowance_used',
+INSERT INTO public.t_results SELECT 'premium exhausted: new call refused with daily_call_allowance_used',
   result->>'success' = 'false' AND result->>'error' = 'daily_call_allowance_used', result::text
 FROM public.t_json WHERE label = 'p2_acc';
 

@@ -127,11 +127,14 @@ export async function handleIssueCallToken(
         return failure(500, "internal_error", UNAVAILABLE);
       }
       const outcome = parseExtensionResult(extension);
-      if (!outcome.ok) {
+      if (!outcome.ok && outcome.error.code === "insufficient_coins") {
+        // No coins for another minute: the call keeps the time already authorised (the rest of today's free
+        // allowance) and ends when that runs out. Refusing here cut free calls off long before their 30 s.
+        ttlSeconds = decision.value.ttlSeconds;
+      } else if (!outcome.ok) {
         if (outcome.error.status >= 500) log("Call billing returned an unreadable result.");
         return failure(outcome.error.status, outcome.error.code, outcome.error.message);
-      }
-      if (outcome.value.coveredSeconds !== null) {
+      } else if (outcome.value.coveredSeconds !== null) {
         ttlSeconds = Math.max(1, Math.min(MAX_TOKEN_TTL_SECONDS, Math.floor(outcome.value.coveredSeconds)));
       } else {
         ttlSeconds = MAX_TOKEN_TTL_SECONDS;

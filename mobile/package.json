@@ -8,7 +8,8 @@
     "web": "expo start --web",
     "test": "jest --config ../jest.config.js",
     "lint": "eslint .",
-    "eas-build-pre-install": "node scripts/check-release-env.js"
+    "eas-build-pre-install": "node scripts/check-release-env.js",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

@@ -119,9 +119,19 @@ describe("Agora call media adapter", () => {
     expect(engine.renewToken).toHaveBeenCalledWith("fresh");
     expect(ended).not.toHaveBeenCalled();
 
+    // A refused renewal on the early "will expire" warning must not cut the call: the free time is still
+    // running on the current token (this used to end 30 s free calls after a few seconds).
     d.renewToken.mockRejectedValueOnce(new CallError("insufficient_coins"));
     await getHandler().onTokenPrivilegeWillExpire();
+    expect(ended).not.toHaveBeenCalled();
+
+    // When the token has really expired and the server still refuses, the call ends and says why.
+    d.renewToken.mockRejectedValueOnce(new CallError("allowance_ended"));
+    await getHandler().onRequestToken();
     expect(ended).toHaveBeenCalledTimes(1);
+    // A second expiry notice does not ask again.
+    await getHandler().onRequestToken();
+    expect(d.renewToken).toHaveBeenCalledTimes(3);
   });
 
   test("room id helper only accepts call_ rooms", () => {

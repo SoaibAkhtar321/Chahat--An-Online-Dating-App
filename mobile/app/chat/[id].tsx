@@ -11,11 +11,11 @@ import {
   ScrollView,
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
+import { startVideoCallIfAllowed } from "../../src/services/callAllowanceGate";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
 import { useScreenProtection } from "../../src/hooks/useScreenProtection";
-import { buildNewCallRoute } from "../../src/services/calls";
 import { ChatTextInput } from "../../src/components/chat/ChatTextInput";
 import { isServiceConfigured } from "../../src/config/appConfig";
 import { Image } from "expo-image";
@@ -677,7 +677,7 @@ export default function ChatDetailScreen() {
           <TouchableOpacity
             style={styles.actionIcon}
             accessibilityLabel="Start video call"
-            onPress={() => router.push(buildNewCallRoute(matchId, "video"))}
+            onPress={() => void startVideoCallIfAllowed(router, matchId)}
           >
             <Video size={20} color={Colors.primary} />
           </TouchableOpacity>

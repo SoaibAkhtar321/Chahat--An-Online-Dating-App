@@ -9,9 +9,9 @@ import { Header } from "../../src/components/ui/Header";
 import { useMilo } from "../../src/context/MiloContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Alert } from "../../src/utils/alert";
+import { startVideoCallIfAllowed } from "../../src/services/callAllowanceGate";
 import {
   buildExistingCallRoute,
-  buildNewCallRoute,
   getMyVideoCalls,
   transitionVideoCall,
   type VideoCall,
@@ -70,7 +70,7 @@ export default function CallsScreen() {
           </View>
           <Text style={styles.infoText}>
             You can video call people you have matched with. Free members get 30 seconds of video calling a
-            day; Premium, Plus and VIP get 5 minutes a day. Time resets at midnight (India time).
+            day, in one call or split across several; Premium, Plus and VIP get 5 minutes a day. Time resets at midnight (India time).
           </Text>
         </View>
 
@@ -140,7 +140,7 @@ export default function CallsScreen() {
             <Text style={styles.emptyText}>No pending requests.</Text>
           )}
           <Text style={styles.providerNotice}>
-            A call request is not a live video call. Video provider setup is still required.
+            An unanswered call request expires after 60 seconds.
           </Text>
         </View>
 
@@ -165,7 +165,7 @@ export default function CallsScreen() {
                   <View style={styles.callActions}>
                     <TouchableOpacity
                       style={[styles.callBtn, styles.callBtnPrimary]}
-                      onPress={() => router.push(buildNewCallRoute(m.id, "video"))}
+                      onPress={() => void startVideoCallIfAllowed(router, m.id)}
                       activeOpacity={0.7}
                       accessibilityRole="button"
                       accessibilityLabel={`Video call ${m.otherUser.name}`}

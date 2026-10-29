@@ -52,20 +52,13 @@ SELECT public.t_shift('al2', 5);
 SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000a';
 SELECT public.transition_video_call((SELECT id FROM public.t_calls WHERE label = 'al2'), 'end');
 RESET ROLE;
+-- 20260101006600: with the free time used and no coins, the call cannot even be created (nobody is rung).
 SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000a';
-INSERT INTO public.t_calls SELECT 'al3', (public.create_video_call('eeeeeeee-0000-0000-0000-0000000000b1', 'video')->>'call_id')::uuid;
+INSERT INTO public.t_json SELECT 'cr_al3', public.create_video_call('eeeeeeee-0000-0000-0000-0000000000b1', 'video');
 RESET ROLE;
-SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000b';
-INSERT INTO public.t_json SELECT 'acc_al3', public.transition_video_call((SELECT id FROM public.t_calls WHERE label = 'al3'), 'accept');
-RESET ROLE;
-INSERT INTO public.t_results SELECT 'allowance: with 15 s used and no coins the accept is refused, call stays pending',
-  NOT (result->>'success')::boolean AND result->>'error' = 'daily_call_allowance_used'
-  AND (SELECT status FROM public.video_calls WHERE id = (SELECT id FROM public.t_calls WHERE label = 'al3')) = 'pending'
-  AND (SELECT accepted_at FROM public.video_calls WHERE id = (SELECT id FROM public.t_calls WHERE label = 'al3')) IS NULL, result::text
-FROM public.t_json WHERE label = 'acc_al3';
-SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000a';
-SELECT public.transition_video_call((SELECT id FROM public.t_calls WHERE label = 'al3'), 'cancel');
-RESET ROLE;
+INSERT INTO public.t_results SELECT 'allowance: with 15 s used and no coins a new call is refused before ringing',
+  NOT (result->>'success')::boolean AND result->>'error' = 'daily_call_allowance_used' AND NOT result ? 'call_id', result::text
+FROM public.t_json WHERE label = 'cr_al3';
 SET ROLE service_role; SET request.jwt.claim.role = 'service_role';
 SELECT public.credit_coins_from_purchase('71000000-0000-0000-0000-00000000000a', 100, 'ORDER-ALLOW-0001');
 RESET ROLE;
@@ -106,19 +99,13 @@ SELECT public.t_shift('al5', 300);
 SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000c';
 SELECT public.transition_video_call((SELECT id FROM public.t_calls WHERE label = 'al5'), 'end');
 RESET ROLE;
+-- 20260101006600: refused at create, before anyone is rung.
 SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000c';
-INSERT INTO public.t_calls SELECT 'al6', (public.create_video_call('eeeeeeee-0000-0000-0000-0000000000b2', 'video')->>'call_id')::uuid;
-RESET ROLE;
-SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000d';
-INSERT INTO public.t_json SELECT 'acc_al6', public.transition_video_call((SELECT id FROM public.t_calls WHERE label = 'al6'), 'accept');
+INSERT INTO public.t_json SELECT 'cr_al6', public.create_video_call('eeeeeeee-0000-0000-0000-0000000000b2', 'video');
 RESET ROLE;
 INSERT INTO public.t_results SELECT 'allowance: premium caller who used 300 s today is refused (no coin path)',
-  NOT (result->>'success')::boolean AND result->>'error' = 'daily_call_allowance_used'
-  AND (SELECT status FROM public.video_calls WHERE id = (SELECT id FROM public.t_calls WHERE label = 'al6')) = 'pending', result::text
-FROM public.t_json WHERE label = 'acc_al6';
-SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000c';
-SELECT public.transition_video_call((SELECT id FROM public.t_calls WHERE label = 'al6'), 'cancel');
-RESET ROLE;
+  NOT (result->>'success')::boolean AND result->>'error' = 'daily_call_allowance_used' AND result->>'is_free' = 'false', result::text
+FROM public.t_json WHERE label = 'cr_al6';
 SET ROLE authenticated; SET request.jwt.claim.sub = '71000000-0000-0000-0000-00000000000e';
 INSERT INTO public.t_calls SELECT 'al7', (public.create_video_call('eeeeeeee-0000-0000-0000-0000000000b3', 'video')->>'call_id')::uuid;
 RESET ROLE;

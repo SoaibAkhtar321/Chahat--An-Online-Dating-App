@@ -35,6 +35,14 @@ export function buildExistingCallRoute(call: Pick<VideoCall, "id" | "match_id" |
   };
 }
 
+/** The caller has used today's video-call time (create_video_call refused; nobody was rung). */
+export class CallAllowanceUsedError extends Error {
+  constructor(public readonly isFree: boolean) {
+    super("You have used today's video-call time.");
+    this.name = "CallAllowanceUsedError";
+  }
+}
+
 export async function createVideoCall(
   matchId: string,
   callType: CallType,
@@ -45,6 +53,9 @@ export async function createVideoCall(
     _call_type: callType,
   });
   if (error) throw new Error(`Could not create call invitation: ${error.message}`);
+  if (data?.success === false && data?.error === "daily_call_allowance_used") {
+    throw new CallAllowanceUsedError(data.is_free !== false);
+  }
   if (!data?.success || typeof data.call_id !== "string") {
     throw new Error("The server did not create a call invitation.");
   }

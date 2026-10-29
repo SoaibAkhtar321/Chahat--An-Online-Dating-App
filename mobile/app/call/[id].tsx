@@ -25,6 +25,7 @@ import {
   createVideoCall,
   getMyVideoCalls,
   markCallConnected,
+  CallAllowanceUsedError,
   transitionVideoCall,
   type CallStatus,
   type CallType,
@@ -141,7 +142,13 @@ export default function CallScreen() {
       })
       .catch((cause) => {
         if (!cancelled) {
-          setError(friendlyCallError(cause, "Could not start the call. Please try again."));
+          if (cause instanceof CallAllowanceUsedError) {
+            setIsFreePlan(cause.isFree);
+            if (cause.isFree) setPremiumPrompt(PREMIUM_CALL_MESSAGE);
+            else setError(PAID_ALLOWANCE_USED_MESSAGE);
+          } else {
+            setError(friendlyCallError(cause, "Could not start the call. Please try again."));
+          }
           setStatus("ended");
         }
       });

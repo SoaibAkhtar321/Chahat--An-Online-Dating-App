@@ -187,19 +187,27 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
           // Fatal join errors surface here before onJoinChannelSuccess (bad/expired token, etc.).
           if (!joined && code !== 0) rejectJoined(new CallError("provider_error"));
         },
+        // Agora warns ~30 s before the token expires, which for a short free call is right after joining. A
+        // refused renewal at that point must NOT end the call: the current token is still valid, and the call
+        // screen's timer ends the call when the paid-for time is really over.
         onTokenPrivilegeWillExpire: async () => {
           try {
             const fresh = await deps.renewToken(callId);
             await engine.renewToken(fresh.token);
+          } catch {
+            // Keep talking on the current token.
+          }
+        },
+        // The token has actually expired: renew or end cleanly, saying why (so the screen can offer Premium).
+        onRequestToken: async () => {
+          if (rejoinFailed) return;
+          try {
+            const fresh = await deps.renewToken(callId);
+            await engine.renewToken(fresh.token);
           } catch (cause) {
-            // The server refused a new token (call over, time allowance used up, rate limit): end cleanly and
-            // say why, so the screen can offer Premium instead of a generic "call ended".
             rejoinFailed = true;
             notifyEnded(cause instanceof CallError ? cause.code : undefined);
           }
-        },
-        onRequestToken: () => {
-          if (!rejoinFailed) void handler.onTokenPrivilegeWillExpire();
         },
         // Microphone health. state 3 = FAILED (no permission / mic busy). Try once to restart capture, then tell the screen.
         onLocalAudioStateChanged: (_conn: unknown, state: number) => {
