@@ -77,6 +77,7 @@ function RootNavigation() {
         />
         <Stack.Screen name="settings/index" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="settings/location" options={{ animation: "slide_from_right" }} />
+        <Stack.Screen name="settings/blocked" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="safety/index" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="verification/index" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="notifications/index" options={{ animation: "slide_from_right" }} />

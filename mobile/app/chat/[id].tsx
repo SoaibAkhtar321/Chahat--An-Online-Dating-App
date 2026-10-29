@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   ScrollView,
+  Pressable,
 } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { startVideoCallIfAllowed } from "../../src/services/callAllowanceGate";
@@ -17,6 +18,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { clearActiveConversation, setActiveConversation } from "../../src/services/activeConversation";
 import { useScreenProtection } from "../../src/hooks/useScreenProtection";
 import { ChatTextInput } from "../../src/components/chat/ChatTextInput";
+import { MAX_PHOTOS_PER_SEND, addPickedPhotos } from "../../src/utils/chatPhotos";
 import { isServiceConfigured } from "../../src/config/appConfig";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -118,7 +120,9 @@ export default function ChatDetailScreen() {
   const presenceRef = useRef<ChatPresence | null>(null);
   // Emoji reactions: messageId -> (userId -> emoji). Loaded with the thread, kept live through Realtime.
   const [reactions, setReactions] = useState<ReactionMap>({});
-  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  // Photos picked for the next send (up to MAX_PHOTOS_PER_SEND); the first one is shown as the main preview.
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const selectedImageUri = selectedImages[0] ?? null;
   // Photo opened full screen from a chat bubble.
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   // The message the next send replies to (shown as a bar above the input).
@@ -433,9 +437,10 @@ export default function ChatDetailScreen() {
     if ((!text && !selectedImageUri) || !user || !matchId) return;
 
     setSending(true);
-    const img = selectedImageUri || undefined;
+    const images = selectedImages;
+    const img = images[0] || undefined;
     const replyTarget = replyDraft;
-    setSelectedImageUri(null);
+    setSelectedImages([]);
     setInputText("");
     setReplyDraft(null);
     presenceRef.current?.notifyStopped();
@@ -445,12 +450,23 @@ export default function ChatDetailScreen() {
 
     if (res.success && res.message) {
       upsertSentMessage(replyTarget ? { ...res.message, replyTo: buildReplyPreview(replyTarget) } : res.message);
+      // Remaining photos go out one by one, in the order they were picked.
+      const failed: string[] = [];
+      for (const extra of images.slice(1)) {
+        const more = await sendChatMessage(matchId, user.id, "", extra, false);
+        if (more.success && more.message) upsertSentMessage(more.message);
+        else failed.push(extra);
+      }
+      if (failed.length) {
+        setSelectedImages(failed);
+        Alert.alert("Some photos weren't sent", "Tap send to try the remaining photos again.");
+      }
       refreshMatches();
       flatListRef.current?.scrollToEnd({ animated: true });
     } else if (res.error === REPLY_TARGET_UNAVAILABLE) {
       // The original disappeared meanwhile: keep what the person wrote so it can be sent as a normal message.
       setInputText(text);
-      setSelectedImageUri(img ?? null);
+      setSelectedImages(images);
       Alert.alert(
         "Message unavailable",
         "The message you were replying to is no longer available. Your message was not sent.",
@@ -467,14 +483,22 @@ export default function ChatDetailScreen() {
       return;
     }
 
+    const room = MAX_PHOTOS_PER_SEND - selectedImages.length;
+    if (room <= 0) {
+      Alert.alert("Photo limit", `You can send up to ${MAX_PHOTOS_PER_SEND} photos at a time.`);
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: false,
+      allowsMultipleSelection: true,
+      selectionLimit: room,
+      orderedSelection: true,
       quality: 0.7,
     });
 
-    if (!result.canceled && result.assets[0]) {
-      setSelectedImageUri(result.assets[0].uri);
+    if (!result.canceled && result.assets.length) {
+      setSelectedImages((prev) => addPickedPhotos(prev, result.assets.map((a) => a.uri)));
     }
   };
 
@@ -609,13 +633,26 @@ export default function ChatDetailScreen() {
     if (!actionDialog) return;
 
     if (actionDialog === "block") {
-      await blockUser(otherUser.id);
-      Alert.alert("Blocked", `You have blocked ${otherUser.name}.`);
+      const ok = await blockUser(otherUser.id);
+      if (!ok) {
+        setActionDialog(null);
+        Alert.alert("Couldn't block", "Please check your connection and try again.");
+        return;
+      }
+      Alert.alert(
+        "Blocked",
+        `You blocked ${otherUser.name}. You can unblock them anytime in Settings → Blocked accounts.`,
+      );
       refreshMatches();
       safeBack(router);
     } else if (actionDialog === "unmatch") {
-      await unmatchUser(matchId);
-      Alert.alert("Unmatched", `You have unmatched with ${otherUser.name}.`);
+      const ok = await unmatchUser(matchId);
+      if (!ok) {
+        setActionDialog(null);
+        Alert.alert("Couldn't unmatch", "Please check your connection and try again.");
+        return;
+      }
+      Alert.alert("Unmatched", `You and ${otherUser.name} are no longer matched.`);
       refreshMatches();
       safeBack(router);
     } else if (actionDialog === "report") {
@@ -690,6 +727,15 @@ export default function ChatDetailScreen() {
       </View>
 
       {/* Menu dropdown banner */}
+      {/* Tapping anywhere outside the menu (including the ⋮ button again) closes it. */}
+      {menuVisible && (
+        <Pressable
+          style={styles.menuBackdrop}
+          onPress={() => setMenuVisible(false)}
+          accessibilityLabel="Close menu"
+          testID="chat-menu-backdrop"
+        />
+      )}
       {menuVisible && (
         <View style={styles.menuBanner}>
           <TouchableOpacity
@@ -771,8 +817,10 @@ export default function ChatDetailScreen() {
       </View>
 
       {/* Message List */}
+      {/* Android 15+ / Expo 54 draw edge-to-edge, so the window no longer shrinks for the keyboard by itself:
+          pad the chat area by the keyboard height on both platforms, or the text box hides behind the keyboard. */}
       <KeyboardAvoidingView
-        behavior={undefined}
+        behavior="padding"
         style={styles.chatArea}
       >
         <FlatList
@@ -835,11 +883,23 @@ export default function ChatDetailScreen() {
         />
 
         {/* Selected image preview */}
-        {selectedImageUri && (
+        {selectedImages.length > 0 && (
           <View style={styles.imagePreviewBar}>
-            <Image source={{ uri: selectedImageUri }} style={styles.previewThumb} />
-            <Text style={styles.previewText}>Photo ready to send</Text>
-            <TouchableOpacity onPress={() => setSelectedImageUri(null)}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewStrip}>
+              {selectedImages.map((uri) => (
+                <TouchableOpacity
+                  key={uri}
+                  onPress={() => setSelectedImages((prev) => prev.filter((u) => u !== uri))}
+                  accessibilityLabel="Remove this photo"
+                >
+                  <Image source={{ uri }} style={styles.previewThumb} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <Text style={styles.previewText}>
+              {selectedImages.length === 1 ? "1 photo" : `${selectedImages.length} photos`}
+            </Text>
+            <TouchableOpacity onPress={() => setSelectedImages([])}>
               <Text style={styles.removePreview}>Remove</Text>
             </TouchableOpacity>
           </View>
@@ -981,10 +1041,11 @@ export default function ChatDetailScreen() {
 
           <ChatTextInput
             ref={inputRef}
-            onKeyboardMedia={(media) => setSelectedImageUri(media.uri)}
+            onKeyboardMedia={(media) => setSelectedImages((prev) => addPickedPhotos(prev, [media.uri]))}
             onKeyboardMediaError={(message) => Alert.alert("GIF", message)}
             style={styles.textInput}
-            placeholder="Type a message or use icebreaker…"
+            placeholder="Type a message…"
+            textAlignVertical="center"
             placeholderTextColor={Colors.mutedForeground}
             value={inputText}
             onChangeText={handleInputChange}
@@ -1093,9 +1154,9 @@ export default function ChatDetailScreen() {
         }
         body={
           actionDialog === "block"
-            ? "They won't be able to view your profile, and your conversation will be deleted."
+            ? "They won't be able to see your profile, message or call you, and this chat will be deleted for both of you. You can unblock them later in Settings → Blocked accounts."
             : actionDialog === "unmatch"
-              ? "This will remove them from your matches and delete your chat history."
+              ? "This chat will be deleted for both of you and you won't see each other in Discover again. They won't be notified. To also stop them from finding your profile, use Block instead."
               : "Please report inappropriate content, harassment, fake profiles, or safety issues."
         }
         confirmText={
@@ -1224,6 +1285,12 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: Colors.border,
     paddingVertical: Spacing.xs,
     zIndex: 10,
+    elevation: 10,
+  },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9,
+    elevation: 9,
   },
   menuOption: {
     paddingVertical: Spacing.md,
@@ -1293,6 +1360,7 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: Radii.sm,
+    marginRight: Spacing.xs,
   },
   previewText: {
     flex: 1,
@@ -1424,10 +1492,14 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     backgroundColor: Colors.input,
     borderRadius: Radii.full,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingTop: 10,
+    paddingBottom: 10,
     fontSize: Typography.sizes.sm,
+    lineHeight: 20,
     color: Colors.foreground,
+    includeFontPadding: false,
   },
+  previewStrip: { flexGrow: 0, maxWidth: "60%" },
   sendBtn: {
     width: Layout.minTap,
     height: Layout.minTap,

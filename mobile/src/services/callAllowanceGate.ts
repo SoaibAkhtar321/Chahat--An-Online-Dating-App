@@ -5,10 +5,16 @@ import { Alert } from "../utils/alert";
 import { getUserVideoCallAllowance } from "./subscription";
 import { buildNewCallRoute } from "./calls";
 import { PAID_ALLOWANCE_USED_MESSAGE, PREMIUM_CALL_MESSAGE } from "./callMedia";
+import { isPhoneInAnotherCall, PHONE_BUSY_MESSAGE, PHONE_BUSY_TITLE } from "./deviceCallState";
 
 type RouterLike = { push: (href: any) => void };
 
 export async function startVideoCallIfAllowed(router: RouterLike, matchId: string): Promise<boolean> {
+  // Like WhatsApp: no new video call while the phone is already in a phone or WhatsApp call.
+  if (isPhoneInAnotherCall()) {
+    Alert.alert(PHONE_BUSY_TITLE, PHONE_BUSY_MESSAGE);
+    return false;
+  }
   let allowance;
   try {
     allowance = await getUserVideoCallAllowance();

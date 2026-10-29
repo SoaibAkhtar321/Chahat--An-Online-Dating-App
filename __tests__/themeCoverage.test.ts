@@ -60,6 +60,7 @@ const REVIEWED_HARDCODED_COLOR_FILES = [
   "src/components/chat/ImageViewerModal.tsx",
   "src/components/discovery/DiscoveryCard.tsx",
   "src/components/profile/PhotoUploader.tsx",
+  "src/components/profile/ShareProfileSheet.tsx", // WhatsApp brand green on the WhatsApp share button
   "src/components/ui/DatePicker.tsx",
   "src/components/ui/Slider.tsx",
 ];

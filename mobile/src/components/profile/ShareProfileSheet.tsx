@@ -1,8 +1,11 @@
 // Bottom sheet with the three share options: copy link, WhatsApp, and "More" (Android share sheet: Instagram,
 // Telegram, SMS, Gmail, …).
 import React, { useMemo } from "react";
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Link2, MessageCircle, Share2, X } from "lucide-react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from "react-native";
+import { Link2, Share2, X } from "lucide-react-native";
+// WhatsApp's own icon (from the Font Awesome brand set), in WhatsApp green, as WhatsApp's brand guidelines ask for
+// share buttons: unmodified, and only to mean "share to WhatsApp".
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../../context/ThemeContext";
 import { Radii, Spacing, ThemeColors, Typography, Layout } from "../../constants/theme";
 import { Alert } from "../../utils/alert";
@@ -30,7 +33,9 @@ export function ShareProfileSheet({ visible, profileId, isOwnProfile, onClose }:
     const res = await shareProfile(profileId, channel, { isOwnProfile });
     onClose();
     if (res.ok && channel === "copy") {
-      Alert.alert("Link copied", "Paste it anywhere to share the profile.");
+      // A short toast, like other apps, instead of a dialog that has to be dismissed.
+      if (Platform.OS === "android") ToastAndroid.show("Link copied", ToastAndroid.SHORT);
+      else Alert.alert("Link copied");
     } else if (!res.ok && res.reason === "unavailable") {
       Alert.alert("WhatsApp not available", "Use “More options” to share another way.");
     } else if (!res.ok && res.reason === "error") {
@@ -38,10 +43,15 @@ export function ShareProfileSheet({ visible, profileId, isOwnProfile, onClose }:
     }
   };
 
-  const options: { key: ShareChannel; label: string; Icon: typeof Link2 }[] = [
-    { key: "copy", label: "Copy link", Icon: Link2 },
-    { key: "whatsapp", label: "WhatsApp", Icon: MessageCircle },
-    { key: "system", label: "More options", Icon: Share2 },
+  const WHATSAPP_GREEN = "#25D366";
+  const options: { key: ShareChannel; label: string; icon: React.ReactNode }[] = [
+    { key: "copy", label: "Copy link", icon: <Link2 size={22} color={colors.primary} /> },
+    {
+      key: "whatsapp",
+      label: "WhatsApp",
+      icon: <FontAwesome name="whatsapp" size={26} color={WHATSAPP_GREEN} testID="whatsapp-icon" />,
+    },
+    { key: "system", label: "More options", icon: <Share2 size={22} color={colors.primary} /> },
   ];
 
   return (
@@ -60,7 +70,7 @@ export function ShareProfileSheet({ visible, profileId, isOwnProfile, onClose }:
           </Text>
         ) : null}
         <View style={styles.row}>
-          {options.map(({ key, label, Icon }) => (
+          {options.map(({ key, label, icon }) => (
             <TouchableOpacity
               key={key}
               style={styles.option}
@@ -70,7 +80,7 @@ export function ShareProfileSheet({ visible, profileId, isOwnProfile, onClose }:
               disabled={!url}
             >
               <View style={styles.iconCircle}>
-                <Icon size={22} color={colors.primary} />
+                {icon}
               </View>
               <Text style={styles.optionLabel}>{label}</Text>
             </TouchableOpacity>

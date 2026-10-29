@@ -20,7 +20,13 @@ import {
   Sparkles,
   HeartHandshake,
   Share2,
+  MessageCircle,
 } from "lucide-react-native";
+import {
+  getProfileActions,
+  profileActionNote,
+  type ProfileActions,
+} from "../../src/services/profileActions";
 import { VoiceIntroPlayer } from "../../src/components/profile/VoiceIntroPlayer";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Radii, Shadows, Typography, ThemeColors, Layout, Spacing } from "../../src/constants/theme";
@@ -44,7 +50,9 @@ export default function ProfileDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile: myProfile } = useAuth();
-  const { deck, swipeCard } = useMilo();
+  const { deck, swipeProfile } = useMilo();
+  const [actions, setActions] = useState<ProfileActions | null>(null);
+  const [acting, setActing] = useState(false);
 
   const [dialogAction, setDialogAction] = useState<"block" | "report" | null>(null);
   const [fetchedProfile, setFetchedProfile] = useState<Profile | null>(null);
@@ -116,6 +124,18 @@ export default function ProfileDetailScreen() {
     };
   }, [id, deckMatch]);
 
+  // What this viewer may do here (already matched → Message; preferences don't fit → no Like; own profile → nothing).
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    void getProfileActions(id).then((a) => {
+      if (!cancelled) setActions(a);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const targetProfile: Profile | null = deckMatch || fetchedProfile;
 
   if (loading) {
@@ -142,17 +162,32 @@ export default function ProfileDetailScreen() {
   const sharedInterests = (targetProfile.interests || []).filter((i) => myInterests.includes(i));
   const score = Math.min(95, 60 + sharedInterests.length * 10);
 
+  // Likes/passes THIS profile (before, the buttons swiped whichever card was on top of Discover).
   const handleAction = async (dir: "like" | "pass") => {
-    const res = await swipeCard(dir);
+    if (acting) return;
+    setActing(true);
+    const res = await swipeProfile(targetProfile.id, dir);
+    setActing(false);
     if (res.isMatch) {
-      router.replace({
-        pathname: "/match/[id]",
-        params: { id: targetProfile.id },
-      });
+      router.replace({ pathname: "/match/[id]", params: { id: targetProfile.id } });
+      return;
+    }
+    if (!res.success) {
+      if (res.error === "daily_like_limit_reached") {
+        Alert.alert("Daily likes used", "You've used today's likes. They reset at midnight, or get Premium for unlimited likes.");
+      } else {
+        Alert.alert("Couldn't do that", "This profile can't be liked right now. Please try again later.");
+      }
+      return;
+    }
+    if (dir === "like") {
+      setActions((prev) => (prev ? { ...prev, canLike: false, reason: "already_liked" } : prev));
+      Alert.alert("Liked", `If ${targetProfile.name} likes you back, it's a match.`);
     } else {
       safeBack(router);
     }
   };
+  const actionNote = actions ? profileActionNote(actions, targetProfile.name) : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -334,7 +369,26 @@ export default function ProfileDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Action Floating Buttons */}
+      {/* Actions: Message for a match, Like / Pass when allowed, otherwise a short explanation. */}
+      {actions?.matchId ? (
+        <View style={styles.floatingActions}>
+          <TouchableOpacity
+            style={styles.messageButton}
+            onPress={() => router.push({ pathname: "/chat/[id]", params: { id: actions.matchId! } })}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Message ${targetProfile.name}`}
+            testID="profile-message"
+          >
+            <MessageCircle size={20} color={Colors.primaryForeground} />
+            <Text style={styles.messageButtonText}>Message</Text>
+          </TouchableOpacity>
+        </View>
+      ) : actionNote ? (
+        <View style={styles.noteBar} testID="profile-action-note">
+          <Text style={styles.noteText}>{actionNote}</Text>
+        </View>
+      ) : actions?.canLike ? (
       <View style={styles.floatingActions}>
         <TouchableOpacity
           style={styles.passButton}
@@ -356,6 +410,7 @@ export default function ProfileDetailScreen() {
           <Heart size={32} color={Colors.primaryForeground} fill={Colors.primaryForeground} />
         </TouchableOpacity>
       </View>
+      ) : null}
 
       <ShareProfileSheet
         visible={shareVisible}
@@ -653,6 +708,38 @@ const createStyles = (Colors: ThemeColors) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     ...Shadows.card,
+  },
+  messageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    height: 52,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primary,
+    ...Shadows.glow,
+  },
+  messageButtonText: {
+    color: Colors.primaryForeground,
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+  },
+  noteBar: {
+    position: "absolute",
+    bottom: 16,
+    left: Spacing.lg,
+    right: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  noteText: {
+    color: Colors.mutedForeground,
+    fontSize: Typography.sizes.sm,
+    lineHeight: 20,
+    textAlign: "center",
   },
   likeButton: {
     width: 68,

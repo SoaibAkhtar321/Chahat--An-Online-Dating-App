@@ -512,6 +512,16 @@ export default function SettingsScreen() {
               <ChevronRight size={18} color={Colors.mutedForeground} />
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.navRow}
+              onPress={() => router.push("/settings/blocked")}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
+              <Text style={styles.rowLabel}>Blocked accounts</Text>
+              <ChevronRight size={18} color={Colors.mutedForeground} />
+            </TouchableOpacity>
+
             {VERIFICATION_ENABLED ? (
               <TouchableOpacity
                 style={styles.navRow}

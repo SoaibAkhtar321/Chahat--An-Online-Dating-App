@@ -46,6 +46,25 @@ export async function unblockUser(targetId: string): Promise<boolean> {
   }
 }
 
+export interface BlockedUser {
+  id: string;
+  name: string;
+  blockedAt: string;
+}
+
+/** The signed-in member's own block list (Settings → Blocked accounts). */
+export async function fetchBlockedUsers(): Promise<BlockedUser[]> {
+  try {
+    const { data, error } = await supabase.rpc("get_my_blocked_users");
+    if (error || !Array.isArray(data)) return [];
+    return data
+      .filter((r: any) => typeof r?.id === "string")
+      .map((r: any) => ({ id: r.id, name: r.name || "Member", blockedAt: r.blocked_at ?? "" }));
+  } catch {
+    return [];
+  }
+}
+
 export async function reportUser(
   targetId: string,
   category: string,

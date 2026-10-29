@@ -34,7 +34,7 @@ describe("GIF upload rules", () => {
   it("chat composer uses the keyboard-media input and the server allows image/gif in the chat bucket only", () => {
     const chat = read("mobile/app/chat/[id].tsx");
     expect(chat).toMatch(/<ChatTextInput/);
-    expect(chat).toMatch(/onKeyboardMedia=\{\(media\) => setSelectedImageUri\(media\.uri\)\}/);
+    expect(chat).toMatch(/onKeyboardMedia=\{\(media\) => setSelectedImages\(\(prev\) => addPickedPhotos\(prev, \[media\.uri\]\)\)\}/);
     const mig = read("supabase/migrations/20260101006500_chat_gif_support.sql");
     expect(mig).toMatch(/'image\/gif'/);
     expect(mig).toMatch(/WHERE id = 'chat'/);

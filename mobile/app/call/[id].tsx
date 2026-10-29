@@ -19,6 +19,11 @@ import {
   PREMIUM_CALL_MESSAGE,
 } from "../../src/services/callMedia";
 import { getUserVideoCallAllowance } from "../../src/services/subscription";
+import {
+  isPhoneInAnotherCall,
+  PHONE_BUSY_ANSWER_MESSAGE,
+  PHONE_BUSY_MESSAGE,
+} from "../../src/services/deviceCallState";
 import { callingUnavailableReason } from "../../src/services/registerCallProvider";
 import { formatCallDuration } from "../../src/utils/callEvents";
 import {
@@ -118,6 +123,12 @@ export default function CallScreen() {
     if (!callingAvailable) {
       // Never create an invitation for a call that cannot connect.
       setError("Calling is not available yet.");
+      setStatus("ended");
+      return;
+    }
+    // Already in a phone / WhatsApp call on this phone: don't ring anyone.
+    if (isPhoneInAnotherCall()) {
+      setError(PHONE_BUSY_MESSAGE);
       setStatus("ended");
       return;
     }
@@ -279,6 +290,10 @@ export default function CallScreen() {
     if (!callId || responding) return;
     if (!callingAvailable) {
       setError("Calling is not available yet, so this call was not answered.");
+      return;
+    }
+    if (isPhoneInAnotherCall()) {
+      setError(PHONE_BUSY_ANSWER_MESSAGE);
       return;
     }
     setResponding(true);

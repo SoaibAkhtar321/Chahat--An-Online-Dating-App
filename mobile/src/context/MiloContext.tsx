@@ -31,6 +31,8 @@ interface MiloContextType {
   subscription: UserSubscription | null;
   refreshSubscription: () => Promise<void>;
   swipeCard: (direction: "like" | "pass" | "priority") => Promise<SwipeResponse>;
+  /** Like or pass one specific profile (opened from a link, chat or Discover), not the top Discover card. */
+  swipeProfile: (targetId: string, direction: "like" | "pass") => Promise<SwipeResponse>;
   undoPass: () => Promise<boolean>;
   triggerBoost: () => boolean;
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
@@ -54,6 +56,7 @@ const MiloContext = createContext<MiloContextType>({
   subscription: null,
   refreshSubscription: async () => {},
   swipeCard: async () => ({ success: false, isMatch: false, likesRemaining: 0 }),
+  swipeProfile: async () => ({ success: false, isMatch: false, likesRemaining: 0 }),
   undoPass: async () => false,
   triggerBoost: () => false,
   setFilters: () => {},
@@ -249,6 +252,17 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   };
 
+  const swipeProfile = async (targetId: string, direction: "like" | "pass"): Promise<SwipeResponse> => {
+    if (!user) return { success: false, isMatch: false, likesRemaining };
+    const requestedUserId = user.id;
+    const res = await submitSwipe(targetId, direction, user.id);
+    if (activeUserId.current !== requestedUserId) return res;
+    if (res.success) setDeck((prev) => prev.filter((p) => p.id !== targetId));
+    if (res.likesRemaining !== undefined && res.success) setLikesRemaining(res.likesRemaining);
+    if (res.isMatch) refreshMatches();
+    return res;
+  };
+
   const undoPass = async (): Promise<boolean> => {
     if (!lastPassedId || !lastPassedProfile) return false;
     const requestedUserId = user?.id;
@@ -287,6 +301,7 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subscription,
         refreshSubscription,
         swipeCard,
+        swipeProfile,
         undoPass,
         triggerBoost,
         setFilters,

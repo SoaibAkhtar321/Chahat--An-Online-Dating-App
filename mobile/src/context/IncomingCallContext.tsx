@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { isPhoneInAnotherCall } from "../services/deviceCallState";
 import { AppState } from "react-native";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
@@ -44,6 +45,7 @@ export function IncomingCallProvider({ children }: { children: React.ReactNode }
         stopRinging: stopInAppRing,
         tell: (title, message) => Alert.alert(title, message),
         isCallingAvailable: () => isCallingAvailable(),
+        isPhoneBusy: () => isPhoneInAnotherCall(),
         now: () => Date.now(),
       }),
     [],

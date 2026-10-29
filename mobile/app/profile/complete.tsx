@@ -569,7 +569,7 @@ export default function CompleteProfileScreen() {
                 onChangeText={setCustomInterest}
                 placeholder="Add custom interest…"
                 maxLength={40}
-                style={{ flex: 1 }}
+                containerStyle={styles.rowInput}
               />
               <Button
                 title="Add"
@@ -598,7 +598,7 @@ export default function CompleteProfileScreen() {
                 onChangeText={setWork}
                 placeholder="Job title or company (optional)"
                 maxLength={80}
-                style={{ flex: 1 }}
+                containerStyle={styles.rowInput}
               />
             </View>
 
@@ -609,7 +609,7 @@ export default function CompleteProfileScreen() {
                 onChangeText={setEducation}
                 placeholder="College or university (optional)"
                 maxLength={80}
-                style={{ flex: 1 }}
+                containerStyle={styles.rowInput}
               />
             </View>
           </View>
@@ -892,6 +892,14 @@ const createStyles = (Colors: ThemeColors) =>
     inputWithIcon: {
       flexDirection: "row",
       alignItems: "center",
+    },
+    // Inputs in a row next to an icon or button must shrink to the space left, or they push past the card edge
+    // (the "Add" button showed as a cut-off orange half-circle and the work/college boxes overflowed).
+    rowInput: {
+      flex: 1,
+      width: "auto",
+      minWidth: 0,
+      marginBottom: 0,
     },
     lifestyleGroup: {
       marginBottom: Spacing.md,

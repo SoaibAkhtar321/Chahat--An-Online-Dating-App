@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Chahat - Online Friendship",
+    "name": "Chahat",
     "slug": "chahat",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -67,6 +67,8 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/notification-icon.png",
+          "color": "#D44B35",
           "sounds": [
             "./assets/sounds/chahat_ringtone.wav"
           ]

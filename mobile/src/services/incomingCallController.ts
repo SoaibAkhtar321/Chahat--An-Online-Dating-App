@@ -36,6 +36,8 @@ export interface IncomingCallDeps {
   stopRinging(): void;
   tell(title: string, message: string): void;
   isCallingAvailable(): boolean;
+  /** True while the phone is in another phone / VoIP call (optional; answering is then refused). */
+  isPhoneBusy?(): boolean;
   now(): number;
 }
 
@@ -140,6 +142,10 @@ export function createIncomingCallController(deps: IncomingCallDeps): IncomingCa
     if (!deps.isCallingAvailable()) {
       deps.tell("Calling isn't available yet", "This version of Chahat can't connect calls yet, so the call was not answered.");
       return { kind: "unavailable" };
+    }
+    if (deps.isPhoneBusy?.()) {
+      deps.tell("You're on another call", "End your current phone or WhatsApp call to answer this video call.");
+      return { kind: "busy" };
     }
     const mine = generation;
     inflight.add(callId);

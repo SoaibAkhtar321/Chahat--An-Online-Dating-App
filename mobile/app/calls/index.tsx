@@ -10,6 +10,7 @@ import { useMilo } from "../../src/context/MiloContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Alert } from "../../src/utils/alert";
 import { startVideoCallIfAllowed } from "../../src/services/callAllowanceGate";
+import { isPhoneInAnotherCall, PHONE_BUSY_ANSWER_MESSAGE, PHONE_BUSY_TITLE } from "../../src/services/deviceCallState";
 import {
   buildExistingCallRoute,
   getMyVideoCalls,
@@ -40,6 +41,10 @@ export default function CallsScreen() {
   }, []);
 
   const handleCallAction = async (call: VideoCall, action: "accept" | "decline" | "cancel") => {
+    if (action === "accept" && isPhoneInAnotherCall()) {
+      Alert.alert(PHONE_BUSY_TITLE, PHONE_BUSY_ANSWER_MESSAGE);
+      return;
+    }
     try {
       const status = await transitionVideoCall(call.id, action);
       await refreshCalls();
