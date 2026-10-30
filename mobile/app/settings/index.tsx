@@ -1,8 +1,9 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { VERIFICATION_ENABLED } from "../../src/constants/features";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { Alert } from "../../src/utils/alert";
 import { downloadMyData } from "../../src/services/dataExport";
+import { getUpdatesPreference, setUpdatesPreference } from "../../src/services/adminContent";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
@@ -38,6 +39,11 @@ export default function SettingsScreen() {
 
   // Settings state
   const [exportingData, setExportingData] = useState(false);
+  // "Offers & announcements": updates and offers sent by the Chahat team from the admin panel.
+  const [notifUpdates, setNotifUpdates] = useState(true);
+  useEffect(() => {
+    if (user?.id) void getUpdatesPreference(user.id).then(setNotifUpdates);
+  }, [user?.id]);
   const handleDownloadData = async () => {
     if (exportingData) return;
     setExportingData(true);
@@ -483,6 +489,18 @@ export default function SettingsScreen() {
                   label="Likes received"
                   value={notifLikes}
                   onValueChange={handleToggleNotifLikes}
+                />
+                <Toggle
+                  label="Offers & announcements"
+                  value={notifUpdates}
+                  onValueChange={(v) => {
+                    setNotifUpdates(v);
+                    if (user?.id) {
+                      void setUpdatesPreference(user.id, v).then((ok) => {
+                        if (!ok) setNotifUpdates(!v);
+                      });
+                    }
+                  }}
                 />
                 <Toggle
                   label="Incoming calls"

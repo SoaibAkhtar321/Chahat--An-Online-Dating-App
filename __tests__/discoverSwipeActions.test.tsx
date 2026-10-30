@@ -30,6 +30,9 @@ jest.mock("../mobile/src/components/discovery/DiscoveryCard", () => ({
     ),
 }));
 jest.mock("../mobile/src/services/subscription", () => ({ hasEntitlement: () => true }));
+// Sponsored cards (2026-10-30): none running in these tests.
+jest.mock("../mobile/src/services/adminContent", () => ({ AD_EVERY_SWIPES: 7, fetchDiscoverAds: () => Promise.resolve([]) }));
+jest.mock("../mobile/src/components/discovery/AdCard", () => ({ AdCard: () => null }));
 jest.mock("../mobile/src/services/location", () => ({ isLocationSharingEnabled: () => Promise.resolve(false) }));
 jest.mock("../mobile/src/services/locationSelection", () => ({ loadLocationSelection: () => Promise.resolve(null) }));
 jest.mock("../mobile/src/services/consent", () => ({ ensureConsent: jest.fn(), setConsent: jest.fn() }));

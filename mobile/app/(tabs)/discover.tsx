@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { AdCard } from "../../src/components/discovery/AdCard";
+import { AD_EVERY_SWIPES, fetchDiscoverAds, type DiscoverAd } from "../../src/services/adminContent";
 import {
   View,
   Text,
@@ -64,6 +66,20 @@ export default function DiscoverScreen() {
   const [swiping, setSwiping] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const cardRef = useRef<SwipeableCardHandle>(null);
+  // Sponsored cards from the admin panel: one after every AD_EVERY_SWIPES profile swipes, when any are running.
+  const [adQueue, setAdQueue] = useState<DiscoverAd[]>([]);
+  const [swipesSinceAd, setSwipesSinceAd] = useState(0);
+  useEffect(() => {
+    if (adQueue.length > 0 || swipesSinceAd < AD_EVERY_SWIPES - 1) return;
+    let cancelled = false;
+    void fetchDiscoverAds().then((ads) => {
+      if (!cancelled && ads.length) setAdQueue(ads);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [swipesSinceAd, adQueue.length]);
+  const currentAd = swipesSinceAd >= AD_EVERY_SWIPES ? adQueue[0] ?? null : null;
   const [locationSharing, setLocationSharing] = useState(false);
 
   useEffect(() => {
@@ -126,11 +142,18 @@ export default function DiscoverScreen() {
   };
 
   const handleSwipe = async (dir: SwipeAction) => {
+    // A sponsored card is only ever dismissed: no like, pass or quota is recorded.
+    if (currentAd) {
+      setAdQueue((q) => q.slice(1));
+      setSwipesSinceAd(0);
+      return;
+    }
     if (swiping || !currentProfile) return;
     setSwiping(true);
     const targetId = currentProfile.id;
     const res = await swipeCard(dir);
     setSwiping(false);
+    if (res.success) setSwipesSinceAd((n) => n + 1);
 
     if (res.error === "daily_like_limit_reached") {
       Alert.alert(
@@ -274,6 +297,10 @@ export default function DiscoverScreen() {
       <View style={styles.cardArea}>
         {loadingDeck ? (
           <ActivityIndicator size="large" color={Colors.primary} />
+        ) : currentAd && currentProfile ? (
+          <SwipeableCard key={`ad-${currentAd.id}`} ref={cardRef} disabled={false} onSwipe={handleSwipe}>
+            <AdCard ad={currentAd} />
+          </SwipeableCard>
         ) : currentProfile ? (
           <SwipeableCard
             key={currentProfile.id}

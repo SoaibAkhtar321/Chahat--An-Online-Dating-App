@@ -45,7 +45,43 @@ function readServiceAccount(): GoogleServiceAccount | null {
     : null;
 }
 
+// Every attempt by a signed-in member is logged for the admin "Payments" page (outcome, product, error text; never
+// the purchase token). Logging is best effort and can never change the answer the app receives.
+interface AttemptContext {
+  userId?: string;
+  productId?: string;
+}
+
+async function logAttempt(ctx: AttemptContext, response: Response): Promise<void> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!ctx.userId || !url || !serviceKey) return;
+  try {
+    const body = await response.clone().json().catch(() => ({}));
+    const outcome =
+      response.status === 200 ? "verified" : response.status === 202 ? "pending" : body?.retryable ? "retryable" : "failed";
+    const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    await admin.from("purchase_attempts").insert({
+      user_id: ctx.userId,
+      store: "google_play",
+      product_id: ctx.productId ? String(ctx.productId).slice(0, 80) : null,
+      outcome,
+      http_status: response.status,
+      reason: typeof body?.error === "string" ? body.error.slice(0, 200) : null,
+    });
+  } catch {
+    // never affects the purchase response
+  }
+}
+
 Deno.serve(async (request) => {
+  const ctx: AttemptContext = {};
+  const response = await handleVerifyPurchase(request, ctx);
+  await logAttempt(ctx, response);
+  return response;
+});
+
+async function handleVerifyPurchase(request: Request, ctx: AttemptContext): Promise<Response> {
   if (request.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (request.method !== "POST") return json(405, { success: false, error: "Method not allowed." });
 
@@ -67,6 +103,7 @@ Deno.serve(async (request) => {
   const { data: authData, error: authError } = await userClient.auth.getUser();
   if (authError || !authData.user) return json(401, { success: false, error: "Invalid session." });
   const userId = authData.user.id;
+  ctx.userId = userId;
 
   let body: unknown;
   try {
@@ -87,6 +124,7 @@ Deno.serve(async (request) => {
     return json(400, { success: false, error: "Unsupported Google Play product." });
   }
   const requestedProductId = purchaseRequest.productId;
+  ctx.productId = requestedProductId;
   const purchaseToken = validatedRequest.purchaseToken;
   const tokenHash = await sha256Hex(purchaseToken);
   const expectedAccountBinding = await sha256Hex(userId);
@@ -246,4 +284,4 @@ Deno.serve(async (request) => {
     idempotent: data.idempotent === true,
     entitlementUpdated: data.entitlement_updated === true,
   });
-});
+}

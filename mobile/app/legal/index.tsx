@@ -167,7 +167,13 @@ export default function LegalAndPrivacyScreen() {
           <P>
             What Chahat stores: your account email; the profile details and photos you add; your messages and media in
             chats; your likes, matches, blocks and reports; a rounded discovery location and a device notification token
-            only if you opt in; and purchase records for paid plans where available.
+            only if you opt in; and purchase records for paid plans where available, including failed attempts (never the
+            payment token).
+          </P>
+          <P>
+            Discover may show sponsored cards, always marked "Sponsored", chosen only by your gender and city. We count
+            whether you saw or tapped one (once a day). Advertisers never get your personal data. Updates and offers are sent
+            as notifications only if "Offers & announcements" is on in Settings → Notifications.
           </P>
           <P>
             Service providers that help run Chahat, used only where the feature is switched on: Supabase (database,

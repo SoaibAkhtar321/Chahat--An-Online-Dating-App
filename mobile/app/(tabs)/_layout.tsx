@@ -6,6 +6,7 @@ import { Typography, Spacing } from "../../src/constants/theme";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useMilo } from "../../src/context/MiloContext";
 import { PushSetup } from "../../src/components/notifications/PushSetup";
+import { SuspendedGate } from "../../src/components/account/SuspendedGate";
 
 export default function TabsLayout() {
   const { totalUnreadCount } = useMilo();
@@ -13,7 +14,7 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
   return (
-    <>
+    <SuspendedGate>
     <PushSetup />
     <Tabs
       screenOptions={{
@@ -72,6 +73,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
-    </>
+    </SuspendedGate>
   );
 }
