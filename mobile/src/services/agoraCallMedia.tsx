@@ -29,8 +29,9 @@ export interface AgoraVideoState {
 export interface CallVideoSurface {
   getState(): AgoraVideoState;
   subscribe(listener: (state: AgoraVideoState) => void): () => void;
-  renderLocal(): React.ReactElement | null;
-  renderRemote(): React.ReactElement | null;
+  /** `overlay` = drawn in the small floating box, above the other video. */
+  renderLocal(overlay?: boolean): React.ReactElement | null;
+  renderRemote(overlay?: boolean): React.ReactElement | null;
 }
 
 export type CallSessionWithVideo = CallMediaSession & { video?: CallVideoSurface };
@@ -320,18 +321,21 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
             videoListeners.add(listener);
             return () => videoListeners.delete(listener);
           },
-          renderLocal: () =>
+          renderLocal: (overlay = true) =>
             React.createElement(RtcSurfaceView, {
+              key: overlay ? "local-small" : "local-large",
               style: { flex: 1 },
               canvas: { uid: 0 },
-              zOrderMediaOverlay: true,
+              zOrderMediaOverlay: overlay,
             }),
-          renderRemote: () =>
+          renderRemote: (overlay = false) =>
             video.remoteUid === null
               ? null
               : React.createElement(RtcSurfaceView, {
+                  key: overlay ? "remote-small" : "remote-large",
                   style: { flex: 1 },
                   canvas: { uid: video.remoteUid },
+                  zOrderMediaOverlay: overlay,
                 }),
         };
       }
@@ -340,35 +344,5 @@ export function createAgoraCallProvider(deps: AgoraProviderDeps): CallMediaProvi
   };
 }
 
-/** Wrapper so the call screen can render a session's video without knowing the SDK. */
-export function CallVideoStage({
-  session,
-}: {
-  session: CallSessionWithVideo | null;
-}): React.ReactElement | null {
-  const surface = session?.video;
-  const [, force] = React.useReducer((n: number) => n + 1, 0);
-  React.useEffect(() => (surface ? surface.subscribe(() => force()) : undefined), [surface]);
-  if (!surface) return null;
-  return React.createElement(
-    View,
-    { style: { flex: 1, width: "100%", backgroundColor: "#000" }, testID: "call-video-stage" },
-    surface.renderRemote(),
-    React.createElement(
-      View,
-      {
-        style: {
-          position: "absolute",
-          top: 16,
-          right: 16,
-          width: 110,
-          height: 160,
-          borderRadius: 12,
-          overflow: "hidden",
-          backgroundColor: "#222",
-        },
-      },
-      surface.renderLocal(),
-    ),
-  );
-}
+// The call screen's video layout (big video + draggable, tappable small box) lives in its own component.
+export { CallVideoStage } from "../components/call/CallVideoStage";

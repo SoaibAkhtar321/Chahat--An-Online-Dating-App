@@ -55,6 +55,7 @@ const REVIEWED_HARDCODED_COLOR_FILES = [
   "app/match/[id].tsx",
   "app/premium/index.tsx",
   "app/profile/[id].tsx",
+  "src/components/call/CallVideoStage.tsx", // black video letterbox behind camera surfaces
   "src/components/chat/ChatBubble.tsx",
   "src/components/chat/CoupleGamesModal.tsx",
   "src/components/chat/ImageViewerModal.tsx",
