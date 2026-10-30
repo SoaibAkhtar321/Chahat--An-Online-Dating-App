@@ -26,7 +26,7 @@ describe("GIF upload rules", () => {
   });
 
   it("only chat uploads may be GIFs; profile photos stay JPEG/PNG/WEBP", () => {
-    expect(read("mobile/src/services/chat.ts")).toMatch(/sanitizeAndPrepareImageUpload\(imageUri, \{ allowGif: true \}\)/);
+    expect(read("mobile/src/services/chat.ts")).toMatch(/sanitizeAndPrepareImageUpload\(uploadUri, \{ allowGif: true \}\)/);
     const profile = read("mobile/src/services/profile.ts");
     expect(profile).not.toMatch(/allowGif/);
   });

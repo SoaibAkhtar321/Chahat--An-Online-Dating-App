@@ -44,6 +44,7 @@ import { ChatBubble } from "../../src/components/chat/ChatBubble";
 import { MessageActionSheet } from "../../src/components/chat/MessageActionSheet";
 import { ProfilePhoto } from "../../src/components/profile/ProfilePhoto";
 import { Dialog } from "../../src/components/ui/Dialog";
+import { ReportSheet } from "../../src/components/safety/ReportSheet";
 import { CoupleGamesModal } from "../../src/components/chat/CoupleGamesModal";
 import { ImageViewerModal } from "../../src/components/chat/ImageViewerModal";
 import { SMART_ICEBREAKERS, type Icebreaker } from "../../src/constants/icebreakers";
@@ -130,6 +131,7 @@ export default function ChatDetailScreen() {
   const [sending, setSending] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [actionDialog, setActionDialog] = useState<"block" | "report" | "unmatch" | null>(null);
+  const [reporting, setReporting] = useState(false);
 
   // Message deletion: long-press sheet, then (for "Delete for everyone") a confirmation dialog.
   const [actionTarget, setActionTarget] = useState<Message | null>(null);
@@ -477,12 +479,7 @@ export default function ChatDetailScreen() {
   };
 
   const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission required", "Chahat needs photo permissions to share images.");
-      return;
-    }
-
+    // The Android photo picker needs no storage/media permission (Google Play Photo & Video Permissions policy).
     const room = MAX_PHOTOS_PER_SEND - selectedImages.length;
     if (room <= 0) {
       Alert.alert("Photo limit", `You can send up to ${MAX_PHOTOS_PER_SEND} photos at a time.`);
@@ -655,16 +652,6 @@ export default function ChatDetailScreen() {
       Alert.alert("Unmatched", `You and ${otherUser.name} are no longer matched.`);
       refreshMatches();
       safeBack(router);
-    } else if (actionDialog === "report") {
-      const rep = await reportUser(otherUser.id, "Inappropriate behavior", "Reported from mobile chat", "chat");
-      if (rep.success) {
-        Alert.alert(
-          "Report submitted",
-          "Thank you for helping keep Chahat safe. Our team will review this.",
-        );
-      } else {
-        Alert.alert("Could not report", rep.error || "Please try again later.");
-      }
     }
 
     setActionDialog(null);
@@ -1142,9 +1129,30 @@ export default function ChatDetailScreen() {
         onCancel={() => setConfirmEveryone(null)}
       />
 
+      <ReportSheet
+        visible={actionDialog === "report"}
+        name={otherUser.name}
+        submitting={reporting}
+        onCancel={() => setActionDialog(null)}
+        onSubmit={async (reason, note) => {
+          setReporting(true);
+          const rep = await reportUser(otherUser.id, reason, note || "Reported from chat", "chat");
+          setReporting(false);
+          setActionDialog(null);
+          if (rep.success) {
+            Alert.alert(
+              "Report submitted",
+              "Thank you for helping keep Chahat safe. Our team will review this. You can also block this person.",
+            );
+          } else {
+            Alert.alert("Could not report", rep.error || "Please try again later.");
+          }
+        }}
+      />
+
       {/* Action Dialogs */}
       <Dialog
-        visible={actionDialog !== null}
+        visible={actionDialog === "block" || actionDialog === "unmatch"}
         title={
           actionDialog === "block"
             ? `Block ${otherUser.name}?`

@@ -114,7 +114,7 @@ describe("Phase 3B: unread counts and chat-list previews", () => {
     expect(mockGetSignedUrl).not.toHaveBeenCalled();
   });
 
-  it("still previews a normal last message with its signed media", async () => {
+  it("still previews a normal last message (the list never downloads its media)", async () => {
     setupMatchList({
       lastRow: {
         id: MSG,
@@ -133,7 +133,9 @@ describe("Phase 3B: unread counts and chat-list previews", () => {
 
     const last = (await fetchUserMatches(ME))[0]!.lastMessage!;
     expect(last.text).toBe("see this");
-    expect(last.image).toBe("signed:m/img.jpg");
+    // Scale (2026-10-30): the chat list shows text only, so it no longer signs the last message's photo/voice URL.
+    expect(last.image).toBeUndefined();
+    expect(last.messageType).toBe("image");
     expect(last.deletedAt).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { formatChatListTime } from "../../src/utils/chatTime";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -98,9 +99,8 @@ export default function ChatsScreen() {
             {conversations.map((item) => {
               const last = item.lastMessage;
               const hasUnread = item.unreadCount > 0;
-              const timeStr = last
-                ? new Date(last.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                : "";
+              // Today: time. Yesterday: "Yesterday". Older: date (it used to show only the time, even for last week).
+              const timeStr = last ? formatChatListTime(last.at) : "";
 
               return (
                 <TouchableOpacity

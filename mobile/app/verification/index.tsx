@@ -79,8 +79,6 @@ function VerificationScreen() {
           {
             text: "Choose Selfie",
             onPress: async () => {
-              const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (libPerm.status !== "granted") return;
               const pickRes = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ["images"],
                 allowsEditing: true,

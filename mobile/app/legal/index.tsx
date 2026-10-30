@@ -213,8 +213,8 @@ export default function LegalAndPrivacyScreen() {
           </P>
           <Detail label="Retention periods" value={OPERATOR_DETAILS.dataRetentionPeriods} />
           <P>
-            To ask for access, correction or erasure of your data, or to withdraw a consent, use the options above or write
-            to us.
+            To get a copy of your data, use Settings → Download my data. You can correct your details in Edit profile. To ask
+            for anything else about your data, or to withdraw a consent, use the options above or write to us.
           </P>
           <Detail label="Contact for privacy requests" value={OPERATOR_DETAILS.supportEmail} />
           <Detail label="How quickly we respond" value={OPERATOR_DETAILS.privacyRequestResponseTime} />

@@ -9,6 +9,7 @@ import {
   prepareVoiceUpload,
 } from "./storage";
 import { DEMO_PROFILES } from "./discovery";
+import { compressChatImage } from "../utils/compressImage";
 import { pushNotificationToInbox } from "./notifications";
 import { generateUUID, isValidUUID } from "../utils/validation";
 import { mapMessageRow } from "../utils/messageState";
@@ -84,93 +85,97 @@ export async function fetchUserMatches(currentUserId: string): Promise<MatchItem
     // The app has these matches' messages now: let senders see the delivered tick (fire and forget).
     void markMessagesDelivered();
 
+    // Scale: everything below runs in parallel and photo URLs are signed in ONE batch. Before, each chat was
+    // loaded one after another (profile, photo URLs, last message, plus signed URLs for the last message's photo or
+    // voice note that the list never shows), so a member with 50 chats waited on ~200 sequential requests every
+    // time the list refreshed.
+    const otherIdOf = (m: { user_a: string; user_b: string }) => (m.user_a === currentUserId ? m.user_b : m.user_a);
+    const [listState, profileRows, lastRows] = await Promise.all([
+      fetchChatListState(matches.map((m) => m.id)),
+      Promise.all(
+        matches.map(async (m) => {
+          const { data } = await supabase.rpc("get_public_profile", { _id: otherIdOf(m) });
+          return (Array.isArray(data) ? data[0] : data) as any;
+        }),
+      ),
+      Promise.all(
+        matches.map(async (m) => {
+          const { data } = await supabase
+            .from("messages")
+            .select(MESSAGE_COLUMNS)
+            .eq("match_id", m.id)
+            .order("created_at", { ascending: false })
+            .limit(1);
+          return (data?.[0] as any) ?? null;
+        }),
+      ),
+    ]);
+
+    const photoPaths: string[] = [];
+    for (const prof of profileRows) {
+      if (prof && Array.isArray(prof.photos)) for (const ph of prof.photos) if (ph?.path) photoPaths.push(ph.path);
+    }
+    const signed = await getSignedUrls("photos", photoPaths);
+
     const items: MatchItem[] = [];
-    const listState = await fetchChatListState(matches.map((m) => m.id));
+    matches.forEach((m, i) => {
+      const prof = profileRows[i];
+      if (!prof) return;
+      const otherProfile: Profile = {
+        id: prof.id,
+        name: prof.name || "Member",
+        age: prof.age || 0,
+        city: prof.city || "",
+        distanceKm: null,
+        bio: prof.bio || "",
+        photos: Array.isArray(prof.photos)
+          ? prof.photos.map((ph: any) => (ph?.path ? signed[ph.path] || "" : "")).filter(Boolean)
+          : [],
+        interests: prof.interests || [],
+        intent: prof.intents?.[0] || "",
+      };
 
-    for (const m of matches) {
-      const otherId = m.user_a === currentUserId ? m.user_b : m.user_a;
-
-      // Get other user's profile from database
-      let otherProfile: Profile | undefined;
-      const { data: profRows } = await supabase.rpc("get_public_profile", { _id: otherId });
-      const prof = Array.isArray(profRows) ? (profRows[0] as any) : profRows;
-
-      if (prof) {
-        const signed = await getSignedUrls(
-          "photos",
-          Array.isArray(prof.photos) ? prof.photos.map((p: any) => p.path) : [],
-        );
-        const photos: string[] = Array.isArray(prof.photos)
-          ? prof.photos.map((p: any) => (p.path ? signed[p.path] || "" : "")).filter(Boolean)
-          : [];
-
-        otherProfile = {
-          id: prof.id,
-          name: prof.name || "Member",
-          age: prof.age || 0,
-          city: prof.city || "",
-          distanceKm: null,
-          bio: prof.bio || "",
-          photos,
-          interests: prof.interests || [],
-          intent: prof.intents?.[0] || "",
+      const last = lastRows[i];
+      let lastMessage: Message | undefined;
+      if (last?.deleted_at) {
+        // Deleted for everyone: a content-free tombstone, never a media URL.
+        lastMessage = mapMessageRow(last, currentUserId);
+      } else if (last) {
+        const kind = last.message_type || (last.audio_path ? "voice" : last.image_path ? "image" : "text");
+        lastMessage = {
+          id: last.id,
+          matchId: m.id,
+          sender: last.sender,
+          from: last.sender === currentUserId ? "me" : "them",
+          text:
+            kind === "voice"
+              ? `Voice note ${last.audio_duration_sec ? `(${last.audio_duration_sec}s)` : "🎤"}`
+              : kind === "system"
+                ? previewForSystemBody(last.body, last.sender === currentUserId)
+                : kind === "image" && !last.body
+                  ? "📷 Photo"
+                  : last.body,
+          at: new Date(last.created_at).getTime(),
+          // "read" only when the server confirms it for this user (Plus/VIP for my own messages).
+          status:
+            listState[m.id]?.lastMessageId === last.id && listState[m.id]?.lastMessageRead === true
+              ? "read"
+              : last.delivered_at
+                ? "delivered"
+                : "sent",
+          audioDurationSec: last.audio_duration_sec,
+          messageType: kind,
         };
       }
 
-      if (otherProfile) {
-        // Fetch last message
-        const { data: lastMsgs } = await supabase
-          .from("messages")
-          .select(MESSAGE_COLUMNS)
-          .eq("match_id", m.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        const last = lastMsgs?.[0];
-        let lastMessage: Message | undefined;
-
-        if (last?.deleted_at) {
-          // Deleted for everyone: a content-free tombstone, never a media URL.
-          lastMessage = mapMessageRow(last, currentUserId);
-        } else if (last) {
-          lastMessage = {
-            id: last.id,
-            matchId: m.id,
-            sender: last.sender,
-            from: last.sender === currentUserId ? "me" : "them",
-            text:
-              last.message_type === "voice" || last.audio_path
-                ? `Voice note ${last.audio_duration_sec ? `(${last.audio_duration_sec}s)` : "🎤"}`
-                : last.message_type === "system"
-                  ? previewForSystemBody(last.body, last.sender === currentUserId)
-                  : last.body,
-            at: new Date(last.created_at).getTime(),
-            // "read" only when the server confirms it for this user (Plus/VIP for my own messages).
-            status:
-              listState[m.id]?.lastMessageId === last.id && listState[m.id]?.lastMessageRead === true
-                ? "read"
-                : last.delivered_at
-                  ? "delivered"
-                  : "sent",
-            image: last.image_path ? await getSignedUrl("chat", last.image_path) : undefined,
-            audio: last.audio_path ? await getSignedUrl("chat", last.audio_path) : undefined,
-            audioDurationSec: last.audio_duration_sec,
-            messageType:
-              last.message_type || (last.audio_path ? "voice" : last.image_path ? "image" : "text"),
-          };
-        }
-
-        const unreadCount = listState[m.id]?.unreadCount ?? 0;
-
-        items.push({
-          id: m.id,
-          otherUser: otherProfile,
-          createdAt: m.created_at,
-          lastMessage,
-          unreadCount,
-        });
-      }
-    }
+      items.push({
+        id: m.id,
+        otherUser: otherProfile,
+        createdAt: m.created_at,
+        lastMessage,
+        unreadCount: listState[m.id]?.unreadCount ?? 0,
+      });
+    });
 
     return items;
   } catch {
@@ -260,7 +265,15 @@ export async function sendChatMessage(
 
     if (imageUri) {
       // Chat accepts animated GIFs (keyboard / gallery); profile photos never do.
-      const { blob, mimeType } = await sanitizeAndPrepareImageUpload(imageUri, { allowGif: true });
+      // Photos are shrunk to phone-screen size first (a camera original is often 4–8 MB); GIFs stay untouched.
+      let uploadUri = imageUri;
+      try {
+        uploadUri = await compressChatImage(imageUri);
+      } catch {
+        // Could not re-encode (unusual format): send the original; the size and type checks below still apply.
+        uploadUri = imageUri;
+      }
+      const { blob, mimeType } = await sanitizeAndPrepareImageUpload(uploadUri, { allowGif: true });
       imagePath = `${matchId}/${messageId}.${imageFileExtension(mimeType)}`;
 
       const { error: uploadErr } = await supabase.storage.from("chat").upload(imagePath, blob, {

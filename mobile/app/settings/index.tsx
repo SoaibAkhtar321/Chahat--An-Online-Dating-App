@@ -2,6 +2,7 @@ import React, { useRef, useState, useMemo } from "react";
 import { VERIFICATION_ENABLED } from "../../src/constants/features";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { Alert } from "../../src/utils/alert";
+import { downloadMyData } from "../../src/services/dataExport";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
@@ -36,6 +37,18 @@ export default function SettingsScreen() {
   const styles = useMemo(() => createStyles(Colors), [Colors]);
 
   // Settings state
+  const [exportingData, setExportingData] = useState(false);
+  const handleDownloadData = async () => {
+    if (exportingData) return;
+    setExportingData(true);
+    try {
+      await downloadMyData();
+    } catch (err: any) {
+      Alert.alert("Download my data", err?.message || "Couldn't prepare your data. Please try again.");
+    } finally {
+      setExportingData(false);
+    }
+  };
   const [showInDiscover, setShowInDiscover] = useState(true);
   const [showDistance, setShowDistance] = useState(true);
   const [locSummary, setLocSummary] = useState("");
@@ -560,6 +573,17 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
             >
               <Text style={styles.rowLabel}>Legal & Privacy</Text>
+              <ChevronRight size={18} color={Colors.mutedForeground} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.navRow}
+              onPress={() => void handleDownloadData()}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              disabled={exportingData}
+              testID="download-my-data"
+            >
+              <Text style={styles.rowLabel}>{exportingData ? "Preparing your data…" : "Download my data"}</Text>
               <ChevronRight size={18} color={Colors.mutedForeground} />
             </TouchableOpacity>
           </View>

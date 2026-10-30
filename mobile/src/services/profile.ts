@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { getSignedUrls, imageFileExtension, sanitizeAndPrepareImageUpload } from "./storage";
+import { compressToUnderLimit } from "../utils/compressImage";
 import type { MeProfile, PhotoItem } from "../types";
 import { validateProfileDraft } from "./profilePolicy";
 export { calculateAge, validateDob } from "../utils/validation";
@@ -262,7 +263,14 @@ export async function uploadProfilePhoto(
 export async function uploadVerificationSelfie(userId: string, uri: string): Promise<string> {
   const authenticatedUserId = (await requireAuthenticatedUser(userId)).id;
   if (!uri.trim()) throw new Error("Selected image is unavailable.");
-  const { blob, mimeType } = await sanitizeAndPrepareImageUpload(uri);
+  // Same size rule as profile photos (the photos bucket accepts at most 2 MB).
+  let uploadUri = uri;
+  try {
+    uploadUri = await compressToUnderLimit(uri);
+  } catch {
+    uploadUri = uri; // the size check below and the bucket limit still apply
+  }
+  const { blob, mimeType } = await sanitizeAndPrepareImageUpload(uploadUri);
   const filePath = `${authenticatedUserId}/verification/selfie-${uniqueSuffix()}.${imageFileExtension(mimeType)}`;
   const { error } = await supabase.storage.from("photos").upload(filePath, blob, {
     contentType: mimeType,

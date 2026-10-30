@@ -42,3 +42,46 @@ export async function compressToUnderLimit(
 
   throw new Error("This photo could not be made small enough. Please choose a different photo.");
 }
+
+/** Chat photos: plenty for a phone screen, and a fraction of a camera original (often 4–8 MB). */
+export const CHAT_PHOTO_MAX_WIDTH = 1600;
+export const MAX_CHAT_PHOTO_BYTES = 600_000;
+
+const GIF_BASE64_PREFIX = "R0lGOD"; // "GIF8" in base64
+
+/** True when the file starts with a GIF header (animated GIFs must be sent as they are). */
+export async function isGifFile(uri: string): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const FileSystem = require("expo-file-system/legacy");
+    const head: string = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+      position: 0,
+      length: 6,
+    });
+    return head.startsWith(GIF_BASE64_PREFIX);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Prepares a chat photo before upload: GIFs are kept as they are; every other image is re-encoded as JPEG, at most
+ * CHAT_PHOTO_MAX_WIDTH wide (never enlarged) and under MAX_CHAT_PHOTO_BYTES. Re-encoding also drops EXIF/GPS.
+ */
+export async function compressChatImage(uri: string): Promise<string> {
+  if (await isGifFile(uri)) return uri;
+  const probe = await ImageManipulator.manipulateAsync(uri, [], { compress: 1, format: ImageManipulator.SaveFormat.JPEG });
+  let width = Math.min(probe.width || CHAT_PHOTO_MAX_WIDTH, CHAT_PHOTO_MAX_WIDTH);
+  while (width >= MIN_WIDTH) {
+    for (const quality of [0.75, 0.65, 0.55, 0.45]) {
+      const out = await ImageManipulator.manipulateAsync(uri, [{ resize: { width } }], {
+        compress: quality,
+        format: ImageManipulator.SaveFormat.JPEG,
+      });
+      if ((await sizeOf(out.uri)) <= MAX_CHAT_PHOTO_BYTES) return out.uri;
+    }
+    width = Math.floor(width * 0.8);
+  }
+  throw new Error("This photo could not be made small enough to send. Please choose a different photo.");
+}

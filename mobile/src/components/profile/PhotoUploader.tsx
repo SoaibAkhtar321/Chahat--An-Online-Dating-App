@@ -88,15 +88,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Permission required",
-          "Chahat needs photo permissions to upload profile pictures.",
-        );
-        return;
-      }
-
+      // The Android photo picker needs no storage/media permission (Google Play Photo & Video Permissions policy).
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         // No system editor: its top-right "Crop" acted as Done. Review happens in PhotoPreviewModal.

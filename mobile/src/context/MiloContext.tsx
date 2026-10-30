@@ -189,14 +189,31 @@ export const MiloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, nextCursor, filters]);
 
+  // Many events ask for a refresh at once (send, receive, delete, react, call ended...). Coalesce them: while a
+  // load is running, further calls only mark that one more load is needed, so a burst costs at most two loads.
+  const matchesLoading = useRef<Promise<void> | null>(null);
+  const matchesAgain = useRef(false);
   const refreshMatches = useCallback(async () => {
     if (!user) return;
-    const request = ++matchesRequest.current;
-    const requestedUserId = user.id;
-    const items = await fetchUserMatches(user.id);
-    if (matchesRequest.current === request && activeUserId.current === requestedUserId) {
-      setMatches(items);
+    if (matchesLoading.current) {
+      matchesAgain.current = true;
+      return matchesLoading.current;
     }
+    const run = async () => {
+      do {
+        matchesAgain.current = false;
+        const request = ++matchesRequest.current;
+        const requestedUserId = user.id;
+        const items = await fetchUserMatches(user.id);
+        if (matchesRequest.current === request && activeUserId.current === requestedUserId) {
+          setMatches(items);
+        }
+      } while (matchesAgain.current);
+    };
+    matchesLoading.current = run().finally(() => {
+      matchesLoading.current = null;
+    });
+    return matchesLoading.current;
   }, [user]);
 
   useEffect(() => {

@@ -38,6 +38,7 @@ import { supabase, isSupabaseConfigured } from "../../src/services/supabase";
 import { getSignedUrls } from "../../src/services/storage";
 import { AvatarPlaceholder } from "../../src/components/ui/AvatarPlaceholder";
 import { Dialog } from "../../src/components/ui/Dialog";
+import { ReportSheet } from "../../src/components/safety/ReportSheet";
 import { ShareProfileSheet } from "../../src/components/profile/ShareProfileSheet";
 import { Alert } from "../../src/utils/alert";
 import type { Profile } from "../../src/types";
@@ -55,6 +56,7 @@ export default function ProfileDetailScreen() {
   const [acting, setActing] = useState(false);
 
   const [dialogAction, setDialogAction] = useState<"block" | "report" | null>(null);
+  const [reporting, setReporting] = useState(false);
   const [fetchedProfile, setFetchedProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
@@ -419,39 +421,39 @@ export default function ProfileDetailScreen() {
         onClose={() => setShareVisible(false)}
       />
 
-      {/* Safety Dialog */}
-      <Dialog
-        visible={dialogAction !== null}
-        title={
-          dialogAction === "block" ? `Block ${targetProfile.name}?` : `Report ${targetProfile.name}`
-        }
-        body={
-          dialogAction === "block"
-            ? "They will no longer appear in your discovery deck or be able to message you."
-            : "Help us keep Chahat genuine and safe. Please confirm your report."
-        }
-        confirmText={dialogAction === "block" ? "Block" : "Submit Report"}
-        danger={dialogAction === "block"}
-        onConfirm={async () => {
-          if (dialogAction === "block") {
-            await blockUser(targetProfile.id);
-            setDialogAction(null);
-            safeBack(router);
+      <ReportSheet
+        visible={dialogAction === "report"}
+        name={targetProfile.name}
+        submitting={reporting}
+        onCancel={() => setDialogAction(null)}
+        onSubmit={async (reason, note) => {
+          setReporting(true);
+          const rep = await reportUser(targetProfile.id, reason, note || "Reported from profile", "profile");
+          setReporting(false);
+          setDialogAction(null);
+          if (rep.success) {
+            Alert.alert("Report submitted", "Thank you for helping keep Chahat safe. Our team will review this.");
           } else {
-            const rep = await reportUser(
-              targetProfile.id,
-              "Profile concern",
-              "Reported from profile detail",
-              "profile",
-            );
-            setDialogAction(null);
-            if (rep.success) {
-              Alert.alert("Report submitted", "Thank you for helping keep Chahat safe.");
-              safeBack(router);
-            } else {
-              Alert.alert("Could not report", rep.error || "Please try again later.");
-            }
+            Alert.alert("Could not report", rep.error || "Please try again later.");
           }
+        }}
+      />
+
+      {/* Block confirmation */}
+      <Dialog
+        visible={dialogAction === "block"}
+        title={`Block ${targetProfile.name}?`}
+        body="They won't be able to see your profile, message or call you. You can unblock them later in Settings → Blocked accounts."
+        confirmText="Block"
+        danger
+        onConfirm={async () => {
+          const ok = await blockUser(targetProfile.id);
+          setDialogAction(null);
+          if (!ok) {
+            Alert.alert("Couldn't block", "Please check your connection and try again.");
+            return;
+          }
+          safeBack(router);
         }}
         onCancel={() => setDialogAction(null)}
       />
